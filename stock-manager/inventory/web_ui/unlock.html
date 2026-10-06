@@ -1,0 +1,65 @@
+<meta charset="utf-8">
+<title>Inventory Manager</title>
+<style>
+  @font-face {
+    font-display: swap;
+    font-family: "Cascadia Mono Web";
+    src: url("/fonts/CascadiaMono.woff2") format("woff2");
+  }
+  :root { color-scheme: dark; }
+  body {
+    align-items: center;
+    background: #000;
+    color: #39ff14;
+    display: flex;
+    font-family: "Cascadia Mono Web", "DejaVu Sans Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 15px;
+    justify-content: center;
+    margin: 0;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  main { width: min(52ch, 100%); }
+  h1 { font-size: 19px; letter-spacing: .04em; margin: 0 0 4px; text-transform: uppercase; }
+  .eyebrow { color: #1c9c10; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+  .eyebrow::before { color: #10600a; content: "-- "; }
+  form { border: 1px solid #1c9c10; display: flex; flex-direction: column; gap: 10px;
+         margin-top: 14px; padding: 18px 20px; }
+  .row { align-items: baseline; display: flex; }
+  label { color: #1c9c10; white-space: pre; }
+  input {
+    background: none; border: 0; caret-color: #39ff14; color: #7dff5c; flex: 1 1 auto;
+    font: inherit; outline: none; padding: 0;
+  }
+  button {
+    align-self: flex-start; background: #08240a; border: 1px solid #39ff14; color: #39ff14;
+    cursor: pointer; font: inherit; margin-top: 4px; padding: 6px 14px; text-transform: uppercase;
+  }
+  button::before { content: "> "; }
+  button:hover { background: #39ff14; color: #000; }
+  .error { border-left: 2px solid #ff6b5e; color: #ff6b5e; margin-top: 12px; padding: 4px 10px; }
+  .hint { color: #1c9c10; margin-top: 14px; }
+  .cursor { animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+</style>
+
+<main>
+  <p class="eyebrow">FIRST_LINE</p>
+  <h1>INVENTORY MANAGER</h1>
+  <form method="post" action="/unlock">
+    <div class="row">
+      <label for="user">user     : </label>
+      <input id="user" name="user" value="USER_VALUE" autocomplete="username"
+             autocapitalize="characters" USER_STATE>
+    </div>
+    <div class="row">
+      <label for="password">password : </label>
+      <input type="password" id="password" name="password" autocomplete="PASSWORD_MODE"
+             required autofocus>
+    </div>
+    CONFIRM_ROW
+    <button type="submit">BUTTON_LABEL</button>
+  </form>
+  <!--ERROR-->
+  <p class="hint">HINT<span class="cursor">_</span></p>
+</main>

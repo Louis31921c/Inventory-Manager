@@ -1,0 +1,1785 @@
+<meta charset="utf-8">
+<title>Inventory manager</title>
+<style>
+  @font-face {
+    font-display: swap;
+    font-family: "Cascadia Mono Web";
+    font-weight: 200 700;
+    src: url("/fonts/CascadiaMono.woff2") format("woff2-variations"),
+         url("/fonts/CascadiaMono.woff2") format("woff2");
+  }
+
+  :root {
+    --ground: #000000;
+    --surface-2: #030a05;
+    --ink: #39ff14;
+    --bright: #7dff5c;
+    --muted: #1c9c10;
+    --line: #10600a;
+    --line-strong: #1c9c10;
+    --green-soft: #08240a;
+    --accent-soft: #08240a;
+    --backorder: #7dff5c;
+    --tab-blue: #5f5fff;
+    --tab-blue-bright: #8f8fff;
+    --ral9003: #f4f4f4;
+    --mono: "Cascadia Mono Web", "Cascadia Mono", "Cascadia Code", "DejaVu Sans Mono",
+            ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 0 auto;
+    max-width: 960px;
+    padding: 0 16px 48px;
+  }
+  ::selection { background: var(--ink); color: #000; }
+  h1, h2 { font-weight: 700; margin: 0; }
+  h1 { font-size: 19px; text-transform: uppercase; }
+  h2 { color: var(--bright); font-size: 15px; }
+  h2::before { color: var(--ink); content: "> "; }
+  p { margin: 0; }
+  .eyebrow {
+    color: var(--muted); font-size: 11px; font-weight: 500;
+    letter-spacing: .18em; text-transform: uppercase;
+  }
+  .eyebrow::before { color: var(--line-strong); content: "-- "; }
+
+  header.page {
+    align-items: baseline; border-bottom: 1px solid var(--line); display: flex;
+    flex-wrap: wrap; gap: 4px 12px; margin-bottom: 4px; padding-block: 16px 9px;
+  }
+  header.page .count { color: var(--muted); font-size: 12px; }
+  header.page form { display: inline; }
+  header.page .count::after {
+    animation: blink 1.1s steps(1) infinite; color: var(--ink); content: " \2588";
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  nav.tabs {
+    background: var(--ground); display: flex; overflow-x: auto; padding-block: 8px;
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  }
+  .tab {
+    background: none; border: 1px solid transparent; color: var(--tab-blue); cursor: pointer;
+    font-family: var(--mono); font-size: 14px; padding: 4px 14px; white-space: nowrap;
+  }
+  .tab::before { content: "["; }
+  .tab::after { content: "]"; }
+  .tab:hover { color: var(--tab-blue-bright); }
+  .tab[aria-selected="true"], .tab[aria-selected="true"]:hover {
+    background: var(--tab-blue); color: #000;
+  }
+
+  [hidden] { display: none !important; }
+  section.panel { display: flex; flex-direction: column; gap: 14px; }
+  .card { border: 1px solid var(--line-strong); padding: 14px 16px; }
+  .card > * + * { margin-top: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .row.tight { gap: 6px; }
+  .grow { flex: 1 1 180px; min-width: 0; }
+
+  button.action {
+    background: var(--accent-soft); border: 1px solid var(--ink); color: var(--ink);
+    cursor: pointer; font-family: var(--mono); font-size: 14px; font-weight: 500;
+    padding: 7px 14px; text-transform: uppercase;
+  }
+  button.action::before { content: "> "; }
+  button.action:hover { background: var(--ink); color: #000; }
+  button.action.ghost { background: none; border-color: var(--line-strong); color: var(--muted); }
+  button.action.ghost:hover { background: none; border-color: var(--ink); color: var(--ink); }
+  button.action[disabled] { cursor: not-allowed; opacity: .4; }
+  button.action[disabled]:hover { background: var(--accent-soft); color: var(--ink); }
+
+  .mini {
+    background: none; border: 1px solid var(--line-strong); color: var(--muted); cursor: pointer;
+    font-family: var(--mono); font-size: 12px; padding: 2px 8px;
+  }
+  .mini:hover { background: var(--ink); border-color: var(--ink); color: #000; }
+  a.mini { display: inline-block; text-decoration: none; }
+  :focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
+
+  label.field { display: flex; flex-direction: column; gap: 2px; }
+  label.field > span {
+    color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  }
+  label.field > span::before { color: var(--ink); content: "$ "; }
+  input, select, textarea {
+    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--bright);
+    font-family: var(--mono); font-size: 14px; padding: 7px 9px; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--ink); outline: none; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .7; }
+  textarea { min-height: 70px; resize: vertical; }
+  input[type="checkbox"] { accent-color: var(--ink); width: auto; }
+  input[type="date"] { color-scheme: dark; }
+
+  select.replaced { display: none; }
+  .dropdown { position: relative; }
+  .dd-toggle {
+    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--ink);
+    cursor: pointer; font-family: var(--mono); font-size: 14px; padding: 7px 28px 7px 9px;
+    text-align: left; width: 100%;
+  }
+  .dd-toggle::after { content: "\25BC"; font-size: 10px; position: absolute; right: 9px; top: 9px; }
+  .dd-toggle[aria-expanded="true"], .dd-toggle:focus { border-color: var(--ink); outline: none; }
+  .dd-list {
+    background: #000; border: 1px solid var(--ink); left: 0; list-style: none; margin: 0;
+    max-height: 260px; overflow-y: auto; padding: 0; position: absolute; right: 0; top: 100%;
+    z-index: 20;
+  }
+  .dd-list li {
+    cursor: pointer; overflow: hidden; padding: 5px 9px; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dd-list li[aria-selected="true"]::before { content: "> "; }
+  .dd-list li:hover, .dd-list li.active { background: var(--ink); color: #000; }
+
+  .file-drop {
+    align-items: center; background: var(--surface-2); border: 1px dashed var(--line-strong);
+    cursor: pointer; display: flex; gap: 12px; padding: 12px;
+  }
+  .file-drop:hover { border-color: var(--ink); }
+  .file-drop input[type="file"] { display: none; }
+  .thumb { border: 1px solid var(--line-strong); max-height: 76px; }
+
+  .lines { display: flex; flex-direction: column; gap: 6px; }
+  .line {
+    align-items: center; background: var(--surface-2); border: 1px solid var(--line);
+    display: grid; gap: 4px 10px; grid-template-columns: 26px minmax(0, 1fr) 92px auto auto;
+    padding: 8px 10px;
+  }
+  .line .num { font-size: 12px; }
+  .line .num::before { content: "["; }
+  .line .num::after { content: "]"; }
+  .line .desig { color: var(--muted); font-size: 12px; grid-column: 2 / -1; overflow-wrap: anywhere; }
+  .rel {
+    align-items: center; color: var(--muted); display: flex; font-size: 12px; gap: 5px;
+    white-space: nowrap;
+  }
+  .rel:hover { color: var(--ink); }
+  @media (max-width: 560px) {
+    .line { grid-template-columns: 26px minmax(0, 1fr) auto; }
+    .line .qty-wrap { grid-column: 2; }
+    .line .rel { grid-column: 3; }
+  }
+
+  table { border-collapse: collapse; font-size: 13px; width: 100%; }
+  .scroll-x { overflow-x: auto; }
+  th {
+    border-bottom: 1px solid var(--line-strong); font-size: 11px; font-weight: 700;
+    letter-spacing: .1em; padding: 5px 14px 5px 0; text-align: left; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  td { padding: 5px 14px 5px 0; vertical-align: top; }
+  td.num { font-variant-numeric: tabular-nums; padding-right: 18px; text-align: right; white-space: nowrap; }
+  tbody tr:hover { background: var(--green-soft); }
+  tbody strong { color: var(--bright); font-weight: 700; }
+
+  .sheet { border-top: 1px solid var(--line); padding-top: 10px; }
+  .sheet + .sheet { margin-top: 14px; }
+  .sheet-title { align-items: baseline; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .sheet-line {
+    align-items: center; display: grid; gap: 4px 10px;
+    grid-template-columns: 26px minmax(0, 1fr) 70px auto; padding: 4px 0;
+  }
+  .stock-choice { display: flex; gap: 4px; }
+  .stock-choice button {
+    background: none; border: 1px solid var(--line); color: var(--muted); cursor: pointer;
+    font-family: var(--mono); font-size: 12px; padding: 1px 8px; white-space: nowrap;
+  }
+  .stock-choice button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #000; }
+  .stock-choice button:hover { border-color: var(--ink); }
+
+  input.cell {
+    background: none; border: 1px solid transparent; color: var(--ink); font: inherit;
+    padding: 1px 4px; width: 100%;
+  }
+  input.cell:hover { border-color: var(--line); }
+  input.cell:focus { background: var(--surface-2); border-color: var(--ink); outline: none; }
+  input.cell.saved { border-color: var(--ink); }
+
+  .graph { align-items: flex-end; display: flex; gap: 3px; height: 54px; margin: 4px 0 2px; }
+  .graph .bar { background: var(--ink); flex: 1 1 auto; max-width: 18px; min-height: 1px; }
+  .graph .bar.bad { background: var(--backorder); }
+  .graph-legend { color: var(--muted); font-size: 11.5px; }
+
+  .pill {
+    border: 1px solid currentColor; display: inline-block; font-size: 10.5px; letter-spacing: .08em;
+    padding: 0 5px; text-transform: uppercase;
+  }
+  .pill.backorder { color: var(--backorder); }
+  .dot {
+    border-radius: 50%; display: inline-block; height: 9px; margin-right: 9px; width: 9px;
+  }
+  .dot.ready { background: var(--ink); box-shadow: 0 0 6px var(--ink); }
+  .dot.configured { background: var(--muted); }
+  .dot.missing, .dot.unsupported { background: none; border: 1px solid var(--line-strong); }
+  .model { align-items: baseline; display: flex; gap: 10px; padding: 3px 0; }
+  .model .detail { color: var(--muted); font-size: 12.5px; }
+  .model .spacer { flex: 1 1 auto; }
+  .model.current strong { color: var(--bright); }
+  .pill.shared { color: var(--ink); }
+
+  .notice { border-left: 2px solid var(--line-strong); font-size: 13px; padding: 6px 10px; }
+  .notice::before { color: var(--ink); content: "> "; }
+  .notice.warn { border-color: var(--backorder); color: var(--backorder); }
+  .notice.bad { border-color: var(--ink); color: var(--ink); }
+  .notice.bad::before { content: "[x] "; }
+  .notice.ok { border-color: var(--ink); }
+  .muted { color: var(--muted); }
+
+  .sql {
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+    font-family: var(--mono); font-size: 12.5px; overflow-x: auto; padding: 9px 10px;
+    white-space: pre-wrap;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    background: none; border: 1px solid var(--line); color: var(--muted); cursor: pointer;
+    font-family: var(--mono); font-size: 12.5px; padding: 3px 9px; text-align: left;
+  }
+  .chip::before { color: var(--ink); content: "? "; }
+  .chip:hover { border-color: var(--ink); color: var(--ink); }
+
+  .fkeys {
+    border-top: 1px solid var(--line-strong); display: flex; flex-wrap: wrap; gap: 2px 18px;
+    padding-top: 6px;
+  }
+  .fkey {
+    background: none; border: 0; color: var(--ink); cursor: pointer; font-family: var(--mono);
+    font-size: 13px; padding: 1px 0; white-space: nowrap;
+  }
+  .fkey b { background: var(--ink); color: #000; font-weight: 400; padding: 0 3px; }
+  .fkey span { color: var(--ral9003); }
+  .fkey:hover span, .fkey:focus-visible span { text-decoration: underline; }
+  .fkeys .license { color: var(--muted); margin-left: auto; text-decoration: none; }
+  .fkeys .license:hover { color: var(--ink); text-decoration: underline; }
+
+  .spin { animation: spin 1s steps(8) infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .spin, header.page .count::after { animation: none; }
+  }
+</style>
+
+<header class="page">
+  <h1>Inventory manager</h1>
+  <span class="count" id="headline-count">...</span>
+  <span class="grow"></span>
+  <span class="muted" id="who"></span>
+  <form method="post" action="/lock" id="lock-form">
+    <button class="mini" type="submit">Remind me</button>
+  </form>
+  <form method="post" action="/quit" id="quit-form">
+    <button class="mini" type="submit">quit</button>
+  </form>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" id="tab-capture" role="tab" aria-selected="true" aria-controls="panel-capture">New note</button>
+  <button class="tab" id="tab-deliveries" role="tab" aria-selected="false" aria-controls="panel-deliveries">Search</button>
+  <button class="tab" id="tab-query" role="tab" aria-selected="false" aria-controls="panel-query">SQL</button>
+  <button class="tab" id="tab-hardware" role="tab" aria-selected="false" aria-controls="panel-hardware">Wanted</button>
+  <button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings">Settings</button>
+</nav>
+
+<div id="global-notice" hidden></div>
+
+<section class="panel" id="panel-capture" role="tabpanel" aria-labelledby="tab-capture">
+  <div class="card">
+    <h2>Import</h2>
+    <label class="file-drop" for="photo">
+      <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" capture="environment">
+      <img class="thumb" id="thumb" alt="" hidden>
+      <span><strong id="photo-name">Choose a photo</strong></span>
+    </label>
+    <div class="row">
+      <button class="action" id="read-btn" disabled>Read the note</button>
+      <button class="action ghost" id="cancel-read" hidden>Stop</button>
+    </div>
+    <div id="read-status" hidden></div>
+  </div>
+
+  <div class="card" id="review" hidden>
+    <p class="eyebrow">Step 2 of 2</p>
+    <h2>Correct, then save</h2>
+    <div id="warnings"></div>
+    <div class="row">
+      <label class="field grow"><span>Supplier</span><input id="f-supplier" autocomplete="off"></label>
+      <label class="field grow"><span>Site</span><input id="f-site" autocomplete="off"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>Delivery date</span><input id="f-delivery_date" type="date"></label>
+      <label class="field grow"><span>Order date</span><input id="f-order_date" type="date"></label>
+      <label class="field grow"><span>Work item</span><input id="f-work_item" autocomplete="off"></label>
+    </div>
+    <div class="lines" id="lines"></div>
+    <div class="row tight"><button class="mini" id="add-line">+ Add a line</button></div>
+    <div id="review-problems"></div>
+    <div class="row">
+      <button class="action" id="save-btn">Save the note</button>
+      <button class="action ghost" id="discard-btn">Discard</button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="panel-deliveries" role="tabpanel" aria-labelledby="tab-deliveries" hidden>
+  <div class="card">
+    <div class="row">
+      <label class="field grow"><span>Search</span><input id="q-search" placeholder="article, reference, supplier..."></label>
+      <label class="field grow"><span>Site</span><select id="q-site"><option value="">All</option></select></label>
+      <label class="rel" for="q-backorder" style="align-self: flex-end; padding-bottom: 8px">
+        <input type="checkbox" id="q-backorder"> backorders only
+      </label>
+    </div>
+    <div class="row">
+      <span class="muted" id="q-summary"></span>
+      <span class="grow"></span>
+      <a class="mini" id="export-csv" href="/export.csv" download>Export CSV</a>
+    </div>
+    <div class="scroll-x"><table id="table-deliveries"></table></div>
+  </div>
+</section>
+
+<section class="panel" id="panel-query" role="tabpanel" aria-labelledby="tab-query" hidden>
+  <div class="card">
+    <h2>Ask</h2>
+    <p class="muted">SELECT * FROM deliveries</p>
+    <label class="field"><span>Question</span><textarea id="question"
+      placeholder="..."></textarea></label>
+    <div class="chips" id="examples"></div>
+    <div class="row">
+      <button class="action" id="ask-btn">Run</button>
+      <button class="action ghost" id="cancel-ask" hidden>Stop</button>
+    </div>
+    <div id="ask-status" hidden></div>
+    <pre class="sql" id="ask-sql" hidden></pre>
+    <div id="ask-note"></div>
+    <div class="scroll-x"><table id="table-answer"></table></div>
+  </div>
+</section>
+
+<section class="panel" id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden>
+  <div class="card">
+    <h2>Scan a Wanted</h2>
+    <label class="file-drop" for="photo-list">
+      <input type="file" id="photo-list" accept="image/jpeg,image/png,image/webp" capture="environment">
+      <img class="thumb" id="thumb-list" alt="" hidden>
+      <span><strong id="photo-list-name">Choose a photo</strong></span>
+    </label>
+    <div class="row">
+      <button class="action" id="read-list" disabled>Read the list</button>
+      <button class="action ghost" id="cancel-list" hidden>Stop</button>
+    </div>
+    <div id="list-status" hidden></div>
+  </div>
+
+  <div class="card" id="list-review" hidden>
+    <h2>Check, then save</h2>
+    <div id="list-warnings"></div>
+    <div class="row">
+      <label class="field grow"><span>Date</span><input id="l-list_date" type="date"></label>
+      <label class="field grow"><span>Site</span><input id="l-site" autocomplete="off"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>Work item</span><input id="l-work_item" autocomplete="off"></label>
+      <label class="field grow"><span>Drafter</span><input id="l-drafter" autocomplete="off"></label>
+    </div>
+    <div class="lines" id="list-lines"></div>
+    <div class="row tight"><button class="mini" id="list-add">+ Add a line</button></div>
+    <div id="list-problems"></div>
+    <div class="row">
+      <button class="action" id="list-save">Save the list</button>
+      <button class="action ghost" id="list-discard">Discard</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Stored lists</h2>
+    <div id="lists"></div>
+  </div>
+</section>
+
+<section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+  <div class="card">
+    <h2>Space used</h2>
+    <div class="scroll-x"><table id="table-storage"></table></div>
+    <div id="storage-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Checks</h2>
+    <div class="scroll-x"><table id="table-checks"></table></div>
+    <div id="checks-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Synchronize AI</h2>
+    <div id="models"></div>
+    <div id="model-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Errors</h2>
+    <p class="muted" id="alerting"></p>
+    <div class="row"><button class="action ghost" id="error-test">report a bug</button></div>
+    <div class="scroll-x"><table id="table-errors"></table></div>
+    <div id="error-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Backups</h2>
+    <div class="row">
+      <button class="action" id="backup-run">new backup</button>
+      <span class="grow"></span>
+      <span class="muted" id="backup-summary"></span>
+    </div>
+    <div class="scroll-x"><table id="table-backups"></table></div>
+    <div id="backup-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Reading accuracy</h2>
+    <p class="muted">Share of the fields read correctly, before any correction, at review time.</p>
+    <div id="accuracy-graph"></div>
+    <div id="accuracy-note"></div>
+  </div>
+
+  <div class="card">
+    <p class="eyebrow">Shared vocabulary</p>
+    <h2>Article names</h2>
+    <p class="muted" id="vocabulary-summary"></p>
+    <div class="row">
+      <label class="field grow"><span>Name to merge</span><input id="merge-alias" autocomplete="off"
+        placeholder="HEX BOLT M6"></label>
+      <label class="field grow"><span>Keep this name</span><input id="merge-article" autocomplete="off"
+        placeholder="BOLT M6"></label>
+      <button class="action" id="merge-run" style="align-self: flex-end">merge</button>
+    </div>
+    <div id="merge-note"></div>
+    <div class="scroll-x"><table id="table-vocabulary"></table></div>
+  </div>
+
+  <div class="card">
+    <p class="eyebrow">Audit</p>
+    <h2>Users</h2>
+    <div class="scroll-x"><table id="table-users"></table></div>
+    <h2>Latest events</h2>
+    <div class="scroll-x"><table id="table-audit"></table></div>
+    <div id="audit-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Download the data</h2>
+    <div class="scroll-x"><table id="table-export"></table></div>
+  </div>
+
+  <div class="card">
+    <p class="eyebrow">Traceability</p>
+    <h2>Stored notes</h2>
+    <div class="scroll-x"><table id="table-notes"></table></div>
+  </div>
+</section>
+
+<nav class="fkeys" id="fkeys" aria-label="Function keys"></nav>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, props = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key.includes("-")) node.setAttribute(key, value);
+    else node[key] = value;
+  }
+  for (const child of children) node.append(child);
+  return node;
+}
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const upper = (text) => String(text ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+const asNumber = (value) => (value === "" || value == null ? null : Number(value));
+const showNum = (value) => (value == null || isNaN(value) ? "—" : Number(value).toLocaleString());
+const showDate = (iso) => (ISO_DATE.test(iso ?? "") ? String(iso).slice(0, 10) : "");
+const showTime = (iso) => (iso ? String(iso).replace("T", " ").slice(0, 16) : "—");
+const mb = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
+const gb = (bytes) => `${(bytes / 1e9).toFixed(3)} GB`;
+
+function weekdayOf(iso) {
+  if (!ISO_DATE.test(iso ?? "")) return null;
+  const [year, month, day] = iso.split("-").map(Number);
+  return DAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+}
+
+function notice(target, kind, text) {
+  target.replaceChildren(text ? el("p", { className: `notice ${kind}`, textContent: text }) : "");
+  target.hidden = !text;
+}
+
+async function api(path, options) {
+  const response = await fetch(path, options);
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+  }
+  if (!response.ok) throw new Error(payload?.detail ?? `Error ${response.status}`);
+  return payload;
+}
+
+const postJson = (body) => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+const patchJson = (body) => ({ ...postJson(body), method: "PATCH" });
+
+let notes = [];
+let rows = [];
+let lists = [];
+let draft = null;
+let draftFile = null;
+let draftSha = null;
+let proposed = null;
+let listDraft = null;
+let listFile = null;
+let listSha = null;
+let listProposed = null;
+
+function flatten() {
+  rows = notes.flatMap((note) =>
+    (note.lines ?? []).map((line) => ({
+      article: line.article ?? "",
+      quantity: line.quantity == null ? null : Number(line.quantity),
+      supplier: note.supplier ?? "",
+      delivery_date: note.delivery_date ?? "",
+      weekday: weekdayOf(note.delivery_date),
+      order_date: note.order_date ?? null,
+      site: note.site ?? null,
+      work_item: line.work_item !== undefined ? line.work_item : (note.work_item ?? null),
+      backorder: line.backorder ? 1 : 0,
+      designation: line.designation ?? "",
+      note_id: note.id,
+      line_no: line.line_no ?? 1,
+    })));
+}
+
+const TABS = ["capture", "deliveries", "query", "hardware", "settings"];
+
+function openTab(name) {
+  for (const other of TABS) {
+    const on = other === name;
+    $(`tab-${other}`).setAttribute("aria-selected", String(on));
+    $(`panel-${other}`).hidden = !on;
+    if (on) $(`panel-${other}`).append($("fkeys"));
+  }
+  try {
+    localStorage.setItem("tab", name);
+  } catch {
+  }
+}
+
+for (const name of TABS) $(`tab-${name}`).addEventListener("click", () => openTab(name));
+
+try {
+  const saved = localStorage.getItem("tab");
+  if (saved && TABS.includes(saved)) openTab(saved);
+} catch {
+}
+
+function pickPhoto(input, nameLabel, thumbId, button, onFile) {
+  input.addEventListener("change", (event) => {
+    const file = event.target.files?.[0] ?? null;
+    onFile(file);
+    button.disabled = !file;
+    nameLabel.textContent = file ? file.name : "Choose a photo";
+    const thumb = $(thumbId);
+    if (file) {
+      thumb.src = URL.createObjectURL(file);
+      thumb.hidden = false;
+    } else {
+      thumb.hidden = true;
+    }
+  });
+}
+
+pickPhoto($("photo"), $("photo-name"), "thumb", $("read-btn"), (file) => { draftFile = file; });
+pickPhoto($("photo-list"), $("photo-list-name"), "thumb-list", $("read-list"), (file) => { listFile = file; });
+
+function spinner(target, text) {
+  target.hidden = false;
+  target.replaceChildren(el("p", { className: "notice" }, [
+    el("span", { className: "spin", textContent: "◐" }), ` ${text}`,
+  ]));
+}
+
+let reading = null;
+$("cancel-read").addEventListener("click", () => reading?.abort());
+
+$("read-btn").addEventListener("click", async () => {
+  if (!draftFile) return;
+  const status = $("read-status");
+  $("read-btn").disabled = true;
+  $("cancel-read").hidden = false;
+  spinner(status, "Reading the note... (10 to 40 seconds)");
+
+  reading = new AbortController();
+  const form = new FormData();
+  form.append("photo", draftFile);
+  try {
+    const result = await api("/api/extract", { method: "POST", body: form, signal: reading.signal });
+    draftSha = result.sha256;
+    status.hidden = true;
+    openReview(result.note);
+  } catch (e) {
+    if (e.name === "AbortError") status.hidden = true;
+    else notice(status, "bad", e.message);
+  } finally {
+    reading = null;
+    $("cancel-read").hidden = true;
+    $("read-btn").disabled = !draftFile;
+  }
+});
+
+function openReview(note) {
+  proposed = structuredClone(note);
+  draft = {
+    supplier: note.supplier ?? "",
+    delivery_date: note.delivery_date ?? "",
+    order_date: note.order_date ?? "",
+    site: note.site ?? "",
+    work_item: note.work_item ?? "",
+    lines: (note.lines ?? []).map((line) => ({
+      article: String(line.article ?? ""),
+      quantity: line.quantity == null ? null : Number(line.quantity),
+      backorder: Boolean(line.backorder),
+      designation: String(line.designation ?? ""),
+      known: Boolean(line.known),
+    })),
+    warnings: note.warnings ?? [],
+  };
+
+  $("f-supplier").value = draft.supplier;
+  $("f-site").value = draft.site;
+  $("f-work_item").value = draft.work_item;
+  $("f-delivery_date").value = draft.delivery_date;
+  $("f-order_date").value = draft.order_date;
+  $("warnings").replaceChildren(...draft.warnings.map((text) =>
+    el("p", { className: "notice warn", textContent: `Check: ${text}` })));
+
+  renderLines();
+  checkProblems();
+  $("review").hidden = false;
+  $("review").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+for (const field of ["supplier", "site", "work_item", "delivery_date", "order_date"]) {
+  $(`f-${field}`).addEventListener("input", (event) => {
+    if (!draft) return;
+    draft[field] = event.target.value;
+    checkProblems();
+  });
+}
+
+function renderLines() {
+  $("lines").replaceChildren(...draft.lines.map((line, index) => {
+    const article = el("input", { value: line.article, "aria-label": `Article ${index + 1}` });
+    article.addEventListener("input", () => {
+      line.article = article.value;
+      line.known = false;
+      checkProblems();
+    });
+
+    const quantity = el("input", {
+      className: "qty", type: "number", min: "0", step: "any",
+      value: line.quantity ?? "", "aria-label": `Quantity line ${index + 1}`,
+    });
+    quantity.addEventListener("input", () => { line.quantity = asNumber(quantity.value); });
+
+    const backorder = el("input", { type: "checkbox", checked: line.backorder, id: `bo-${index}` });
+    backorder.addEventListener("change", () => { line.backorder = backorder.checked; });
+
+    const remove = el("button", { className: "mini", textContent: "x", title: "Remove the line" });
+    remove.addEventListener("click", () => {
+      draft.lines.splice(index, 1);
+      renderLines();
+      checkProblems();
+    });
+
+    const row = el("div", { className: "line" }, [
+      el("span", { className: "num", textContent: index + 1 }),
+      article,
+      el("span", { className: "qty-wrap" }, [quantity]),
+      el("label", { className: "rel", htmlFor: `bo-${index}` }, [backorder, "backorder"]),
+      remove,
+    ]);
+    if (line.designation) {
+      row.append(el("span", {
+        className: "desig",
+        textContent: (line.known ? "known name: " : "") + line.designation,
+      }));
+    }
+    return row;
+  }));
+}
+
+$("add-line").addEventListener("click", () => {
+  if (!draft) return;
+  draft.lines.push({ article: "", quantity: null, backorder: false, designation: "", known: false });
+  renderLines();
+  checkProblems();
+});
+
+function checkProblems() {
+  const found = [];
+  if (!draft.supplier.trim()) found.push("supplier missing");
+  if (!ISO_DATE.test(draft.delivery_date)) found.push("delivery date missing");
+  if (!draft.lines.length) found.push("no article");
+  draft.lines.forEach((line, index) => {
+    if (!line.article.trim()) found.push(`article ${index + 1} has no name`);
+  });
+
+  notice($("review-problems"), "warn", found.length ? `To fix: ${found.join(", ")}` : "");
+  $("save-btn").disabled = found.length > 0;
+  return found;
+}
+
+$("discard-btn").addEventListener("click", () => {
+  draft = draftFile = draftSha = null;
+  $("review").hidden = true;
+  $("photo").value = "";
+  $("thumb").hidden = true;
+  $("photo-name").textContent = "Choose a photo";
+  $("read-btn").disabled = true;
+});
+
+function measure(before, after, headerFields, lineFields) {
+  if (!before) return null;
+  let fields = 0;
+  let corrected = 0;
+
+  const compare = (a, b) => {
+    fields += 1;
+    const left = a === "" || a == null ? null : String(a).trim().toLowerCase();
+    const right = b === "" || b == null ? null : String(b).trim().toLowerCase();
+    if (left !== right) corrected += 1;
+  };
+
+  for (const field of headerFields) compare(before[field], after[field]);
+
+  const linesBefore = before.lines ?? [];
+  const linesAfter = after.lines ?? [];
+  for (let i = 0; i < Math.max(linesBefore.length, linesAfter.length); i += 1) {
+    if (!linesBefore[i] || !linesAfter[i]) {
+      fields += lineFields.length;
+      corrected += lineFields.length;
+      continue;
+    }
+    for (const field of lineFields) compare(linesBefore[i][field], linesAfter[i][field]);
+  }
+  return { fields, corrected, lines: linesAfter.length };
+}
+
+$("save-btn").addEventListener("click", async () => {
+  if (!draft || checkProblems().length) return;
+  $("save-btn").disabled = true;
+  notice($("review-problems"), "ok", "Saving...");
+
+  const note = {
+    supplier: draft.supplier.trim(),
+    delivery_date: draft.delivery_date,
+    order_date: ISO_DATE.test(draft.order_date) ? draft.order_date : null,
+    site: draft.site.trim() || null,
+    work_item: draft.work_item.trim() || null,
+    lines: draft.lines.map((line) => ({
+      article: line.article.trim(),
+      quantity: line.quantity,
+      backorder: Boolean(line.backorder),
+      designation: line.designation || null,
+    })),
+  };
+  const body = {
+    sha256: draftSha,
+    note,
+    measurement: measure(proposed, note,
+      ["supplier", "delivery_date", "order_date", "site", "work_item"],
+      ["article", "quantity", "backorder"]),
+  };
+
+  try {
+    const stored = await api("/api/notes", postJson(body));
+    notice($("review-problems"), "ok", `Note #${stored.note_id} saved.`);
+    await refresh();
+    setTimeout(() => $("discard-btn").click(), 1200);
+  } catch (e) {
+    notice($("review-problems"), "bad", e.message);
+    $("save-btn").disabled = false;
+  }
+});
+
+function renderTable(table, columns, data, empty) {
+  table.replaceChildren();
+  if (!data.length) {
+    table.append(el("tbody", {}, [el("tr", {}, [el("td", { className: "muted", textContent: empty })])]));
+    return;
+  }
+  table.append(el("thead", {}, [
+    el("tr", {}, columns.map((col) => el("th", { textContent: col.label }))),
+  ]));
+  table.append(el("tbody", {}, data.map((item) =>
+    el("tr", {}, columns.map((col) => {
+      const cell = el("td", { className: col.numeric ? "num" : "" });
+      cell.append(col.cell(item));
+      return cell;
+    })))));
+}
+
+function filtered() {
+  const search = upper($("q-search").value);
+  const site = $("q-site").value;
+  const onlyBackorders = $("q-backorder").checked;
+
+  return rows.filter((row) => {
+    if (onlyBackorders && !row.backorder) return false;
+    if (site && (row.site ?? "") !== site) return false;
+    if (!search) return true;
+    const haystack = upper(`${row.article} ${row.designation} ${row.supplier} ${row.site ?? ""}`);
+    return haystack.includes(search);
+  });
+}
+
+function workItemCell(row) {
+  const input = el("input", {
+    className: "cell", value: row.work_item ?? "", placeholder: "—",
+    "aria-label": `Work item of ${row.article}`,
+  });
+  let stored = row.work_item ?? "";
+
+  const save = async () => {
+    const value = input.value.trim();
+    if (value === stored) return;
+    try {
+      await api(`/api/deliveries/${row.note_id}/${row.line_no}`, patchJson({ work_item: value }));
+      stored = value;
+      row.work_item = value || null;
+      input.classList.add("saved");
+      setTimeout(() => input.classList.remove("saved"), 900);
+    } catch (e) {
+      input.value = stored;
+      notice($("global-notice"), "bad", e.message);
+    }
+  };
+
+  input.addEventListener("change", save);
+  input.addEventListener("blur", save);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      input.blur();
+    }
+    if (event.key === "Escape") {
+      input.value = stored;
+      input.blur();
+    }
+  });
+  return input;
+}
+
+function renderDeliveries() {
+  const data = filtered();
+  const units = data.reduce((sum, row) => sum + (row.quantity ?? 0), 0);
+  const backorders = data.filter((row) => row.backorder).length;
+  $("q-summary").textContent = `${data.length} line(s) · ${showNum(units)} units`
+    + (backorders ? ` · ${backorders} on backorder` : "");
+
+  renderTable($("table-deliveries"), [
+    {
+      label: "Article",
+      cell: (row) => {
+        const box = el("span", {}, [el("strong", { textContent: row.article })]);
+        if (row.backorder) {
+          box.append(" ", el("span", { className: "pill backorder", textContent: "backorder" }));
+        }
+        if (row.designation) {
+          box.append(el("div", { className: "desig muted", textContent: row.designation }));
+        }
+        return box;
+      },
+    },
+    { label: "Qty", numeric: true, cell: (row) => showNum(row.quantity) },
+    { label: "Supplier", cell: (row) => row.supplier },
+    {
+      label: "Delivered", numeric: true,
+      cell: (row) => showDate(row.delivery_date) + (row.weekday ? ` · ${row.weekday.slice(0, 3)}` : ""),
+    },
+    { label: "Site", cell: (row) => row.site ?? "—" },
+    { label: "Work item", cell: workItemCell },
+  ], data, "No line matches this filter.");
+
+  renderTable($("table-notes"), [
+    { label: "#", numeric: true, cell: (note) => String(note.id) },
+    { label: "Note", cell: (note) => note.supplier },
+    { label: "Delivered", numeric: true, cell: (note) => showDate(note.delivery_date) },
+    { label: "Site", cell: (note) => note.site ?? "—" },
+    { label: "Lines", numeric: true, cell: (note) => String((note.lines ?? []).length) },
+    { label: "Entered by", cell: (note) => note.confirmed_by ?? "—" },
+    {
+      label: "Photo",
+      cell: (note) => (note.photo
+        ? el("a", { href: `/api/photo/${note.id}`, target: "_blank" }, [
+          el("img", {
+            className: "thumb", src: `/api/photo/${note.id}`, alt: "", loading: "lazy",
+            style: "max-height:44px",
+          })])
+        : "—"),
+    },
+    { label: "", cell: (note) => confirmButton("Delete", () => api(`/api/notes/${note.id}`, { method: "DELETE" })) },
+  ], notes, "No note stored.");
+
+  refreshSiteFilter();
+}
+
+function confirmButton(label, action) {
+  const button = el("button", { className: "mini", textContent: label });
+  let armed = false;
+  button.addEventListener("click", async () => {
+    if (!armed) {
+      armed = true;
+      button.textContent = "Confirm?";
+      return;
+    }
+    try {
+      await action();
+      await refresh();
+    } catch {
+      button.textContent = "Failed";
+    }
+  });
+  return button;
+}
+
+function refreshSiteFilter() {
+  const select = $("q-site");
+  const current = select.value;
+  const sites = [...new Set(rows.map((row) => row.site).filter(Boolean))].sort();
+  select.replaceChildren(
+    el("option", { value: "", textContent: "All" }),
+    ...sites.map((site) => el("option", { value: site, textContent: site })),
+  );
+  select.value = sites.includes(current) ? current : "";
+  siteMenu.refresh();
+}
+
+for (const id of ["q-search", "q-site", "q-backorder"]) {
+  $(id).addEventListener("input", renderDeliveries);
+}
+
+const siteMenu = ((select) => {
+  select.classList.add("replaced");
+  const toggle = el("button", { className: "dd-toggle", type: "button", "aria-haspopup": "listbox" });
+  toggle.setAttribute("aria-expanded", "false");
+  const list = el("ul", { className: "dd-list", role: "listbox", hidden: true });
+  const wrap = el("div", { className: "dropdown" }, [toggle, list]);
+  select.after(wrap);
+  wrap.append(select);
+
+  const close = () => {
+    list.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+  };
+
+  const choose = (value) => {
+    select.value = value;
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    close();
+    toggle.focus();
+  };
+
+  const refreshList = () => {
+    const current = select.value;
+    toggle.textContent = select.selectedOptions[0]?.textContent ?? "All";
+    list.replaceChildren(...[...select.options].map((option) => {
+      const item = el("li", { role: "option", textContent: option.textContent, tabIndex: -1 });
+      item.setAttribute("aria-selected", String(option.value === current));
+      item.addEventListener("click", () => choose(option.value));
+      return item;
+    }));
+  };
+
+  toggle.addEventListener("click", () => {
+    const opening = list.hidden;
+    list.hidden = !opening;
+    toggle.setAttribute("aria-expanded", String(opening));
+    if (opening) {
+      const selected = list.querySelector('[aria-selected="true"]') ?? list.firstElementChild;
+      selected?.classList.add("active");
+    }
+  });
+
+  wrap.addEventListener("keydown", (event) => {
+    const items = [...list.children];
+    const index = items.findIndex((item) => item.classList.contains("active"));
+    if (event.key === "Escape") {
+      close();
+      toggle.focus();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (list.hidden) {
+        toggle.click();
+        return;
+      }
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = Math.max(0, Math.min(items.length - 1, index + step));
+      for (const item of items) item.classList.remove("active");
+      items[next].classList.add("active");
+      items[next].scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter" && !list.hidden && index >= 0) {
+      event.preventDefault();
+      items[index].click();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!wrap.contains(event.target)) close();
+  });
+
+  return { refresh: refreshList };
+})($("q-site"));
+
+const EXAMPLES = [
+  "how many units per supplier last month?",
+  "which articles are still on backorder?",
+  "average lead time between order and delivery, per supplier",
+  "what was asked for on the Wanted lists but never delivered?",
+];
+
+$("examples").replaceChildren(...EXAMPLES.map((text) => {
+  const chip = el("button", { className: "chip", textContent: text });
+  chip.addEventListener("click", () => {
+    $("question").value = text;
+    $("ask-btn").click();
+  });
+  return chip;
+}));
+
+let asking = null;
+$("cancel-ask").addEventListener("click", () => asking?.abort());
+
+$("ask-btn").addEventListener("click", async () => {
+  const question = $("question").value.trim();
+  if (!question) return;
+
+  const status = $("ask-status");
+  $("ask-btn").disabled = true;
+  $("cancel-ask").hidden = false;
+  $("ask-sql").hidden = true;
+  $("ask-note").replaceChildren();
+  $("table-answer").replaceChildren();
+  spinner(status, "Working...");
+
+  asking = new AbortController();
+  const sql = question.replace(/^\s*\/?sql\s+/i, "");
+  const direct = /^\s*(select|with)\b/i.test(sql);
+
+  try {
+    const answer = await api(direct ? "/api/sql" : "/api/question", {
+      ...postJson(direct ? { sql } : { question }),
+      signal: asking.signal,
+    });
+    status.hidden = true;
+
+    if (answer.note) {
+      $("ask-note").replaceChildren(el("p", { className: "notice", textContent: answer.note }));
+    }
+    if (!answer.sql) return;
+
+    $("ask-sql").textContent = answer.sql;
+    $("ask-sql").hidden = false;
+
+    const columns = answer.columns.map((name, index) => ({
+      label: name,
+      numeric: answer.rows.some((row) => typeof row[index] === "number"),
+      cell: (row) => {
+        const value = row[index];
+        if (value == null) return "—";
+        if (typeof value === "number") return showNum(value);
+        if (typeof value === "boolean") return value ? "yes" : "no";
+        return String(value);
+      },
+    }));
+    renderTable($("table-answer"), columns, answer.rows, "No result.");
+  } catch (e) {
+    if (e.name === "AbortError") status.hidden = true;
+    else notice(status, "bad", e.message);
+  } finally {
+    asking = null;
+    $("cancel-ask").hidden = true;
+    $("ask-btn").disabled = false;
+  }
+});
+
+let readingList = null;
+$("cancel-list").addEventListener("click", () => readingList?.abort());
+
+$("read-list").addEventListener("click", async () => {
+  if (!listFile) return;
+  const status = $("list-status");
+  $("read-list").disabled = true;
+  $("cancel-list").hidden = false;
+  spinner(status, "Reading the list... (handwriting: 1 to 2 minutes)");
+
+  readingList = new AbortController();
+  const form = new FormData();
+  form.append("photo", listFile);
+  try {
+    const result = await api("/api/lists/extract", {
+      method: "POST", body: form, signal: readingList.signal,
+    });
+    listSha = result.sha256;
+    status.hidden = true;
+    openListReview(result.list);
+  } catch (e) {
+    if (e.name === "AbortError") status.hidden = true;
+    else notice(status, "bad", e.message);
+  } finally {
+    readingList = null;
+    $("cancel-list").hidden = true;
+    $("read-list").disabled = !listFile;
+  }
+});
+
+function openListReview(sheet) {
+  listProposed = structuredClone(sheet);
+  listDraft = {
+    list_date: sheet.list_date ?? "",
+    site: sheet.site ?? "",
+    work_item: sheet.work_item ?? "",
+    drafter: sheet.drafter ?? "",
+    lines: (sheet.lines ?? []).map((line) => ({
+      article: String(line.article ?? ""),
+      designation: String(line.designation ?? ""),
+      reference: line.reference ?? null,
+      quantity: line.quantity == null ? null : Number(line.quantity),
+      stock: line.stock == null ? null : Number(line.stock),
+    })),
+    warnings: sheet.warnings ?? [],
+  };
+
+  $("l-list_date").value = listDraft.list_date;
+  $("l-site").value = listDraft.site;
+  $("l-work_item").value = listDraft.work_item;
+  $("l-drafter").value = listDraft.drafter;
+  $("list-warnings").replaceChildren(...listDraft.warnings.map((text) =>
+    el("p", { className: "notice warn", textContent: `Check: ${text}` })));
+
+  renderListLines();
+  checkList();
+  $("list-review").hidden = false;
+  $("list-review").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+for (const field of ["list_date", "site", "work_item", "drafter"]) {
+  $(`l-${field}`).addEventListener("input", (event) => {
+    if (listDraft) listDraft[field] = event.target.value;
+  });
+}
+
+function renderListLines() {
+  $("list-lines").replaceChildren(...listDraft.lines.map((line, index) => {
+    const article = el("input", { value: line.article, "aria-label": `Article ${index + 1}` });
+    article.addEventListener("input", () => {
+      line.article = article.value;
+      checkList();
+    });
+
+    const quantity = el("input", {
+      className: "qty", type: "number", min: "0", step: "any",
+      value: line.quantity ?? "", "aria-label": `Quantity ${index + 1}`,
+    });
+    quantity.addEventListener("input", () => { line.quantity = asNumber(quantity.value); });
+
+    const remove = el("button", { className: "mini", textContent: "x", title: "Remove the line" });
+    remove.addEventListener("click", () => {
+      listDraft.lines.splice(index, 1);
+      renderListLines();
+      checkList();
+    });
+
+    const row = el("div", { className: "line" }, [
+      el("span", { className: "num", textContent: index + 1 }),
+      article,
+      el("span", { className: "qty-wrap" }, [quantity]),
+      remove,
+    ]);
+    if (line.designation && line.designation !== line.article) {
+      row.append(el("span", { className: "desig", textContent: line.designation }));
+    }
+    return row;
+  }));
+}
+
+$("list-add").addEventListener("click", () => {
+  if (!listDraft) return;
+  listDraft.lines.push({ article: "", designation: "", reference: null, quantity: null, stock: null });
+  renderListLines();
+  checkList();
+});
+
+function checkList() {
+  const found = [];
+  if (!listDraft.lines.length) found.push("no line");
+  listDraft.lines.forEach((line, index) => {
+    if (!line.article.trim()) found.push(`line ${index + 1} has no article`);
+  });
+
+  notice($("list-problems"), "warn", found.length ? `To fix: ${found.join(", ")}` : "");
+  $("list-save").disabled = found.length > 0;
+  return found;
+}
+
+$("list-discard").addEventListener("click", () => {
+  listDraft = listFile = listSha = null;
+  $("list-review").hidden = true;
+  $("photo-list").value = "";
+  $("thumb-list").hidden = true;
+  $("photo-list-name").textContent = "Choose a photo";
+  $("read-list").disabled = true;
+});
+
+$("list-save").addEventListener("click", async () => {
+  if (!listDraft || checkList().length) return;
+  $("list-save").disabled = true;
+  notice($("list-problems"), "ok", "Saving...");
+
+  const sheet = {
+    list_date: ISO_DATE.test(listDraft.list_date) ? listDraft.list_date : null,
+    site: listDraft.site.trim() || null,
+    work_item: listDraft.work_item.trim() || null,
+    drafter: listDraft.drafter.trim() || null,
+    lines: listDraft.lines.map((line) => ({
+      article: line.article.trim(),
+      designation: line.designation || null,
+      reference: line.reference,
+      quantity: line.quantity,
+      stock: line.stock,
+      in_stock: null,
+    })),
+  };
+  const body = {
+    sha256: listSha,
+    list: sheet,
+    measurement: measure(listProposed, sheet,
+      ["list_date", "site", "work_item", "drafter"], ["article", "quantity"]),
+  };
+
+  try {
+    const stored = await api("/api/lists", postJson(body));
+    notice($("list-problems"), "ok", `List #${stored.list_id} saved.`);
+    await refresh();
+    setTimeout(() => $("list-discard").click(), 1200);
+  } catch (e) {
+    notice($("list-problems"), "bad", e.message);
+    $("list-save").disabled = false;
+  }
+});
+
+function stockButtons(sheet, line) {
+  const choice = el("span", { className: "stock-choice" });
+  for (const [label, value] of [["in stock", true], ["to order", false]]) {
+    const button = el("button", { type: "button", textContent: label });
+    button.setAttribute("aria-pressed", String(line.in_stock === value));
+    button.addEventListener("click", async () => {
+      const next = line.in_stock === value ? null : value;
+      try {
+        await api(`/api/lists/${sheet.id}/lines/${line.line_no}`, patchJson({ in_stock: next }));
+        line.in_stock = next;
+        renderLists();
+      } catch (e) {
+        notice($("global-notice"), "bad", e.message);
+      }
+    });
+    choice.append(button);
+  }
+  return choice;
+}
+
+function renderLists() {
+  if (!lists.length) {
+    $("lists").replaceChildren(el("p", { className: "muted", textContent: "No list stored." }));
+    return;
+  }
+
+  $("lists").replaceChildren(...lists.map((sheet) => {
+    const lines = sheet.lines ?? [];
+    const ticked = lines.filter((line) => line.in_stock !== null).length;
+    const summary = `${sheet.work_item ?? "—"} · ${showDate(sheet.list_date)} · `
+      + `#${sheet.id} · ${ticked}/${lines.length} ticked`
+      + (sheet.created_by ? ` · by ${sheet.created_by}` : "");
+
+    const title = el("div", { className: "sheet-title" }, [
+      el("strong", { textContent: sheet.site ?? "no site" }),
+      el("span", { className: "muted", textContent: summary }),
+    ]);
+
+    const actions = el("span", { className: "row tight", style: "margin-left:auto" });
+    if (sheet.photo) {
+      actions.append(el("a", {
+        className: "mini", href: `/api/list-photo/${sheet.id}`, target: "_blank",
+        textContent: "photo",
+      }));
+    }
+    actions.append(confirmButton("Delete", () => api(`/api/lists/${sheet.id}`, { method: "DELETE" })));
+    title.append(actions);
+
+    const block = el("div", { className: "sheet" }, [title]);
+    for (const line of lines) {
+      block.append(el("div", { className: "sheet-line" }, [
+        el("span", { className: "num", textContent: line.line_no }),
+        el("span", {}, [el("strong", { textContent: line.article })]),
+        el("span", { className: "num", textContent: showNum(line.quantity) }),
+        stockButtons(sheet, line),
+      ]));
+    }
+    return block;
+  }));
+}
+
+const DATASETS = [
+  ["inventory", "Inventory"],
+  ["deliveries", "Deliveries (lines)"],
+  ["hardware", "Wanted"],
+  ["catalog", "Supplier lines"],
+  ["vocabulary", "Article vocabulary"],
+  ["audit", "Audit trail"],
+];
+
+function renderExport() {
+  const link = (dataset, fmt) =>
+    el("a", { className: "mini", href: `/export/${dataset}.${fmt}`, textContent: fmt });
+
+  renderTable($("table-export"), [
+    { label: "Data", cell: ([, label]) => el("strong", { textContent: label }) },
+    { label: "CSV", cell: ([dataset]) => link(dataset, "csv") },
+    { label: "XLSX", cell: ([dataset]) => link(dataset, "xlsx") },
+    { label: "Parquet", cell: ([dataset]) => link(dataset, "parquet") },
+  ], DATASETS, "");
+}
+
+async function renderStorage() {
+  let info;
+  try {
+    info = await api("/api/storage");
+  } catch (e) {
+    notice($("storage-note"), "bad", e.message);
+    return;
+  }
+
+  const lines = [
+    ["Database", mb(info.database_bytes), `${info.rows.deliveries} delivery line(s)`],
+    ["Photos", mb(info.photo_bytes), `${info.photo_count} file(s)`],
+    ["Data folder", mb(info.data_bytes),
+      `${info.rows.notes} note(s) · ${info.rows.hardware_lists} list(s)`],
+    ["Disk used", gb(info.disk_used_bytes), `of ${gb(info.disk_total_bytes)} in total`],
+    ["Disk free", gb(info.disk_free_bytes), ""],
+  ];
+  renderTable($("table-storage"), [
+    { label: "Item", cell: ([name]) => el("strong", { textContent: name }) },
+    { label: "Size", numeric: true, cell: ([, size]) => size },
+    { label: "Detail", cell: ([, , detail]) => el("span", { className: "muted", textContent: detail }) },
+  ], lines, "");
+
+  notice($("storage-note"), "",
+    `Images deletd after ${info.photo_retention_days} days`);
+}
+
+async function renderChecks() {
+  let state;
+  try {
+    state = await api("/api/checks");
+  } catch (e) {
+    notice($("checks-note"), "bad", e.message);
+    return;
+  }
+
+  const ok = state.status === "ok";
+  const lines = [
+    ["State", ok ? "OK" : (state.status === "unknown" ? "never checked" : "needs attention")],
+    ["Last check", showTime(state.checked_at)],
+    ["Site answer", state.http ? `http ${state.http}` : "—"],
+    ["Disk free", state.disk_free_percent != null ? `${state.disk_free_percent} %` : "—"],
+    ["Last backup", state.backup_age_hours >= 0 ? `${state.backup_age_hours} h ago` : "none"],
+  ];
+  renderTable($("table-checks"), [
+    { label: "Check", cell: ([name]) => el("strong", { textContent: name }) },
+    { label: "Value", cell: ([, value]) => value },
+  ], lines, "");
+
+  const problems = state.problems ?? [];
+  notice($("checks-note"), ok ? "" : "warn",
+    problems.length ? `To look at: ${problems.join(" ; ")}` : "");
+}
+
+async function renderModels() {
+  let data;
+  try {
+    data = await api("/api/models");
+  } catch (e) {
+    notice($("model-note"), "bad", e.message);
+    return;
+  }
+
+  $("models").replaceChildren(...(data.providers ?? []).map((provider) => {
+    const row = el("div", { className: provider.current ? "model current" : "model" }, [
+      el("span", { className: `dot ${provider.state}` }),
+      el("strong", { textContent: provider.name }),
+      el("span", { className: "detail", textContent: provider.detail }),
+      el("span", { className: "spacer" }),
+    ]);
+    if (provider.current) {
+      row.append(el("span", { className: "pill shared", textContent: "in use" }));
+    }
+
+    const check = el("button", { className: "mini", textContent: "check" });
+    check.addEventListener("click", async () => {
+      check.disabled = true;
+      notice($("model-note"), "", `checking ${provider.name}...`);
+      try {
+        const answer = await api("/api/models/check", postJson({ id: provider.id }));
+        notice($("model-note"), answer.ok ? "ok" : "warn", `${provider.name}: ${answer.detail}`);
+      } catch (e) {
+        notice($("model-note"), "bad", e.message);
+      } finally {
+        check.disabled = false;
+      }
+    });
+    row.append(check);
+
+    if (!provider.current && provider.state !== "unsupported") {
+      const use = el("button", { className: "mini", textContent: "use" });
+      use.addEventListener("click", async () => {
+        use.disabled = true;
+        try {
+          const answer = await api("/api/models/use", postJson({ id: provider.id }));
+          notice($("model-note"), "ok", `reading with ${provider.name} from now on`);
+          await renderModels();
+          return answer;
+        } catch (e) {
+          notice($("model-note"), "bad", e.message);
+        } finally {
+          use.disabled = false;
+        }
+      });
+      row.append(use);
+    }
+    return row;
+  }));
+}
+
+async function renderErrors() {
+  let data;
+  try {
+    data = await api("/api/errors?limit=25");
+  } catch (e) {
+    notice($("error-note"), "bad", e.message);
+    return;
+  }
+
+  const alerting = data.alerting ?? {};
+  $("alerting").textContent = alerting.enabled
+    ? `Texting ${alerting.to} through ${alerting.provider} · at most `
+      + `${alerting.max_per_hour} message(s) per hour`
+    : "Notify Admin a bug, typo or any error";
+
+  renderTable($("table-errors"), [
+    { label: "#", numeric: true, cell: (error) => String(error.error_no) },
+    { label: "When", cell: (error) => showTime(error.at) },
+    { label: "Kind", cell: (error) => error.kind },
+    {
+      label: "Description",
+      cell: (error) => {
+        const box = el("span", {}, [el("strong", { textContent: error.description })]);
+        if (error.context) {
+          box.append(el("div", { className: "desig muted", textContent: error.context }));
+        }
+        return box;
+      },
+    },
+    {
+      label: "Message",
+      cell: (error) => el("span", {
+        className: error.sms_status === "sent" ? "" : "muted",
+        textContent: error.sms_status,
+      }),
+    },
+  ], data.errors ?? [], "No error reported.");
+}
+
+$("error-test").addEventListener("click", async () => {
+  $("error-test").disabled = true;
+  notice($("error-note"), "", "Sending...");
+  try {
+    const result = await api("/api/errors/test", { method: "POST" });
+    notice($("error-note"), result.sms_status === "sent" ? "ok" : "warn",
+      `Error #${result.error_no}, message: ${result.sms_status}`);
+    await renderErrors();
+  } catch (e) {
+    notice($("error-note"), "bad", e.message);
+  } finally {
+    $("error-test").disabled = false;
+  }
+});
+
+async function renderBackups() {
+  let data;
+  try {
+    data = await api("/api/backups");
+  } catch (e) {
+    notice($("backup-note"), "bad", e.message);
+    return;
+  }
+
+  const files = data.backups ?? [];
+  $("backup-summary").textContent = files.length
+    ? `${files.length} backup(s) · latest ${files[0].date.replace("T", " ")}`
+    : "no backup";
+
+  const csv = (file, table) => el("a", {
+    className: "mini", textContent: "csv",
+    href: `/export/backup/${file.name}.csv?table=${table}`,
+  });
+
+  renderTable($("table-backups"), [
+    { label: "Date", cell: (file) => el("strong", { textContent: file.date.replace("T", " ") }) },
+    { label: "Size", numeric: true, cell: (file) => `${(file.bytes / 1000).toFixed(0)} kB` },
+    { label: "Encrypted", cell: (file) => (file.encrypted ? "yes" : "no") },
+    { label: "Deliveries", cell: (file) => csv(file, "deliveries") },
+    { label: "Wanted", cell: (file) => csv(file, "hardware_list_lines") },
+  ], files.slice(0, 10), "No backup yet.");
+}
+
+$("backup-run").addEventListener("click", async () => {
+  $("backup-run").disabled = true;
+  notice($("backup-note"), "", "Backing up...");
+  try {
+    const result = await api("/api/backups", { method: "POST" });
+    notice($("backup-note"), "ok", result.latest
+      ? `Backup done: ${result.latest.name} (${(result.latest.bytes / 1000).toFixed(0)} kB)`
+      : "Backup done.");
+    await renderBackups();
+  } catch (e) {
+    notice($("backup-note"), "bad", e.message);
+  } finally {
+    $("backup-run").disabled = false;
+  }
+});
+
+async function renderAccuracy() {
+  let data;
+  try {
+    data = await api("/api/accuracy");
+  } catch (e) {
+    notice($("accuracy-note"), "bad", e.message);
+    return;
+  }
+
+  const series = data.series ?? [];
+  if (!series.length) {
+    $("accuracy-graph").replaceChildren();
+    notice($("accuracy-note"), "",
+      "Nothing measured yet: it fills in as notes are checked and saved.");
+    return;
+  }
+
+  const graph = el("div", { className: "graph" });
+  for (const day of series.slice(-30)) {
+    const bar = el("div", {
+      className: day.accuracy < 90 ? "bar bad" : "bar",
+      title: `${showDate(day.day)}: ${day.accuracy}% over ${day.documents} document(s)`,
+    });
+    bar.style.height = `${Math.max(2, Math.round(day.accuracy))}%`;
+    graph.append(bar);
+  }
+
+  $("accuracy-graph").replaceChildren(graph, el("p", {
+    className: "graph-legend",
+    textContent: `one day per bar · ${data.documents} document(s) reviewed · `
+      + `${data.corrected} field(s) corrected out of ${data.fields}`,
+  }));
+  notice($("accuracy-note"), data.accuracy != null && data.accuracy < 90 ? "warn" : "",
+    data.accuracy != null ? `Overall accuracy: ${data.accuracy}%` : "");
+}
+
+async function renderVocabulary() {
+  let data;
+  try {
+    data = await api("/api/vocabulary");
+  } catch (e) {
+    notice($("merge-note"), "bad", e.message);
+    return;
+  }
+
+  const articles = data.articles ?? [];
+  $("vocabulary-summary").textContent = `${data.total} name(s) · ${data.shared} used on both `
+    + `delivery notes and Wanted lists · ${(data.aliases ?? []).length} alias(es)`;
+
+  renderTable($("table-vocabulary"), [
+    {
+      label: "Article",
+      cell: (entry) => {
+        const box = el("span", {}, [el("strong", { textContent: entry.article })]);
+        if (entry.shared) {
+          box.append(" ", el("span", { className: "pill shared", textContent: "shared" }));
+        }
+        if (entry.aliases.length) {
+          box.append(el("div", {
+            className: "desig muted", textContent: `= ${entry.aliases.join(", ")}`,
+          }));
+        }
+        return box;
+      },
+    },
+    { label: "Notes", numeric: true, cell: (entry) => String(entry.deliveries) },
+    { label: "Lists", numeric: true, cell: (entry) => String(entry.lists) },
+    { label: "Confirmed", numeric: true, cell: (entry) => String(entry.seen) },
+    {
+      label: "",
+      cell: (entry) => {
+        const pick = el("button", { className: "mini", textContent: "merge into..." });
+        pick.addEventListener("click", () => {
+          $("merge-alias").value = entry.article;
+          $("merge-article").focus();
+        });
+        return pick;
+      },
+    },
+  ], articles.slice(0, 60), "No article name yet.");
+}
+
+$("merge-run").addEventListener("click", async () => {
+  const alias = $("merge-alias").value.trim();
+  const article = $("merge-article").value.trim();
+  if (!alias || !article) {
+    notice($("merge-note"), "warn", "Give the name to merge and the name to keep.");
+    return;
+  }
+
+  $("merge-run").disabled = true;
+  try {
+    const result = await api("/api/vocabulary/merge", postJson({ alias, article }));
+    notice($("merge-note"), "ok",
+      `${result.alias} is now ${result.article}, ${result.deliveries} delivery line(s) and `
+      + `${result.list_lines} list line(s) rewritten.`);
+    $("merge-alias").value = "";
+    $("merge-article").value = "";
+    await refresh();
+  } catch (e) {
+    notice($("merge-note"), "bad", e.message);
+  } finally {
+    $("merge-run").disabled = false;
+  }
+});
+
+async function renderAudit() {
+  let data;
+  try {
+    data = await api("/api/audit?limit=60");
+  } catch (e) {
+    notice($("audit-note"), "bad", e.message);
+    return;
+  }
+
+  renderTable($("table-users"), [
+    { label: "User", cell: (user) => el("strong", { textContent: user.user }) },
+    { label: "Notes", numeric: true, cell: (user) => String(user.notes) },
+    { label: "Lists", numeric: true, cell: (user) => String(user.lists) },
+    { label: "Corrections", numeric: true, cell: (user) => String(user.corrections) },
+    { label: "Events", numeric: true, cell: (user) => String(user.events) },
+    { label: "Last seen", cell: (user) => showTime(user.last_seen) },
+  ], data.users ?? [], "Nobody has signed in yet.");
+
+  renderTable($("table-audit"), [
+    { label: "When", cell: (event) => showTime(event.at) },
+    { label: "User", cell: (event) => el("strong", { textContent: event.user }) },
+    { label: "Action", cell: (event) => event.action },
+    { label: "Target", cell: (event) => event.target ?? "—" },
+    { label: "Detail", cell: (event) => el("span", { className: "muted", textContent: event.detail ?? "" }) },
+  ], data.events ?? [], "No event recorded.");
+}
+
+const FKEYS = [
+  ["F1", "SQL", () => {
+    openTab("query");
+    $("question").focus();
+  }],
+  ["F2", "Run", () => {
+    openTab("query");
+    $("ask-btn").click();
+  }],
+  ["F3", "Search", () => openTab("deliveries")],
+  ["F4", "Wanted", () => openTab("hardware")],
+  ["F5", "Export CSV", () => { window.location.href = "/export.csv"; }],
+  ["F6", "Export Parquet", () => { window.location.href = "/export.parquet"; }],
+  ["F7", "Quit", () => $("quit-form").submit()],
+  ["F8", "Remind me", () => $("lock-form").submit()],
+];
+
+$("fkeys").replaceChildren(
+  ...FKEYS.map(([key, label, action]) => {
+    const button = el("button", { className: "fkey", type: "button", title: `${key} = ${label}` }, [
+      el("b", { textContent: key }),
+      el("span", { textContent: `=${label}` }),
+    ]);
+    button.addEventListener("click", action);
+    return button;
+  }),
+  el("a", {
+    className: "license", href: "/license", target: "_blank", rel: "noopener",
+    textContent: "licence", title: "MIT licence. No warranty of any kind.",
+  }),
+);
+
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey || event.altKey || event.metaKey) return;
+  const entry = FKEYS.find(([key]) => key === event.key);
+  if (!entry) return;
+  event.preventDefault();
+  entry[2]();
+});
+
+async function refresh() {
+  try {
+    const data = await api("/api/data");
+    notes = data.notes;
+    lists = data.lists ?? [];
+    flatten();
+
+    $("who").textContent = data.user ? `user ${data.user}` : "";
+    $("headline-count").textContent = `${notes.length} notes · ${rows.length} lines`;
+
+    renderDeliveries();
+    renderLists();
+    renderExport();
+    await Promise.all([
+      renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
+      renderAccuracy(), renderVocabulary(), renderAudit(),
+    ]);
+    notice($("global-notice"), "", "");
+  } catch (e) {
+    notice($("global-notice"), "bad", `Server unreachable: ${e.message}`);
+  }
+}
+
+openTab(TABS.find((name) => $(`tab-${name}`).getAttribute("aria-selected") === "true") ?? "capture");
+refresh();
+</script>

@@ -1,0 +1,43 @@
+[project]
+name = "stock-manager"
+version = "1.0.0"
+description = "Read delivery notes and handwritten hardware lists from photos into a local DuckDB file, from the terminal."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "@louis31921c" }]
+keywords = ["inventory", "duckdb", "terminal", "ocr", "deliveries"]
+dependencies = [
+    "duckdb>=1.1",
+    "pydantic>=2",
+    "python-dotenv>=1",
+    "openpyxl>=3.1",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+gemini = ["google-genai>=2.24"]
+dev = ["pytest", "pytest-asyncio", "pillow", "httpx"]
+
+[project.scripts]
+stock-manager = "inventory.desktop:main"
+stock = "inventory.cli:main"
+stock-tui = "inventory.cli:main"
+
+[project.urls]
+Source = "https://github.com/Louis31921c/Inventory-Manager"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["inventory"]
+
+[tool.setuptools.package-data]
+inventory = ["rules.md", "prompts/*.md", "web_ui/*.html", "web_ui/*.txt", "web_ui/fonts/*.woff2"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

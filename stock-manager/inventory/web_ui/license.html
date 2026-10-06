@@ -1,0 +1,62 @@
+<meta charset="utf-8">
+<title>Licence</title>
+<style>
+  @font-face {
+    font-display: swap;
+    font-family: "Cascadia Mono Web";
+    src: url("/fonts/CascadiaMono.woff2") format("woff2");
+  }
+  body {
+    background: #000; color: #39ff14; font-size: 13px; line-height: 1.5; margin: 0;
+    padding: 24px 16px 64px;
+    font-family: "Cascadia Mono Web", "DejaVu Sans Mono", ui-monospace, monospace;
+  }
+  pre { margin: 0 auto; max-width: 82ch; min-height: 60vh; white-space: pre-wrap; word-wrap: break-word; }
+  pre.typing::after { animation: blink 1s steps(1) infinite; content: "\2588"; }
+  @keyframes blink { 50% { opacity: 0; } }
+  footer { margin: 24px auto 0; max-width: 82ch; }
+  a { color: #39ff14; }
+  .skip { color: #1c9c10; }
+</style>
+
+<pre id="text" class="typing"></pre>
+<footer><a href="/">&lt; back</a> <span class="skip" id="skip">(click to show it all)</span></footer>
+
+<script>
+const LICENCE = LICENCE_JSON;
+const out = document.getElementById("text");
+const skip = document.getElementById("skip");
+let shown = 0;
+let follow = true;
+
+function showEverything() {
+  out.textContent = LICENCE;
+  out.classList.remove("typing");
+  skip.textContent = "";
+}
+
+addEventListener("click", showEverything);
+addEventListener("keydown", showEverything);
+addEventListener("wheel", () => { follow = false; });
+addEventListener("touchmove", () => { follow = false; });
+
+function step() {
+  if (shown >= LICENCE.length) return showEverything();
+
+  let printed = 0;
+  let newline = false;
+  while (printed < 10 && shown < LICENCE.length) {
+    newline = LICENCE[shown++] === "\n";
+    printed += 1;
+    if (newline) break;
+  }
+
+  out.textContent = LICENCE.slice(0, shown);
+  if (follow && out.scrollHeight > innerHeight) scrollTo(0, document.body.scrollHeight);
+  if (newline) setTimeout(() => requestAnimationFrame(step), 45);
+  else requestAnimationFrame(step);
+}
+
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) showEverything();
+else requestAnimationFrame(step);
+</script>
