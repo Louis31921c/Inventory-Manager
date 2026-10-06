@@ -59,7 +59,7 @@ def seed(app):
         ("VERGE TRIM GALVANISED", 6, True, "B02 - Verge trim L 3000 dev 333 DX51D Z275"),
     ]), "sha3", "", "ALEX")
 
-    db.save_hardware_list(path, {"list_date": date(2026, 9, 24), "site": "HARBOUR POINT",
+    db.save_purchase_order(path, {"list_date": date(2026, 9, 24), "site": "HARBOUR POINT",
                                  "work_item": "PARAPET", "drafter": "N.T", "lines": [
         {"article": "HEX BOLT M6X25", "quantity": 110, "in_stock": True},
         {"article": "WASHER M6", "quantity": 220, "in_stock": True},
@@ -67,10 +67,10 @@ def seed(app):
         {"article": "INSERT M6", "quantity": 60, "in_stock": None}]}, "sha4", "", "MARIE")
     audit.record(path, "ALEX", "note.save", "note #3", "FORMA STEEL - 2 line(s)", "terminal")
     audit.record(path, "MARIE", "note.save", "note #2", "METALWORKS - 2 line(s)", "terminal")
-    audit.record(path, "MARIE", "list.tick", "list #1 line 3", "to order", "terminal")
+    audit.record(path, "MARIE", "order.tick", "list #1 line 3", "to order", "terminal")
     audit.record(path, "ALEX", "vocabulary.merge", "WASHER M6", "RONDELLE M6 -> WASHER M6",
                  "terminal")
-    audit.record(path, "ALEX", "export", "deliveries.csv", None, "terminal")
+    audit.record(path, "ALEX", "export", "inventory_lines.csv", None, "terminal")
     vocabulary.merge(path, "RONDELLE M6", "WASHER M6", "ALEX")
     alerts.report(app.config, "backup", "backup failed: no space left on device", "backup")
     alerts.report(app.config, "extract", "note reading failed: model timed out", "/read")
@@ -127,12 +127,12 @@ def main():
         draw(tui.render(app, 104, 26), out_dir / "search.png")
 
         app.tab = 2
-        app.question = "what was asked for on the hardware lists but never delivered?"
+        app.question = "what was ordered but never delivered?"
         app.answer = {
             "sql": "SELECT l.article, sum(l.quantity) AS asked,\n"
                    "       coalesce(sum(d.units), 0) AS delivered\n"
-                   "FROM hardware_list_lines l\n"
-                   "LEFT JOIN (SELECT article, sum(quantity) AS units FROM deliveries "
+                   "FROM purchase_order_lines l\n"
+                   "LEFT JOIN (SELECT article, sum(quantity) AS units FROM inventory_lines "
                    "GROUP BY article) d ON d.article = l.article\n"
                    "GROUP BY l.article ORDER BY asked DESC",
             "note": None,
@@ -147,7 +147,7 @@ def main():
         app.sheet_cursor = 0
         app.line_cursor = 2
         app.say("S in stock, O to order, C clears it")
-        draw(tui.render(app, 104, 26), out_dir / "hardware.png")
+        draw(tui.render(app, 104, 26), out_dir / "orders.png")
 
         app.tab = 4
         app.say("B backup now, T test message, M merge two names")

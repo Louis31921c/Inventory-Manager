@@ -48,7 +48,7 @@ def known_articles(db_path, limit=PROMPT_LIMIT):
 
 
 def backfill(con):
-    for table, source in (("deliveries", "delivery"), ("hardware_list_lines", "list")):
+    for table, source in (("inventory_lines", "delivery"), ("purchase_order_lines", "list")):
         con.execute(
             f"""
             INSERT INTO article_names (article, seen, source)
@@ -63,8 +63,8 @@ def vocabulary(db_path):
     with duckdb.connect(str(db_path), read_only=True) as con:
         rows = con.execute(
             """
-            WITH on_notes AS (SELECT article, count(*) AS n FROM deliveries GROUP BY article),
-                 on_lists AS (SELECT article, count(*) AS n FROM hardware_list_lines GROUP BY article),
+            WITH on_notes AS (SELECT article, count(*) AS n FROM inventory_lines GROUP BY article),
+                 on_lists AS (SELECT article, count(*) AS n FROM purchase_order_lines GROUP BY article),
                  alias_of AS (SELECT article, string_agg(alias, ', ' ORDER BY alias) AS aliases,
                                      count(*) AS alias_count
                               FROM article_aliases GROUP BY article)
@@ -81,7 +81,7 @@ def vocabulary(db_path):
     return [
         {
             "article": article, "seen": seen, "source": source,
-            "deliveries": notes, "lists": lists,
+            "inventory": notes, "orders": lists,
             "aliases": [a for a in aliases.split(", ") if a], "alias_count": alias_count,
             "last_seen": last_seen.isoformat(timespec="minutes") if last_seen else None,
             "shared": bool(notes and lists),
@@ -102,9 +102,9 @@ def aliases(db_path):
 
 
 def _rewrite(con, alias_name, target, user):
-    notes = con.execute("UPDATE deliveries SET article = ? WHERE article = ? RETURNING 1",
+    notes = con.execute("UPDATE inventory_lines SET article = ? WHERE article = ? RETURNING 1",
                         [target, alias_name]).fetchall()
-    lines = con.execute("UPDATE hardware_list_lines SET article = ? WHERE article = ? RETURNING 1",
+    lines = con.execute("UPDATE purchase_order_lines SET article = ? WHERE article = ? RETURNING 1",
                         [target, alias_name]).fetchall()
     con.execute("UPDATE catalog SET article = ? WHERE article = ?", [target, alias_name])
     con.execute("UPDATE article_aliases SET article = ? WHERE article = ?", [target, alias_name])
@@ -128,7 +128,7 @@ def _rewrite(con, alias_name, target, user):
         """,
         [alias_name, target, user],
     )
-    return {"deliveries": len(notes), "list_lines": len(lines)}
+    return {"inventory": len(notes), "order_lines": len(lines)}
 
 
 def merge(db_path, alias, article, user=None):

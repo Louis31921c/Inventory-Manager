@@ -8,7 +8,7 @@ from pathlib import Path
 
 import duckdb
 
-TABLES = ("notes", "deliveries", "hardware_lists", "hardware_list_lines", "catalog",
+TABLES = ("notes", "inventory_lines", "purchase_orders", "purchase_order_lines", "catalog",
           "article_names", "article_aliases", "readings", "users", "audit", "errors",
           "schema_migrations")
 

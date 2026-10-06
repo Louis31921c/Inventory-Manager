@@ -1,6 +1,6 @@
 # Stock manager
 
-A desktop app for a workshop. Photograph a delivery note or a handwritten hardware list, a model
+A desktop app for a workshop. Photograph a delivery note or a handwritten purchase order, a model
 reads it, you correct what it got wrong, and the lines land in a DuckDB file on your own machine.
 Then search them, ask questions in plain words, or run SQL.
 
@@ -97,7 +97,7 @@ stock-tui                  # the same, in a terminal
 stock read note.jpg        # read one photo, print what came back
 stock search "hex bolt"    # the stored lines
 stock ask "how many units per supplier last month?"
-stock export deliveries --format xlsx
+stock export inventory_lines --format xlsx
 stock where                # where the data lives
 ```
 
@@ -110,7 +110,7 @@ stock where                # where the data lives
 | New note | `R` reads a photo. Correct the fields and lines, `S` saves. |
 | Search | `/` filters, `B` shows backorders only, `E` edits the work item of a line. |
 | SQL | `Enter` asks a question in plain words, or type a `SELECT` yourself. |
-| Hardware list | `R` reads a sheet. `S` in stock, `O` to order, `C` clears, `D` deletes. |
+| Purchase orders | `R` reads a sheet. `S` in stock, `O` to order, `C` clears, `D` deletes. |
 | Settings | `B` backup, `T` test message, `M` merge two names, `E` export, `P` purge photos. |
 
 ### Keys everywhere
@@ -120,7 +120,7 @@ stock where                # where the data lives
 | F1 | SQL tab |
 | F2 | ask a question |
 | F3 | search |
-| F4 | hardware lists |
+| F4 | purchase orders |
 | F5 / F6 | export the delivery lines to CSV / Parquet |
 | F7 | quit |
 | Ctrl-U | clear the line you are typing |
@@ -140,9 +140,9 @@ A question in plain words goes to the model, which writes one `SELECT`. The quer
 the answer, so a misunderstood question is obvious. Anything starting with `select` or `with` runs
 as typed. Every query runs read-only with file access switched off.
 
-### Hardware lists
+### Purchase orders
 
-![Wanted lists](docs/app-wanted.png)
+![Purchase orders](docs/app-wanted.png)
 
 The handwritten sheets go through the same reader, and each line is ticked in stock or to order.
 They share the article vocabulary with the delivery notes, which is what makes "asked for against
@@ -192,8 +192,8 @@ cron or a systemd timer at `stock backup`.
 
 | Table | Holds |
 |---|---|
-| `notes`, `deliveries` | one row per note, one per article line |
-| `hardware_lists`, `hardware_list_lines` | the sheets and their lines, with `in_stock` |
+| `notes`, `inventory_lines` | one row per note, one per article line |
+| `purchase_orders`, `purchase_order_lines` | the sheets and their lines, with `in_stock` |
 | `article_names`, `article_aliases` | the shared vocabulary and its merges |
 | `catalog` | supplier line -> confirmed name |
 | `readings` | fields compared against fields corrected |

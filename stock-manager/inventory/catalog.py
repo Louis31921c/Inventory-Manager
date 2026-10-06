@@ -38,7 +38,7 @@ def learn(con, note):
 
 def backfill(con):
     rows = con.execute(
-        "SELECT supplier, designation, article FROM deliveries WHERE designation IS NOT NULL"
+        "SELECT supplier, designation, article FROM inventory_lines WHERE designation IS NOT NULL"
     ).fetchall()
     for supplier, designation, article in rows:
         con.execute(

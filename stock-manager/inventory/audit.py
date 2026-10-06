@@ -78,14 +78,15 @@ def users(db_path):
                        count(*)                                  AS events,
                        max(happened_at)                          AS last_event,
                        count(*) FILTER (action = 'note.save')    AS notes,
-                       count(*) FILTER (action = 'list.save')    AS lists,
+                       count(*) FILTER (action IN ('order.save', 'list.save')) AS orders,
                        count(*) FILTER (action LIKE '%.edit'
-                                        OR action = 'list.tick') AS corrections,
+                                        OR action IN ('order.tick', 'list.tick'))
+                                                                AS corrections,
                        count(*) FILTER (action = 'login')        AS logins
                 FROM audit GROUP BY user_name
             )
             SELECT coalesce(u.user_name, a.user_name),
-                   coalesce(a.events, 0), coalesce(a.notes, 0), coalesce(a.lists, 0),
+                   coalesce(a.events, 0), coalesce(a.notes, 0), coalesce(a.orders, 0),
                    coalesce(a.corrections, 0), coalesce(a.logins, 0),
                    greatest(coalesce(a.last_event, u.last_seen_at),
                             coalesce(u.last_seen_at, a.last_event)),
@@ -94,11 +95,11 @@ def users(db_path):
             ORDER BY 7 DESC NULLS LAST
             """
         ).fetchall()
-    return [{"user": name, "events": events_, "notes": notes, "lists": lists,
+    return [{"user": name, "events": events_, "notes": notes, "orders": orders,
              "corrections": corrections, "logins": logins,
              "last_seen": last.isoformat(timespec="seconds") if last else None,
              "since": since.isoformat(timespec="minutes") if since else None}
-            for name, events_, notes, lists, corrections, logins, last, since in rows]
+            for name, events_, notes, orders, corrections, logins, last, since in rows]
 
 
 def summary(db_path, limit=100):

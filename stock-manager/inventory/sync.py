@@ -63,8 +63,8 @@ def counts(path):
 def copy_in(db_path, legacy_path, images_dir=None, user=None):
     """Insert whatever is not already here. Returns what was added."""
     present = check(legacy_path)
-    added = {"notes": 0, "deliveries": 0, "lists": 0, "list_lines": 0, "catalog": 0,
-             "readings": 0, "skipped_notes": 0, "skipped_lists": 0}
+    added = {"notes": 0, "inventory": 0, "orders": 0, "order_lines": 0, "catalog": 0,
+             "readings": 0, "skipped_notes": 0, "skipped_orders": 0}
 
     with duckdb.connect(str(db_path)) as con:
         con.execute(f"ATTACH '{legacy_path}' AS legacy (READ_ONLY)")
@@ -82,9 +82,9 @@ def copy_in(db_path, legacy_path, images_dir=None, user=None):
                     "VALUES (?, ?, ?, ?) RETURNING note_id",
                     [sha, _photo(image, sha, images_dir), confirmed, user]).fetchone()[0]
                 added["notes"] += 1
-                added["deliveries"] += len(con.execute(
+                added["inventory"] += len(con.execute(
                     """
-                    INSERT INTO deliveries (article, quantity, supplier, delivery_date, order_date,
+                    INSERT INTO inventory_lines (article, quantity, supplier, delivery_date, order_date,
                                             site, work_item, backorder, designation, note_id,
                                             line_no)
                     SELECT article, quantite, fournisseur, date_livraison, date_commande,
@@ -98,20 +98,20 @@ def copy_in(db_path, legacy_path, images_dir=None, user=None):
                         "SELECT liste_id, date_liste, chantier, ouvrage, dessinateur, "
                         "image_sha256, image_path, cree_le FROM legacy.listes "
                         "ORDER BY liste_id").fetchall():
-                    if sha and con.execute("SELECT 1 FROM hardware_lists WHERE image_sha256 = ?",
+                    if sha and con.execute("SELECT 1 FROM purchase_orders WHERE image_sha256 = ?",
                                            [sha]).fetchone():
-                        added["skipped_lists"] += 1
+                        added["skipped_orders"] += 1
                         continue
                     list_id = con.execute(
-                        "INSERT INTO hardware_lists (list_date, site, work_item, drafter, "
+                        "INSERT INTO purchase_orders (list_date, site, work_item, drafter, "
                         "image_sha256, image_path, created_at, created_by) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING list_id",
                         [day, site, work_item, drafter, sha, _photo(image, sha, images_dir),
                          created, user]).fetchone()[0]
-                    added["lists"] += 1
-                    added["list_lines"] += len(con.execute(
+                    added["orders"] += 1
+                    added["order_lines"] += len(con.execute(
                         """
-                        INSERT INTO hardware_list_lines (list_id, line_no, article, designation,
+                        INSERT INTO purchase_order_lines (list_id, line_no, article, designation,
                                                          reference, quantity, stock, in_stock)
                         SELECT ?, ligne_no, article, designation, reference, quantite, stock,
                                en_stock

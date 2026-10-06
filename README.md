@@ -1,6 +1,6 @@
 # Inventory Manager
 
-A lightweight inventory management ERP for tracking your company's hardware. Custom designed on demand to solve a real business need. Snap a photo of a delivery note or a handwritten hardware list, review what the model extracted, edit any fields as needed, and save the results to DuckDB. Then query it with SQL or export it (csv, parquet, xlsx). accessible from your phone or computer.each user has its own session to track activity and be able to communicate within the company
+A lightweight inventory management ERP for tracking your company's hardware. Custom designed on demand to solve a real business need. Snap a photo of a delivery note or a handwritten purchase order, review what the model extracted, edit any fields as needed, and save the results to DuckDB. Then query it with SQL or export it (csv, parquet, xlsx). accessible from your phone or computer.each user has its own session to track activity and be able to communicate within the company
 ```
 photo -> model -> you check it -> DuckDB -> search, SQL, questions, exports
 ```
@@ -32,12 +32,12 @@ to CSV or Parquet. Query one, or JOIN both for more advanced indicators
 Disk and database size, measured reading accuracy, the article vocabulary and its merges, who did
 what, numbered errors, snapshots, force a backup, each user's commit audit
 
-### Wanted lists
+### Purchase orders
 
-![Wanted lists](stock-manager/docs/app-wanted.png)
+![Purchase orders](stock-manager/docs/app-wanted.png)
 
 Photograph a handwritten sheet and every line is read. Tick each one in stock or to order; the
-sheets share the article names with the delivery notes, so the two can be joined.
+orders share the article names with the delivery notes, so the two can be joined.
 
 ## Things worth knowing
 

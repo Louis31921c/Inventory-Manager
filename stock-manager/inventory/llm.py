@@ -111,7 +111,7 @@ def _vocabulary(known_articles):
         return ""
     return (
         "\n\n<known_articles>\nArticle names already used in our database, the shared vocabulary "
-        "built from both delivery notes and hardware lists, most frequent first. When a line is the "
+        "built from both delivery notes and purchase orders, most frequent first. When a line is the "
         "same product (same type and same defining size or colour), reuse the exact name from this "
         "list, even if the document words it differently. Only create a new name for a product that "
         f"is not in the list.\n{names}\n</known_articles>"
@@ -124,7 +124,7 @@ def extraction_prompt(known_articles=()):
 
 def list_prompt(known_articles=()):
     
-    return prompt_text("hardware_list.md") + _house_rules() + _vocabulary(known_articles)
+    return prompt_text("purchase_order.md") + _house_rules() + _vocabulary(known_articles)
 
 
 def _question_prompt(question, previous):
@@ -162,7 +162,7 @@ class ClaudeCodeBackend:
 
     async def extract_list(self, data, media_type, known_articles=()):
         return await self._read_file(data, media_type, "list", LIST_SCHEMA,
-                                     "a photo of a hardware list",
+                                     "a photo of a purchase order sheet",
                                      list_prompt(known_articles))
 
     async def to_sql(self, question, previous=None):

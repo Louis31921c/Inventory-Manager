@@ -1,10 +1,10 @@
-This is a hardware list: a printed form filled in by hand in the workshop. Read the
+This is a purchase order sheet: a printed form filled in by hand in the workshop. Read the
 handwriting.
 
 Header fields, each next to its printed label:
 - list_date: the date field, as YYYY-MM-DD (often written day-first, e.g. 24/08/2026 is 2026-08-24).
 - site: the job site field, exactly as written (it may include a job number).
-- work_item: the structure or part of the building the hardware is for.
+- work_item: the structure or part of the building the parts are for.
 - drafter: the name or initials of whoever filled the sheet in.
 
 The table lists one entry per written line, top to bottom:

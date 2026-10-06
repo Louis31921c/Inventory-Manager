@@ -73,7 +73,7 @@ def cmd_read(config, args):
 
 
 def cmd_search(config, args):
-    rows = db.delivery_rows(config.db_path)
+    rows = db.inventory_rows(config.db_path)
     needle = (args.text or "").upper()
     keep = []
     for row in rows:
@@ -168,19 +168,19 @@ def cmd_vocab(config, args):
         audit.record(config.db_path, config.user, "vocabulary.merge", result["article"],
                      f"{result['alias']} -> {result['article']}", "cli")
         print(f"{result['alias']} is now {result['article']}: "
-              f"{result['deliveries']} delivery line(s), {result['list_lines']} sheet line(s)")
+              f"{result['inventory']} delivery line(s), {result['order_lines']} sheet line(s)")
         return 0
-    rows = [[entry["article"], entry["deliveries"], entry["lists"], entry["seen"],
+    rows = [[entry["article"], entry["inventory"], entry["orders"], entry["seen"],
              ", ".join(entry["aliases"])] for entry in vocabulary.vocabulary(config.db_path)]
-    table(["article", "notes", "sheets", "seen", "aliases"], rows, args.limit)
+    table(["article", "lines", "orders", "seen", "aliases"], rows, args.limit)
     return 0
 
 
 def cmd_audit(config, args):
     if args.users:
-        rows = [[u["user"], u["notes"], u["lists"], u["corrections"], u["events"], u["last_seen"]]
+        rows = [[u["user"], u["notes"], u["orders"], u["corrections"], u["events"], u["last_seen"]]
                 for u in audit.users(config.db_path)]
-        table(["user", "notes", "sheets", "corrections", "events", "last seen"], rows)
+        table(["user", "notes", "orders", "corrections", "events", "last seen"], rows)
         return 0
     rows = [[e["at"], e["user"], e["action"], e["target"], e["detail"]]
             for e in audit.events(config.db_path, args.limit)]

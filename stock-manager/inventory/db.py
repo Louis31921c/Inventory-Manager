@@ -15,7 +15,7 @@ LIST_COLUMNS = ("list_date", "site", "work_item", "drafter", "image_sha256", "im
                 "created_by")
 LIST_LINE_COLUMNS = ("list_id", "line_no", "article", "designation", "reference", "quantity",
                      "stock", "in_stock")
-COUNTED_TABLES = ("notes", "deliveries", "hardware_lists", "hardware_list_lines", "catalog",
+COUNTED_TABLES = ("notes", "inventory_lines", "purchase_orders", "purchase_order_lines", "catalog",
                   "article_names", "audit")
 
 
@@ -76,7 +76,7 @@ def save_note(db_path, note, image_sha256, image_path, user=None):
             ).fetchone()[0]
             placeholders = ", ".join("?" * (len(ROW_COLUMNS) + 2))
             con.executemany(
-                f"INSERT INTO deliveries ({', '.join(ROW_COLUMNS)}, note_id, line_no) "
+                f"INSERT INTO inventory_lines ({', '.join(ROW_COLUMNS)}, note_id, line_no) "
                 f"VALUES ({placeholders})",
                 [[r[c] for c in ROW_COLUMNS] + [note_id, n] for n, r in enumerate(rows, 1)],
             )
@@ -91,7 +91,7 @@ def save_note(db_path, note, image_sha256, image_path, user=None):
 
 def describe_note(db_path, note_id):
    
-    supplier, lines = read(db_path, "SELECT any_value(supplier), count(*) FROM deliveries "
+    supplier, lines = read(db_path, "SELECT any_value(supplier), count(*) FROM inventory_lines "
                                     "WHERE note_id = ?", [note_id])[0]
     return (supplier, lines) if lines else None
 
@@ -102,19 +102,19 @@ def delete_note(db_path, note_id):
         con.begin()
         row = con.execute("DELETE FROM notes WHERE note_id = ? RETURNING image_path",
                           [note_id]).fetchone()
-        con.execute("DELETE FROM deliveries WHERE note_id = ?", [note_id])
+        con.execute("DELETE FROM inventory_lines WHERE note_id = ?", [note_id])
         con.commit()
     return row[0] if row else None
 
 
 def update_work_item(db_path, note_id, line_no, work_item):
    
-    return write(db_path, "UPDATE deliveries SET work_item = ? WHERE note_id = ? AND line_no = ? "
+    return write(db_path, "UPDATE inventory_lines SET work_item = ? WHERE note_id = ? AND line_no = ? "
                           "RETURNING line_no",
                  [normalize_name(work_item), note_id, line_no]) is not None
 
 
-def inventory(db_path):
+def stock_by_article(db_path):
     
     rows = read(db_path, """
             SELECT article,
@@ -125,7 +125,7 @@ def inventory(db_path):
                    arg_max(work_item, delivery_date) AS work_item,
                    count(*)                          AS lines,
                    count(*) FILTER (backorder)       AS backorders
-            FROM deliveries
+            FROM inventory_lines
             GROUP BY article
             ORDER BY article
             """)
@@ -137,17 +137,17 @@ def inventory(db_path):
 
 
 EXPORTS = {
-    "deliveries": "SELECT " + ", ".join(EXPORT_COLUMNS)
-                  + " FROM deliveries ORDER BY delivery_date, note_id",
-    "inventory": """SELECT article, sum(quantity) AS quantity, max(delivery_date) AS last_delivery,
+    "inventory": "SELECT " + ", ".join(EXPORT_COLUMNS)
+                  + " FROM inventory_lines ORDER BY delivery_date, note_id",
+    "stock": """SELECT article, sum(quantity) AS quantity, max(delivery_date) AS last_delivery,
                            arg_max(supplier, delivery_date) AS supplier,
                            arg_max(site, delivery_date) AS site,
                            arg_max(work_item, delivery_date) AS work_item,
                            count(*) AS lines, count(*) FILTER (backorder) AS backorders
-                    FROM deliveries GROUP BY article ORDER BY article""",
-    "hardware": """SELECT h.list_id, h.list_date, h.site, h.work_item, h.drafter,
+                    FROM inventory_lines GROUP BY article ORDER BY article""",
+    "purchase_orders": """SELECT h.list_id, h.list_date, h.site, h.work_item, h.drafter,
                           l.line_no, l.article, l.designation, l.quantity, l.stock, l.in_stock
-                   FROM hardware_lists h JOIN hardware_list_lines l USING (list_id)
+                   FROM purchase_orders h JOIN purchase_order_lines l USING (list_id)
                    ORDER BY h.list_date DESC NULLS LAST, h.list_id, l.line_no""",
     "catalog": "SELECT article, supplier, reference, designation, seen FROM catalog "
                "ORDER BY article",
@@ -176,9 +176,9 @@ def export_to_file(db_path, dataset, out):
 
 def export(db_path, out_dir):
     out_dir.mkdir(parents=True, exist_ok=True)
-    paths = [out_dir / "deliveries.csv", out_dir / "deliveries.parquet"]
+    paths = [out_dir / "inventory.csv", out_dir / "inventory.parquet"]
     for path in paths:
-        export_to_file(db_path, "deliveries", path)
+        export_to_file(db_path, "inventory", path)
     return paths
 
 
@@ -209,16 +209,16 @@ def purge_photos(db_path, images_dir, days=42):
             con.execute("UPDATE notes SET image_path = NULL WHERE note_id = ?", [note_id])
 
         old_lists = con.execute(
-            "SELECT list_id, image_path FROM hardware_lists WHERE image_path IS NOT NULL "
+            "SELECT list_id, image_path FROM purchase_orders WHERE image_path IS NOT NULL "
             f"AND created_at < now() - INTERVAL {int(days)} DAY"
         ).fetchall()
         for list_id, path_str in old_lists:
             unlink(path_str)
-            con.execute("UPDATE hardware_lists SET image_path = NULL WHERE list_id = ?", [list_id])
+            con.execute("UPDATE purchase_orders SET image_path = NULL WHERE list_id = ?", [list_id])
 
         kept = {row[0] for row in con.execute(
             "SELECT image_path FROM notes WHERE image_path IS NOT NULL "
-            "UNION SELECT image_path FROM hardware_lists WHERE image_path IS NOT NULL"
+            "UNION SELECT image_path FROM purchase_orders WHERE image_path IS NOT NULL"
         ).fetchall()}
 
     for orphan in images_dir.glob("*"):
@@ -283,18 +283,18 @@ def accuracy(db_path, days=90):
     }
 
 
-def find_list_by_image(db_path, sha256):
-    rows = read(db_path, "SELECT list_id FROM hardware_lists WHERE image_sha256 = ?", [sha256])
+def find_order_by_image(db_path, sha256):
+    rows = read(db_path, "SELECT list_id FROM purchase_orders WHERE image_sha256 = ?", [sha256])
     return rows[0][0] if rows else None
 
 
-def save_hardware_list(db_path, data, image_sha256, image_path, user=None):
+def save_purchase_order(db_path, data, image_sha256, image_path, user=None):
     
     with duckdb.connect(str(db_path)) as con:
         con.begin()
         try:
             list_id = con.execute(
-                f"INSERT INTO hardware_lists ({', '.join(LIST_COLUMNS)}) "
+                f"INSERT INTO purchase_orders ({', '.join(LIST_COLUMNS)}) "
                 f"VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING list_id",
                 [data.get("list_date"), normalize_name(data.get("site")),
                  normalize_name(data.get("work_item")), normalize_name(data.get("drafter")),
@@ -304,7 +304,7 @@ def save_hardware_list(db_path, data, image_sha256, image_path, user=None):
             lines = data.get("lines", [])
             articles = [vocabulary.resolve(con, line["article"]) for line in lines]
             con.executemany(
-                f"INSERT INTO hardware_list_lines ({', '.join(LIST_LINE_COLUMNS)}) "
+                f"INSERT INTO purchase_order_lines ({', '.join(LIST_LINE_COLUMNS)}) "
                 f"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [[list_id, n, article, line.get("designation"), line.get("reference"),
                   line.get("quantity"), line.get("stock"), line.get("in_stock")]
@@ -318,7 +318,7 @@ def save_hardware_list(db_path, data, image_sha256, image_path, user=None):
     return list_id
 
 
-def hardware_lists(db_path):
+def purchase_orders(db_path):
     
     rows = read(db_path, """
             SELECT h.list_id, h.list_date, h.site, h.work_item, h.drafter, h.image_path,
@@ -326,7 +326,7 @@ def hardware_lists(db_path):
                    list({'line_no': l.line_no, 'article': l.article, 'designation': l.designation,
                          'reference': l.reference, 'quantity': l.quantity, 'stock': l.stock,
                          'in_stock': l.in_stock} ORDER BY l.line_no) AS lines
-            FROM hardware_lists h LEFT JOIN hardware_list_lines l USING (list_id)
+            FROM purchase_orders h LEFT JOIN purchase_order_lines l USING (list_id)
             GROUP BY h.list_id, h.list_date, h.site, h.work_item, h.drafter, h.image_path,
                      h.created_by
             ORDER BY h.list_date DESC NULLS LAST, h.list_id DESC
@@ -340,23 +340,23 @@ def hardware_lists(db_path):
 
 def set_in_stock(db_path, list_id, line_no, in_stock):
    
-    return write(db_path, "UPDATE hardware_list_lines SET in_stock = ? "
+    return write(db_path, "UPDATE purchase_order_lines SET in_stock = ? "
                           "WHERE list_id = ? AND line_no = ? RETURNING line_no",
                  [in_stock, list_id, line_no]) is not None
 
 
-def delete_hardware_list(db_path, list_id):
+def delete_purchase_order(db_path, list_id):
     with duckdb.connect(str(db_path)) as con:
         con.begin()
-        row = con.execute("DELETE FROM hardware_lists WHERE list_id = ? RETURNING image_path",
+        row = con.execute("DELETE FROM purchase_orders WHERE list_id = ? RETURNING image_path",
                           [list_id]).fetchone()
-        con.execute("DELETE FROM hardware_list_lines WHERE list_id = ?", [list_id])
+        con.execute("DELETE FROM purchase_order_lines WHERE list_id = ?", [list_id])
         con.commit()
     return row[0] if row else None
 
 
-def list_photo_path(db_path, list_id):
-    rows = read(db_path, "SELECT image_path FROM hardware_lists WHERE list_id = ?", [list_id])
+def order_photo_path(db_path, list_id):
+    rows = read(db_path, "SELECT image_path FROM purchase_orders WHERE list_id = ?", [list_id])
     return rows[0][0] if rows else None
 
 
@@ -387,7 +387,7 @@ def notes_with_lines(db_path):
                list({'line_no': d.line_no, 'article': d.article, 'quantity': d.quantity,
                      'backorder': d.backorder, 'designation': d.designation,
                      'work_item': d.work_item} ORDER BY d.line_no)
-        FROM notes n JOIN deliveries d USING (note_id)
+        FROM notes n JOIN inventory_lines d USING (note_id)
         GROUP BY n.note_id, n.image_path, n.confirmed_by, n.confirmed_at
         ORDER BY any_value(d.delivery_date) DESC, n.note_id DESC
         """)
@@ -400,10 +400,10 @@ def notes_with_lines(db_path):
             for note_id, image, by, at, supplier, delivered, ordered, site, work_item, lines in rows]
 
 
-def delivery_rows(db_path):
+def inventory_rows(db_path):
     """One flat row per article line, for the search screen."""
     rows = read(db_path, "SELECT " + ", ".join(EXPORT_COLUMNS) + ", line_no "
-                         "FROM deliveries ORDER BY delivery_date DESC, note_id DESC, line_no")
+                         "FROM inventory_lines ORDER BY delivery_date DESC, note_id DESC, line_no")
     keys = list(EXPORT_COLUMNS) + ["line_no"]
     out = []
     for row in rows:

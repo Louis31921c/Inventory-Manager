@@ -283,9 +283,9 @@
 
 <nav class="tabs" role="tablist">
   <button class="tab" id="tab-capture" role="tab" aria-selected="true" aria-controls="panel-capture">New note</button>
-  <button class="tab" id="tab-deliveries" role="tab" aria-selected="false" aria-controls="panel-deliveries">Search</button>
+  <button class="tab" id="tab-inventory" role="tab" aria-selected="false" aria-controls="panel-inventory">Inventory</button>
   <button class="tab" id="tab-query" role="tab" aria-selected="false" aria-controls="panel-query">SQL</button>
-  <button class="tab" id="tab-hardware" role="tab" aria-selected="false" aria-controls="panel-hardware">Wanted</button>
+  <button class="tab" id="tab-orders" role="tab" aria-selected="false" aria-controls="panel-orders">Purchase orders</button>
   <button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings">Settings</button>
 </nav>
 
@@ -329,7 +329,7 @@
   </div>
 </section>
 
-<section class="panel" id="panel-deliveries" role="tabpanel" aria-labelledby="tab-deliveries" hidden>
+<section class="panel" id="panel-inventory" role="tabpanel" aria-labelledby="tab-inventory" hidden>
   <div class="card">
     <div class="row">
       <label class="field grow"><span>Search</span><input id="q-search" placeholder="article, reference, supplier..."></label>
@@ -343,14 +343,14 @@
       <span class="grow"></span>
       <a class="mini" id="export-csv" href="/export.csv" download>Export CSV</a>
     </div>
-    <div class="scroll-x"><table id="table-deliveries"></table></div>
+    <div class="scroll-x"><table id="table-inventory"></table></div>
   </div>
 </section>
 
 <section class="panel" id="panel-query" role="tabpanel" aria-labelledby="tab-query" hidden>
   <div class="card">
     <h2>Ask</h2>
-    <p class="muted">SELECT * FROM deliveries</p>
+    <p class="muted">SELECT * FROM inventory_lines</p>
     <label class="field"><span>Question</span><textarea id="question"
       placeholder="..."></textarea></label>
     <div class="chips" id="examples"></div>
@@ -365,9 +365,9 @@
   </div>
 </section>
 
-<section class="panel" id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden>
+<section class="panel" id="panel-orders" role="tabpanel" aria-labelledby="tab-orders" hidden>
   <div class="card">
-    <h2>Scan a Wanted</h2>
+    <h2>Scan a purchase order</h2>
     <label class="file-drop" for="photo-list">
       <input type="file" id="photo-list" accept="image/jpeg,image/png,image/webp" capture="environment">
       <img class="thumb" id="thumb-list" alt="" hidden>
@@ -401,7 +401,7 @@
   </div>
 
   <div class="card">
-    <h2>Stored lists</h2>
+    <h2>Stored purchase orders</h2>
     <div id="lists"></div>
   </div>
 </section>
@@ -575,7 +575,7 @@ function flatten() {
     })));
 }
 
-const TABS = ["capture", "deliveries", "query", "hardware", "settings"];
+const TABS = ["capture", "inventory", "query", "orders", "settings"];
 
 function openTab(name) {
   for (const other of TABS) {
@@ -870,7 +870,7 @@ function workItemCell(row) {
     const value = input.value.trim();
     if (value === stored) return;
     try {
-      await api(`/api/deliveries/${row.note_id}/${row.line_no}`, patchJson({ work_item: value }));
+      await api(`/api/inventory/${row.note_id}/${row.line_no}`, patchJson({ work_item: value }));
       stored = value;
       row.work_item = value || null;
       input.classList.add("saved");
@@ -903,7 +903,7 @@ function renderDeliveries() {
   $("q-summary").textContent = `${data.length} line(s) · ${showNum(units)} units`
     + (backorders ? ` · ${backorders} on backorder` : "");
 
-  renderTable($("table-deliveries"), [
+  renderTable($("table-inventory"), [
     {
       label: "Article",
       cell: (row) => {
@@ -1061,7 +1061,7 @@ const EXAMPLES = [
   "how many units per supplier last month?",
   "which articles are still on backorder?",
   "average lead time between order and delivery, per supplier",
-  "what was asked for on the Wanted lists but never delivered?",
+  "what was ordered but never delivered?",
 ];
 
 $("examples").replaceChildren(...EXAMPLES.map((text) => {
@@ -1143,7 +1143,7 @@ $("read-list").addEventListener("click", async () => {
   const form = new FormData();
   form.append("photo", listFile);
   try {
-    const result = await api("/api/lists/extract", {
+    const result = await api("/api/orders/extract", {
       method: "POST", body: form, signal: readingList.signal,
     });
     listSha = result.sha256;
@@ -1284,7 +1284,7 @@ $("list-save").addEventListener("click", async () => {
   };
 
   try {
-    const stored = await api("/api/lists", postJson(body));
+    const stored = await api("/api/orders", postJson(body));
     notice($("list-problems"), "ok", `List #${stored.list_id} saved.`);
     await refresh();
     setTimeout(() => $("list-discard").click(), 1200);
@@ -1302,9 +1302,9 @@ function stockButtons(sheet, line) {
     button.addEventListener("click", async () => {
       const next = line.in_stock === value ? null : value;
       try {
-        await api(`/api/lists/${sheet.id}/lines/${line.line_no}`, patchJson({ in_stock: next }));
+        await api(`/api/orders/${sheet.id}/lines/${line.line_no}`, patchJson({ in_stock: next }));
         line.in_stock = next;
-        renderLists();
+        renderOrders();
       } catch (e) {
         notice($("global-notice"), "bad", e.message);
       }
@@ -1314,9 +1314,9 @@ function stockButtons(sheet, line) {
   return choice;
 }
 
-function renderLists() {
+function renderOrders() {
   if (!lists.length) {
-    $("lists").replaceChildren(el("p", { className: "muted", textContent: "No list stored." }));
+    $("lists").replaceChildren(el("p", { className: "muted", textContent: "No purchase order stored." }));
     return;
   }
 
@@ -1335,11 +1335,11 @@ function renderLists() {
     const actions = el("span", { className: "row tight", style: "margin-left:auto" });
     if (sheet.photo) {
       actions.append(el("a", {
-        className: "mini", href: `/api/list-photo/${sheet.id}`, target: "_blank",
+        className: "mini", href: `/api/order-photo/${sheet.id}`, target: "_blank",
         textContent: "photo",
       }));
     }
-    actions.append(confirmButton("Delete", () => api(`/api/lists/${sheet.id}`, { method: "DELETE" })));
+    actions.append(confirmButton("Delete", () => api(`/api/orders/${sheet.id}`, { method: "DELETE" })));
     title.append(actions);
 
     const block = el("div", { className: "sheet" }, [title]);
@@ -1356,9 +1356,9 @@ function renderLists() {
 }
 
 const DATASETS = [
-  ["inventory", "Inventory"],
-  ["deliveries", "Deliveries (lines)"],
-  ["hardware", "Wanted"],
+  ["stock", "Stock per article"],
+  ["inventory", "Inventory (lines)"],
+  ["purchase_orders", "Purchase orders"],
   ["catalog", "Supplier lines"],
   ["vocabulary", "Article vocabulary"],
   ["audit", "Audit trail"],
@@ -1386,10 +1386,10 @@ async function renderStorage() {
   }
 
   const lines = [
-    ["Database", mb(info.database_bytes), `${info.rows.deliveries} delivery line(s)`],
+    ["Database", mb(info.database_bytes), `${info.rows.inventory_lines} delivery line(s)`],
     ["Photos", mb(info.photo_bytes), `${info.photo_count} file(s)`],
     ["Data folder", mb(info.data_bytes),
-      `${info.rows.notes} note(s) · ${info.rows.hardware_lists} list(s)`],
+      `${info.rows.notes} note(s) · ${info.rows.purchase_orders} list(s)`],
     ["Disk used", gb(info.disk_used_bytes), `of ${gb(info.disk_total_bytes)} in total`],
     ["Disk free", gb(info.disk_free_bytes), ""],
   ];
@@ -1563,8 +1563,8 @@ async function renderBackups() {
     { label: "Date", cell: (file) => el("strong", { textContent: file.date.replace("T", " ") }) },
     { label: "Size", numeric: true, cell: (file) => `${(file.bytes / 1000).toFixed(0)} kB` },
     { label: "Encrypted", cell: (file) => (file.encrypted ? "yes" : "no") },
-    { label: "Deliveries", cell: (file) => csv(file, "deliveries") },
-    { label: "Wanted", cell: (file) => csv(file, "hardware_list_lines") },
+    { label: "Inventory", cell: (file) => csv(file, "inventory_lines") },
+    { label: "Purchase orders", cell: (file) => csv(file, "purchase_order_lines") },
   ], files.slice(0, 10), "No backup yet.");
 }
 
@@ -1631,7 +1631,7 @@ async function renderVocabulary() {
 
   const articles = data.articles ?? [];
   $("vocabulary-summary").textContent = `${data.total} name(s) · ${data.shared} used on both `
-    + `delivery notes and Wanted lists · ${(data.aliases ?? []).length} alias(es)`;
+    + `delivery notes and purchase orders · ${(data.aliases ?? []).length} alias(es)`;
 
   renderTable($("table-vocabulary"), [
     {
@@ -1649,8 +1649,8 @@ async function renderVocabulary() {
         return box;
       },
     },
-    { label: "Notes", numeric: true, cell: (entry) => String(entry.deliveries) },
-    { label: "Lists", numeric: true, cell: (entry) => String(entry.lists) },
+    { label: "Lines", numeric: true, cell: (entry) => String(entry.inventory) },
+    { label: "Orders", numeric: true, cell: (entry) => String(entry.orders) },
     { label: "Confirmed", numeric: true, cell: (entry) => String(entry.seen) },
     {
       label: "",
@@ -1678,8 +1678,8 @@ $("merge-run").addEventListener("click", async () => {
   try {
     const result = await api("/api/vocabulary/merge", postJson({ alias, article }));
     notice($("merge-note"), "ok",
-      `${result.alias} is now ${result.article}, ${result.deliveries} delivery line(s) and `
-      + `${result.list_lines} list line(s) rewritten.`);
+      `${result.alias} is now ${result.article}, ${result.inventory} delivery line(s) and `
+      + `${result.order_lines} list line(s) rewritten.`);
     $("merge-alias").value = "";
     $("merge-article").value = "";
     await refresh();
@@ -1702,7 +1702,7 @@ async function renderAudit() {
   renderTable($("table-users"), [
     { label: "User", cell: (user) => el("strong", { textContent: user.user }) },
     { label: "Notes", numeric: true, cell: (user) => String(user.notes) },
-    { label: "Lists", numeric: true, cell: (user) => String(user.lists) },
+    { label: "Orders", numeric: true, cell: (user) => String(user.orders) },
     { label: "Corrections", numeric: true, cell: (user) => String(user.corrections) },
     { label: "Events", numeric: true, cell: (user) => String(user.events) },
     { label: "Last seen", cell: (user) => showTime(user.last_seen) },
@@ -1726,8 +1726,8 @@ const FKEYS = [
     openTab("query");
     $("ask-btn").click();
   }],
-  ["F3", "Search", () => openTab("deliveries")],
-  ["F4", "Wanted", () => openTab("hardware")],
+  ["F3", "Inventory", () => openTab("inventory")],
+  ["F4", "Orders", () => openTab("orders")],
   ["F5", "Export CSV", () => { window.location.href = "/export.csv"; }],
   ["F6", "Export Parquet", () => { window.location.href = "/export.parquet"; }],
   ["F7", "Quit", () => $("quit-form").submit()],
@@ -1768,7 +1768,7 @@ async function refresh() {
     $("headline-count").textContent = `${notes.length} notes · ${rows.length} lines`;
 
     renderDeliveries();
-    renderLists();
+    renderOrders();
     renderExport();
     await Promise.all([
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),

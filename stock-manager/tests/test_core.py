@@ -74,7 +74,7 @@ def test_save_query_delete(db_path, tmp_path):
     assert db.describe_note(db_path, note_id) == ("ACME SUPPLIES", 2)
 
     r = db.run_readonly(
-        db_path, "SELECT article, weekday, backorder, order_date FROM deliveries ORDER BY article")
+        db_path, "SELECT article, weekday, backorder, order_date FROM inventory_lines ORDER BY article")
     assert r.columns == ["article", "weekday", "backorder", "order_date"]
     assert r.rows == [("CEMENT 35KG", "Monday", False, date(2026, 9, 15)),
                       ("MESH ST25", "Monday", True, date(2026, 9, 15))]
@@ -89,7 +89,7 @@ def test_save_query_delete(db_path, tmp_path):
     assert parquet_path.stat().st_size > 0
 
     assert db.delete_note(db_path, note_id) == "img.jpg"
-    assert db.run_readonly(db_path, "SELECT count(*) FROM deliveries").rows == [(0,)]
+    assert db.run_readonly(db_path, "SELECT count(*) FROM inventory_lines").rows == [(0,)]
     assert db.delete_note(db_path, note_id) is None
 
 
@@ -97,15 +97,15 @@ def test_duplicate_image_rejected(db_path):
     db.save_note(db_path, make_note(), "abc", "img.jpg")
     with pytest.raises(Exception):
         db.save_note(db_path, make_note(), "abc", "img.jpg")
-    assert db.run_readonly(db_path, "SELECT count(*) FROM deliveries").rows == [(2,)]
+    assert db.run_readonly(db_path, "SELECT count(*) FROM inventory_lines").rows == [(2,)]
 
 
 @pytest.mark.parametrize(
     "sql",
     [
-        "DELETE FROM deliveries",
-        "DROP TABLE deliveries",
-        "COPY deliveries TO '/tmp/x.csv'",
+        "DELETE FROM inventory_lines",
+        "DROP TABLE inventory_lines",
+        "COPY inventory_lines TO '/tmp/x.csv'",
         "SELECT 1; SELECT 2",
         "SELECT * FROM read_csv('/etc/passwd')",
         "ATTACH '/tmp/other.duckdb'",
@@ -300,12 +300,12 @@ def test_catalog_backfill(tmp_path):
 
 def test_vocabulary_is_shared_between_notes_and_lists(db_path):
     db.save_note(db_path, make_note(lines=[Line(article="hex bolt", quantity=10)]), "s1", "1.jpg")
-    db.save_hardware_list(db_path, {"site": "C", "lines": [
+    db.save_purchase_order(db_path, {"site": "C", "lines": [
         {"article": "HEX BOLT", "quantity": 20}, {"article": "WASHER M6", "quantity": 5}]},
         "l1", "l.jpg")
 
     entries = {e["article"]: e for e in vocabulary.vocabulary(db_path)}
-    assert entries["HEX BOLT"]["deliveries"] == 1 and entries["HEX BOLT"]["lists"] == 1
+    assert entries["HEX BOLT"]["inventory"] == 1 and entries["HEX BOLT"]["orders"] == 1
     assert entries["HEX BOLT"]["shared"] is True
     assert entries["HEX BOLT"]["seen"] == 2
     assert entries["WASHER M6"]["shared"] is False
@@ -314,22 +314,22 @@ def test_vocabulary_is_shared_between_notes_and_lists(db_path):
 
 def test_vocabulary_merge_rewrites_both_tables_and_sticks(db_path):
     db.save_note(db_path, make_note(lines=[Line(article="BOLT M6", quantity=100)]), "s1", "1.jpg")
-    db.save_hardware_list(db_path, {"lines": [{"article": "BOLT M6", "quantity": 7}]}, "l1", "l.jpg")
+    db.save_purchase_order(db_path, {"lines": [{"article": "BOLT M6", "quantity": 7}]}, "l1", "l.jpg")
 
     result = vocabulary.merge(db_path, "BOLT M6", "hex bolt", "ALEX")
-    assert result == {"alias": "BOLT M6", "article": "HEX BOLT", "deliveries": 1, "list_lines": 1}
-    assert db.run_readonly(db_path, "SELECT DISTINCT article FROM deliveries").rows == [("HEX BOLT",)]
-    assert db.run_readonly(db_path, "SELECT DISTINCT article FROM hardware_list_lines").rows \
+    assert result == {"alias": "BOLT M6", "article": "HEX BOLT", "inventory": 1, "order_lines": 1}
+    assert db.run_readonly(db_path, "SELECT DISTINCT article FROM inventory_lines").rows == [("HEX BOLT",)]
+    assert db.run_readonly(db_path, "SELECT DISTINCT article FROM purchase_order_lines").rows \
         == [("HEX BOLT",)]
     assert "BOLT M6" not in [e["article"] for e in vocabulary.vocabulary(db_path)]
     assert vocabulary.aliases(db_path)[0] == {
         **vocabulary.aliases(db_path)[0], "alias": "BOLT M6", "article": "HEX BOLT", "created_by": "ALEX"}
 
     db.save_note(db_path, make_note(lines=[Line(article="Bolt M6", quantity=1)]), "s2", "2.jpg")
-    db.save_hardware_list(db_path, {"lines": [{"article": "bolt m6", "quantity": 1}]}, "l2",
+    db.save_purchase_order(db_path, {"lines": [{"article": "bolt m6", "quantity": 1}]}, "l2",
                           "l2.jpg")
-    assert db.run_readonly(db_path, "SELECT DISTINCT article FROM deliveries").rows == [("HEX BOLT",)]
-    assert db.run_readonly(db_path, "SELECT DISTINCT article FROM hardware_list_lines").rows \
+    assert db.run_readonly(db_path, "SELECT DISTINCT article FROM inventory_lines").rows == [("HEX BOLT",)]
+    assert db.run_readonly(db_path, "SELECT DISTINCT article FROM purchase_order_lines").rows \
         == [("HEX BOLT",)]
 
 
@@ -354,11 +354,11 @@ def test_clean_name(raw, expected):
 def test_audit_records_who_did_what(db_path):
     audit.record(db_path, "alex", "login", None, "password", "10.0.0.1")
     audit.record(db_path, "ALEX", "note.save", "note #1", "ACME · 2 line(s)", "10.0.0.1")
-    audit.record(db_path, "marie", "list.tick", "list #3 line 2", "to order", "10.0.0.2")
-    audit.record(db_path, None, "export", "deliveries.csv", None, "10.0.0.3")
+    audit.record(db_path, "marie", "order.tick", "list #3 line 2", "to order", "10.0.0.2")
+    audit.record(db_path, None, "export", "inventory.csv", None, "10.0.0.3")
 
     events = audit.events(db_path, limit=10)
-    assert [e["action"] for e in events] == ["export", "list.tick", "note.save", "login"]
+    assert [e["action"] for e in events] == ["export", "order.tick", "note.save", "login"]
     assert events[-1]["user"] == "ALEX" and events[0]["user"] == "?"
     assert audit.events(db_path, user="marie")[0]["target"] == "list #3 line 2"
 
@@ -374,9 +374,9 @@ def test_audit_never_raises(tmp_path):
 
 def test_saving_records_the_user(db_path):
     db.save_note(db_path, make_note(), "s", "p.jpg", "ALEX")
-    db.save_hardware_list(db_path, {"lines": [{"article": "BOLT"}]}, "l", "l.jpg", "MARIE")
+    db.save_purchase_order(db_path, {"lines": [{"article": "BOLT"}]}, "l", "l.jpg", "MARIE")
     assert db.run_readonly(db_path, "SELECT confirmed_by FROM notes").rows == [("ALEX",)]
-    assert db.hardware_lists(db_path)[0]["created_by"] == "MARIE"
+    assert db.purchase_orders(db_path)[0]["created_by"] == "MARIE"
 
 
 def test_report_numbers_and_stores_without_a_provider(tmp_path):
@@ -473,7 +473,7 @@ def _ok():
     return R()
 
 
-def test_hardware_lists_save_tick_and_delete(db_path):
+def test_purchase_orders_save_tick_and_delete(db_path):
     sheet = {
         "list_date": date(2026, 8, 24),
         "site": "Harbour site", "work_item": "Railing block B", "drafter": "N.T",
@@ -484,10 +484,10 @@ def test_hardware_lists_save_tick_and_delete(db_path):
              "quantity": 220, "stock": None, "in_stock": None},
         ],
     }
-    list_id = db.save_hardware_list(db_path, sheet, "sha-list", "photo.jpg")
-    assert db.find_list_by_image(db_path, "sha-list") == list_id
+    list_id = db.save_purchase_order(db_path, sheet, "sha-list", "photo.jpg")
+    assert db.find_order_by_image(db_path, "sha-list") == list_id
 
-    stored = db.hardware_lists(db_path)
+    stored = db.purchase_orders(db_path)
     assert len(stored) == 1
     assert stored[0]["site"] == "HARBOUR SITE" and stored[0]["photo"] is True
     assert [l["article"] for l in stored[0]["lines"]] == ["BOLT M6X30", "WASHER M6"]
@@ -496,34 +496,34 @@ def test_hardware_lists_save_tick_and_delete(db_path):
 
     assert db.set_in_stock(db_path, list_id, 1, True)
     assert db.set_in_stock(db_path, list_id, 2, False)
-    assert [l["in_stock"] for l in db.hardware_lists(db_path)[0]["lines"]] == [True, False]
+    assert [l["in_stock"] for l in db.purchase_orders(db_path)[0]["lines"]] == [True, False]
 
     assert db.set_in_stock(db_path, list_id, 1, None)
-    assert db.hardware_lists(db_path)[0]["lines"][0]["in_stock"] is None
+    assert db.purchase_orders(db_path)[0]["lines"][0]["in_stock"] is None
     assert not db.set_in_stock(db_path, list_id, 99, True)
 
-    assert db.delete_hardware_list(db_path, list_id) == "photo.jpg"
-    assert db.hardware_lists(db_path) == []
-    assert db.delete_hardware_list(db_path, list_id) is None
+    assert db.delete_purchase_order(db_path, list_id) == "photo.jpg"
+    assert db.purchase_orders(db_path) == []
+    assert db.delete_purchase_order(db_path, list_id) is None
 
 
-def test_hardware_list_image_is_unique(db_path):
+def test_order_image_is_unique(db_path):
     sheet = {"lines": [{"article": "BOLT M6X30"}]}
-    db.save_hardware_list(db_path, sheet, "same-photo", "a.jpg")
+    db.save_purchase_order(db_path, sheet, "same-photo", "a.jpg")
     with pytest.raises(Exception):
-        db.save_hardware_list(db_path, sheet, "same-photo", "b.jpg")
-    assert len(db.hardware_lists(db_path)) == 1
+        db.save_purchase_order(db_path, sheet, "same-photo", "b.jpg")
+    assert len(db.purchase_orders(db_path)) == 1
 
 
 def test_work_item_is_editable_per_line(db_path):
     note_id = db.save_note(db_path, make_note(), "sha-wi", "img.jpg")
     assert db.update_work_item(db_path, note_id, 2, "Slab level 2")
     rows = db.run_readonly(
-        db_path, "SELECT line_no, article, work_item FROM deliveries ORDER BY line_no").rows
+        db_path, "SELECT line_no, article, work_item FROM inventory_lines ORDER BY line_no").rows
     assert rows == [(1, "CEMENT 35KG", "GROUND SLAB"), (2, "MESH ST25", "SLAB LEVEL 2")]
     assert db.update_work_item(db_path, note_id, 1, None)
     assert db.run_readonly(db_path,
-                           "SELECT work_item FROM deliveries WHERE line_no = 1").rows == [(None,)]
+                           "SELECT work_item FROM inventory_lines WHERE line_no = 1").rows == [(None,)]
     assert not db.update_work_item(db_path, note_id, 99, "x")
 
 
@@ -533,7 +533,7 @@ def test_inventory_aggregates_by_article(db_path):
     db.save_note(db_path, make_note(supplier="B", delivery_date="2026-09-20", site="Site 2",
                                     work_item="Balcony", lines=[
         Line(article="HEX BOLT", quantity=50, designation="d2", backorder=True)]), "s2", "2.jpg")
-    stock = {row["article"]: row for row in db.inventory(db_path)}
+    stock = {row["article"]: row for row in db.stock_by_article(db_path)}
     bolt = stock["HEX BOLT"]
     assert bolt["quantity"] == 150 and bolt["lines"] == 2 and bolt["backorders"] == 1
     assert bolt["supplier"] == "B" and bolt["site"] == "SITE 2" and bolt["work_item"] == "BALCONY"
@@ -542,7 +542,7 @@ def test_inventory_aggregates_by_article(db_path):
 
 def test_exports_cover_every_dataset(db_path, tmp_path):
     db.save_note(db_path, make_note(), "sha-exp", "img.jpg", "ALEX")
-    db.save_hardware_list(db_path, {"site": "C", "lines": [{"article": "BOLT M6X30", "quantity": 10}]},
+    db.save_purchase_order(db_path, {"site": "C", "lines": [{"article": "BOLT M6X30", "quantity": 10}]},
                           "l1", "l.jpg", "ALEX")
     audit.record(db_path, "ALEX", "note.save", "note #1")
     for dataset in db.EXPORTS:
@@ -578,12 +578,12 @@ def test_purge_photos_keeps_the_records(db_path, tmp_path):
 
     old_id = db.save_note(db_path, make_note(), "sha-old", str(old_photo))
     new_id = db.save_note(db_path, make_note(supplier="Recent"), "sha-new", str(recent_photo))
-    list_id = db.save_hardware_list(db_path, {"site": "C", "lines": [{"article": "BOLT"}]},
+    list_id = db.save_purchase_order(db_path, {"site": "C", "lines": [{"article": "BOLT"}]},
                                     "sha-l", str(old_photo))
     with ddb.connect(str(db_path)) as con:
         con.execute("UPDATE notes SET confirmed_at = now() - INTERVAL 50 DAY WHERE note_id = ?",
                     [old_id])
-        con.execute("UPDATE hardware_lists SET created_at = now() - INTERVAL 50 DAY "
+        con.execute("UPDATE purchase_orders SET created_at = now() - INTERVAL 50 DAY "
                     "WHERE list_id = ?", [list_id])
 
     result = db.purge_photos(db_path, images, days=42)
@@ -597,8 +597,8 @@ def test_purge_photos_keeps_the_records(db_path, tmp_path):
         db_path, "SELECT note_id, image_sha256, image_path FROM notes ORDER BY note_id").rows
     assert rows == [(old_id, "sha-old", None), (new_id, "sha-new", str(recent_photo))]
     assert db.find_by_image(db_path, "sha-old") == old_id
-    assert db.run_readonly(db_path, "SELECT count(*) FROM deliveries").rows == [(4,)]
-    assert db.hardware_lists(db_path)[0]["photo"] is False
+    assert db.run_readonly(db_path, "SELECT count(*) FROM inventory_lines").rows == [(4,)]
+    assert db.purchase_orders(db_path)[0]["photo"] is False
 
     again = db.purge_photos(db_path, images, days=42)
     assert again["files"] == 0
@@ -631,8 +631,8 @@ def test_migrations_are_idempotent_over_existing_data(tmp_path):
     with ddb.connect(str(path)) as con:
         con.execute("DELETE FROM schema_migrations")
         migrations.apply(con)
-    assert db.run_readonly(path, "SELECT count(*) FROM deliveries").rows == [(2,)]
-    assert db.run_readonly(path, "SELECT article FROM deliveries ORDER BY line_no").rows[0][0] \
+    assert db.run_readonly(path, "SELECT count(*) FROM inventory_lines").rows == [(2,)]
+    assert db.run_readonly(path, "SELECT article FROM inventory_lines ORDER BY line_no").rows[0][0] \
         == "CEMENT 35KG"
 
 
@@ -640,11 +640,11 @@ def test_backup_round_trip_keeps_every_row(db_path, tmp_path):
     from inventory import backup
 
     db.save_note(db_path, make_note(), "sha-b", "p.jpg", "ALEX")
-    db.save_hardware_list(db_path, {"site": "C", "lines": [{"article": "BOLT M6X30", "quantity": 10}]},
+    db.save_purchase_order(db_path, {"site": "C", "lines": [{"article": "BOLT M6X30", "quantity": 10}]},
                           "l", "l.jpg")
     audit.record(db_path, "ALEX", "note.save", "note #1")
     before = backup.counts(db_path)
-    assert before["deliveries"] == 2 and before["hardware_list_lines"] == 1 and before["audit"] == 1
+    assert before["inventory_lines"] == 2 and before["purchase_order_lines"] == 1 and before["audit"] == 1
 
     export_dir = tmp_path / "export"
     backup.export(db_path, export_dir)
@@ -653,7 +653,7 @@ def test_backup_round_trip_keeps_every_row(db_path, tmp_path):
     restored = tmp_path / "restored.duckdb"
     assert backup.restore(export_dir, restored) == before
     assert db.run_readonly(restored,
-                           "SELECT article FROM deliveries ORDER BY line_no").rows[0][0] == "CEMENT 35KG"
+                           "SELECT article FROM inventory_lines ORDER BY line_no").rows[0][0] == "CEMENT 35KG"
 
 
 def test_eval_compares_only_the_fields_given():
@@ -707,7 +707,7 @@ def filled(tmp_path):
     config = temp_config(tmp_path)
     db.init(config.db_path)
     db.save_note(config.db_path, make_note(), "sha-tui", "", "ALEX")
-    db.save_hardware_list(config.db_path, {"site": "HARBOUR POINT", "lines": [
+    db.save_purchase_order(config.db_path, {"site": "HARBOUR POINT", "lines": [
         {"article": "HEX BOLT", "quantity": 10}, {"article": "WASHER M6", "quantity": 20}]},
         "sha-list", "", "ALEX")
     return config
@@ -803,12 +803,12 @@ def test_review_keys_edit_and_save_a_note(tmp_path):
     tui.handle(app, 0, "s")
     assert app.draft is None
     rows = db.run_readonly(app.config.db_path,
-                           "SELECT article, quantity, backorder FROM deliveries ORDER BY line_no")
+                           "SELECT article, quantity, backorder FROM inventory_lines ORDER BY line_no")
     assert rows.rows == [("HEX BOLT", 100.0, False), ("WASHER M6", 25.0, True)]
     assert db.accuracy(app.config.db_path)["fields"] > 0
 
 
-def test_hardware_ticks_from_the_keyboard(tmp_path):
+def test_order_ticks_from_the_keyboard(tmp_path):
     import curses
 
     from inventory import tui
@@ -838,7 +838,7 @@ def test_function_keys_switch_tabs_and_export(tmp_path):
     tui.handle(app, curses.KEY_F1, None)
     assert app.tab == 2
     tui.handle(app, curses.KEY_F5, None)
-    assert (app.config.data_dir / "exports" / "deliveries.csv").exists()
+    assert (app.config.data_dir / "exports" / "inventory.csv").exists()
     tui.handle(app, curses.KEY_F7, None)
     assert app.running is False
 
@@ -856,12 +856,12 @@ def test_cli_commands(tmp_path, capsys):
     assert cli.main(["--data", data, "search", "cement"]) == 0
     assert "CEMENT 35KG" in capsys.readouterr().out
 
-    assert cli.main(["--data", data, "sql", "SELECT count(*) FROM deliveries"]) == 0
+    assert cli.main(["--data", data, "sql", "SELECT count(*) FROM inventory_lines"]) == 0
     assert "2" in capsys.readouterr().out
 
-    assert cli.main(["--data", data, "--user", "ALEX", "export", "deliveries",
+    assert cli.main(["--data", data, "--user", "ALEX", "export", "inventory",
                      "--format", "csv"]) == 0
-    assert (tmp_path / "exports" / "deliveries.csv").exists()
+    assert (tmp_path / "exports" / "inventory.csv").exists()
 
     assert cli.main(["--data", data, "vocab"]) == 0
     assert "CEMENT 35KG" in capsys.readouterr().out
@@ -871,7 +871,7 @@ def test_cli_commands(tmp_path, capsys):
     assert "ALEX" in capsys.readouterr().out
 
     assert cli.main(["--data", data, "errors"]) == 0
-    assert cli.main(["--data", data, "sql", "DELETE FROM deliveries"]) == 1
+    assert cli.main(["--data", data, "sql", "DELETE FROM inventory_lines"]) == 1
 
 
 def test_backup_snapshot_round_trip(tmp_path):
@@ -887,7 +887,7 @@ def test_backup_snapshot_round_trip(tmp_path):
     with tarfile.open(archive) as tar:
         tar.extractall(tmp_path / "unpacked", filter="data")
     counts = backup.restore(tmp_path / "unpacked" / "db", tmp_path / "again.duckdb")
-    assert counts["deliveries"] == 2
+    assert counts["inventory_lines"] == 2
 
 
 def test_account_file_and_password(tmp_path):
@@ -1029,17 +1029,17 @@ def test_sync_brings_the_web_version_over(tmp_path):
 
     assert sync.counts(legacy)["livraisons"] == 2
     before, added = sync.from_file(config, legacy)
-    assert added["notes"] == 1 and added["deliveries"] == 2
-    assert added["lists"] == 1 and added["list_lines"] == 1
+    assert added["notes"] == 1 and added["inventory"] == 2
+    assert added["orders"] == 1 and added["order_lines"] == 1
     assert added["catalog"] == 1 and added["readings"] == 1
 
     rows = db.run_readonly(config.db_path, "SELECT article, quantity, supplier, delivery_date, "
-                                           "site, work_item, backorder FROM deliveries "
+                                           "site, work_item, backorder FROM inventory_lines "
                                            "ORDER BY line_no").rows
     assert rows[0] == ("BOLT M6", 1200.0, "NORTHGATE", date(2026, 9, 21), "HARBOUR POINT", "PARAPET",
                        False)
     assert rows[1][6] is True
-    sheet = db.hardware_lists(config.db_path)[0]
+    sheet = db.purchase_orders(config.db_path)[0]
     assert sheet["site"] == "HARBOUR POINT" and sheet["lines"][0]["in_stock"] is True
     assert sheet["photo"] is False  # the photo stayed on the server
     assert db.accuracy(config.db_path)["fields"] == 20
@@ -1048,8 +1048,8 @@ def test_sync_brings_the_web_version_over(tmp_path):
 
     again = sync.from_file(config, legacy)[1]
     assert again["notes"] == 0 and again["skipped_notes"] == 1
-    assert again["lists"] == 0 and again["skipped_lists"] == 1
-    assert db.run_readonly(config.db_path, "SELECT count(*) FROM deliveries").rows == [(2,)]
+    assert again["orders"] == 0 and again["skipped_orders"] == 1
+    assert db.run_readonly(config.db_path, "SELECT count(*) FROM inventory_lines").rows == [(2,)]
 
 
 def test_sync_refuses_a_file_that_is_not_the_web_database(tmp_path):

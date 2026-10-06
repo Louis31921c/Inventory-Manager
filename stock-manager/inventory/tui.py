@@ -12,8 +12,8 @@ from . import alerts, audit, backup, catalog, db, llm, models_info, vocabulary
 from .models import Note, Line, parse_date
 from .screen import BRIGHT, DIM, INVERT, KEY, NORMAL, TAB, TAB_ON, WARN, Screen, columns, pad, truncate
 
-TABS = ("NEW NOTE", "SEARCH", "SQL", "HARDWARE LIST", "SETTINGS")
-FKEYS = (("F1", "SQL"), ("F2", "RUN"), ("F3", "SEARCH"), ("F4", "HARDWARE"),
+TABS = ("NEW NOTE", "INVENTORY", "SQL", "PURCHASE ORDERS", "SETTINGS")
+FKEYS = (("F1", "SQL"), ("F2", "RUN"), ("F3", "INVENTORY"), ("F4", "ORDERS"),
          ("F5", "EXPORT CSV"), ("F6", "EXPORT PARQUET"), ("F7", "QUIT"))
 IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
                ".webp": "image/webp", ".pdf": "application/pdf"}
@@ -92,8 +92,8 @@ class App:
 
     def reload(self):
         self.notes = db.notes_with_lines(self.config.db_path)
-        self.rows = db.delivery_rows(self.config.db_path)
-        self.sheets = db.hardware_lists(self.config.db_path)
+        self.rows = db.inventory_rows(self.config.db_path)
+        self.sheets = db.purchase_orders(self.config.db_path)
 
     def model(self):
         if self.backend is None:
@@ -177,7 +177,7 @@ class App:
         except ValueError as e:
             return self.say(str(e))
         sha = hashlib.sha256(data).hexdigest()
-        if db.find_list_by_image(self.config.db_path, sha) is not None:
+        if db.find_order_by_image(self.config.db_path, sha) is not None:
             return self.say("that sheet is already stored")
         known = vocabulary.known_articles(self.config.db_path)
         self.busy = "reading the sheet, handwriting takes a minute or two..."
@@ -205,13 +205,13 @@ class App:
         sheet["lines"] = lines
         sheet["list_date"] = parse_date(sheet.get("list_date")) if sheet.get("list_date") else None
         matches = list(self.config.images_dir.glob(f"{self.sheet_sha}.*")) if self.sheet_sha else []
-        list_id = db.save_hardware_list(self.config.db_path, sheet, self.sheet_sha or None,
+        list_id = db.save_purchase_order(self.config.db_path, sheet, self.sheet_sha or None,
                                         str(matches[0]) if matches else "", self.config.user)
-        self.event("list.save", f"list #{list_id}", f"{sheet.get('site') or 'no site'} - "
+        self.event("order.save", f"order #{list_id}", f"{sheet.get('site') or 'no site'} - "
                                                     f"{len(lines)} line(s)")
         self.sheet_draft = self.sheet_sha = None
         self.reload()
-        self.say(f"list #{list_id} saved")
+        self.say(f"order #{list_id} saved")
 
     def run_question(self, text):
         text = text.strip()
@@ -274,7 +274,7 @@ class App:
                    f"{result['alias']} -> {result['article']}")
         self.reload()
         self.say(f"{result['alias']} is now {result['article']}, "
-                 f"{result['deliveries']} delivery line(s) rewritten")
+                 f"{result['inventory']} delivery line(s) rewritten")
 
 
 def measure_note(before, after):
@@ -406,7 +406,7 @@ def draw_sql(screen, app, top, width, height):
         for offset, example in enumerate((
                 "how many units per supplier last month?",
                 "which articles are still on backorder?",
-                "what was asked for on the hardware lists but never delivered?")):
+                "what was ordered but never delivered?")):
             screen.put(top + 3 + offset, 4, f"? {example}", DIM)
         return
     row = top + 3
@@ -432,7 +432,7 @@ def format_cell(value):
     return str(value)
 
 
-def draw_hardware(screen, app, top, width, height):
+def draw_orders(screen, app, top, width, height):
     if app.sheet_draft is not None:
         screen.put(top, 2, "CHECK THE SHEET, THEN S TO SAVE", BRIGHT)
         rows = sheet_rows(app.sheet_draft)
@@ -449,7 +449,7 @@ def draw_hardware(screen, app, top, width, height):
                            f"{marker} {pad(label, 12)} {truncate(value, width - 22)}", style)
         return
 
-    screen.put(top, 2, "R  read a handwritten hardware list", BRIGHT)
+    screen.put(top, 2, "R  read a purchase order sheet", BRIGHT)
     screen.put(top + 1, 2, "S in stock   O to order   C clear   D delete sheet", DIM)
     row = top + 3
     for index, sheet in enumerate(app.sheets):
@@ -496,8 +496,8 @@ def draw_settings(screen, app, top, width, height):
                            f"({info['photo_count']} files)   "
                            f"free {info['disk_free_bytes'] / 1e9:.1f} GB")
     screen.put(row + 3, 4, f"{info['rows']['notes']} notes   "
-                           f"{info['rows']['deliveries']} delivery lines   "
-                           f"{info['rows']['hardware_lists']} sheets   "
+                           f"{info['rows']['inventory_lines']} delivery lines   "
+                           f"{info['rows']['purchase_orders']} sheets   "
                            f"photos kept {app.config.photo_retention_days} days", DIM)
 
     row += 5
@@ -516,8 +516,8 @@ def draw_settings(screen, app, top, width, height):
     screen.put(row + 1, 4, f"{len(names)} name(s), {shared} used on both notes and sheets", DIM)
     for offset, entry in enumerate(names[:3]):
         screen.put(row + 2 + offset, 4,
-                   truncate(f"{pad(entry['article'], 34)} notes {entry['deliveries']:<4} "
-                            f"sheets {entry['lists']:<4} "
+                   truncate(f"{pad(entry['article'], 34)} notes {entry['inventory']:<4} "
+                            f"sheets {entry['orders']:<4} "
                             f"{('= ' + ', '.join(entry['aliases'])) if entry['aliases'] else ''}",
                             width - 6))
 
@@ -525,7 +525,7 @@ def draw_settings(screen, app, top, width, height):
     screen.put(row, 2, "USERS", BRIGHT)
     for offset, person in enumerate(people[:2]):
         screen.put(row + 1 + offset, 4,
-                   f"{pad(person['user'], 16)} {person['notes']} notes  {person['lists']} sheets  "
+                   f"{pad(person['user'], 16)} {person['notes']} notes  {person['orders']} sheets  "
                    f"{person['corrections']} corrections  "
                    f"last {(person['last_seen'] or '-').replace('T', ' ')[:16]}")
 
@@ -550,7 +550,7 @@ def draw_settings(screen, app, top, width, height):
                (f", latest {snapshots[0]['date']}" if snapshots else ""), DIM)
 
 
-DRAW = (draw_new_note, draw_search, draw_sql, draw_hardware, draw_settings)
+DRAW = (draw_new_note, draw_search, draw_sql, draw_orders, draw_settings)
 
 
 def render(app, width, height):
@@ -684,7 +684,7 @@ def handle_sql(app, code, char):
         app.prompt = Prompt("question", app.question, lambda text: app.run_question(text))
 
 
-def handle_hardware(app, code, char):
+def handle_orders(app, code, char):
     if app.sheet_draft is not None:
         rows = sheet_rows(app.sheet_draft)
         lines = app.sheet_draft.setdefault("lines", [])
@@ -734,14 +734,14 @@ def handle_hardware(app, code, char):
         line = lines[min(app.line_cursor, len(lines) - 1)]
         value = {"s": True, "o": False, "c": None}[char.lower()]
         if db.set_in_stock(app.config.db_path, sheet["id"], line["line_no"], value):
-            app.event("list.tick", f"list #{sheet['id']} line {line['line_no']}",
+            app.event("order.tick", f"list #{sheet['id']} line {line['line_no']}",
                       {True: "in stock", False: "to order", None: "not ticked"}[value])
             app.reload()
     elif char in ("d", "D"):
         def done(text):
             if text.strip().lower() in ("y", "yes"):
-                db.delete_hardware_list(app.config.db_path, sheet["id"])
-                app.event("list.delete", f"list #{sheet['id']}")
+                db.delete_purchase_order(app.config.db_path, sheet["id"])
+                app.event("order.delete", f"list #{sheet['id']}")
                 app.reload()
                 app.say(f"list #{sheet['id']} deleted")
 
@@ -759,12 +759,12 @@ def handle_settings(app, code, char):
         app.say(f"{result['files']} photo(s) deleted, {result['bytes'] / 1e6:.1f} MB freed")
     elif char in ("e", "E"):
         def done(text):
-            dataset = text.strip() or "deliveries"
+            dataset = text.strip() or "inventory"
             if dataset not in db.EXPORTS:
                 return app.say(f"unknown dataset: {dataset} ({', '.join(db.EXPORTS)})")
             app.export(dataset, "csv")
 
-        app.prompt = Prompt(f"export which ({', '.join(db.EXPORTS)})", "deliveries", done)
+        app.prompt = Prompt(f"export which ({', '.join(db.EXPORTS)})", "inventory_lines", done)
     elif char in ("m", "M"):
         def second(alias):
             def done(article):
@@ -775,7 +775,7 @@ def handle_settings(app, code, char):
         app.prompt = Prompt("merge which name", "", second)
 
 
-HANDLE = (handle_new_note, handle_search, handle_sql, handle_hardware, handle_settings)
+HANDLE = (handle_new_note, handle_search, handle_sql, handle_orders, handle_settings)
 
 
 def handle(app, code, char):
@@ -800,9 +800,9 @@ def handle(app, code, char):
     elif code == curses.KEY_F4:
         app.tab = 3
     elif code == curses.KEY_F5:
-        app.export("deliveries", "csv")
+        app.export("inventory", "csv")
     elif code == curses.KEY_F6:
-        app.export("deliveries", "parquet")
+        app.export("inventory", "parquet")
     elif code == 9:
         app.tab = (app.tab + 1) % len(TABS)
     elif code == curses.KEY_BTAB:

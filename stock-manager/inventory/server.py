@@ -281,7 +281,7 @@ def data(request: Request):
                    list({'line_no': d.line_no, 'article': d.article, 'quantity': d.quantity,
                          'backorder': d.backorder, 'designation': d.designation,
                          'work_item': d.work_item} ORDER BY d.line_no) AS lines
-            FROM notes n JOIN deliveries d USING (note_id)
+            FROM notes n JOIN inventory_lines d USING (note_id)
             GROUP BY n.note_id, n.image_path, n.confirmed_by
             ORDER BY any_value(d.delivery_date) DESC, n.note_id DESC
             """)
@@ -297,8 +297,8 @@ def data(request: Request):
                   in notes],
         "catalog": [{"supplier": s, "designation": d, "reference": r, "article": a, "seen": n}
                     for s, d, r, a, n in catalog_rows],
-        "lists": db.hardware_lists(config.db_path),
-        "inventory": db.inventory(config.db_path),
+        "lists": db.purchase_orders(config.db_path),
+        "inventory": db.stock_by_article(config.db_path),
         "backend": config.backend,
         "user": who(request)[0],
     }
@@ -413,7 +413,7 @@ class WorkItem(BaseModel):
     work_item: str | None = None
 
 
-@app.patch("/api/deliveries/{note_id}/{line_no}")
+@app.patch("/api/inventory/{note_id}/{line_no}")
 def edit_work_item(request: Request, note_id: int, line_no: int, body: WorkItem):
     value = (body.work_item or "").strip() or None
     if not db.update_work_item(config.db_path, note_id, line_no, value):
@@ -423,10 +423,10 @@ def edit_work_item(request: Request, note_id: int, line_no: int, body: WorkItem)
     return {"note_id": note_id, "line_no": line_no, "work_item": value}
 
 
-@app.post("/api/lists/extract")
+@app.post("/api/orders/extract")
 async def extract_list(request: Request, photo: UploadFile):
     raw, media_type, sha = await _photo_bytes(photo)
-    already = db.find_list_by_image(config.db_path, sha)
+    already = db.find_order_by_image(config.db_path, sha)
     if already is not None:
         raise HTTPException(409, f"This list is already stored (list #{already}).")
 
@@ -438,7 +438,7 @@ async def extract_list(request: Request, photo: UploadFile):
     except Exception as e:
         log.exception("list reading failed")
         reported = await asyncio.to_thread(report, request, "extract",
-                                           f"list reading failed: {e}", "/api/lists/extract")
+                                           f"list reading failed: {e}", "/api/orders/extract")
         raise HTTPException(500, f"Reading failed (error #{reported['error_no']}): {e}") from e
 
     (config.images_dir / f"{sha}{SUPPORTED[media_type]}").write_bytes(raw)
@@ -467,7 +467,7 @@ class SaveList(BaseModel):
     measurement: Measurement | None = None
 
 
-@app.post("/api/lists")
+@app.post("/api/orders")
 def save_list(request: Request, body: SaveList):
     sheet = body.list
     if not sheet.lines:
@@ -483,7 +483,7 @@ def save_list(request: Request, body: SaveList):
     payload["lines"] = [dict(l, article=l["article"].strip()) for l in payload["lines"]]
 
     try:
-        list_id = db.save_hardware_list(config.db_path, payload, body.sha256 or None,
+        list_id = db.save_purchase_order(config.db_path, payload, body.sha256 or None,
                                         _stored_photo(body.sha256), who(request)[0])
     except duckdb.ConstraintException as e:
         raise HTTPException(409, "This list is already stored.") from e
@@ -491,7 +491,7 @@ def save_list(request: Request, body: SaveList):
     if body.measurement:
         db.record_reading(config.db_path, "list", body.measurement.fields,
                           body.measurement.corrected, body.measurement.lines)
-    event(request, "list.save", f"list #{list_id}",
+    event(request, "order.save", f"order #{list_id}",
           f"{sheet.site or 'no site'} · {len(sheet.lines)} line(s)")
     return {"list_id": list_id}
 
@@ -500,25 +500,25 @@ class Stock(BaseModel):
     in_stock: bool | None = None
 
 
-@app.patch("/api/lists/{list_id}/lines/{line_no}")
+@app.patch("/api/orders/{list_id}/lines/{line_no}")
 def set_in_stock(request: Request, list_id: int, line_no: int, body: Stock):
     if not db.set_in_stock(config.db_path, list_id, line_no, body.in_stock):
         raise HTTPException(404, "Line not found.")
     state = {True: "in stock", False: "to order", None: "not ticked"}[body.in_stock]
-    event(request, "list.tick", f"list #{list_id} line {line_no}", state)
+    event(request, "order.tick", f"order #{list_id} line {line_no}", state)
     return {"list_id": list_id, "line_no": line_no, "in_stock": body.in_stock}
 
 
-@app.delete("/api/lists/{list_id}")
+@app.delete("/api/orders/{list_id}")
 def remove_list(request: Request, list_id: int):
-    _drop(db.delete_hardware_list(config.db_path, list_id), f"No list #{list_id}.")
-    event(request, "list.delete", f"list #{list_id}")
+    _drop(db.delete_purchase_order(config.db_path, list_id), f"No list #{list_id}.")
+    event(request, "order.delete", f"order #{list_id}")
     return {"deleted": list_id}
 
 
-@app.get("/api/list-photo/{list_id}")
+@app.get("/api/order-photo/{list_id}")
 def list_photo(list_id: int):
-    return _photo(db.list_photo_path(config.db_path, list_id))
+    return _photo(db.order_photo_path(config.db_path, list_id))
 
 
 @app.get("/api/vocabulary")
@@ -544,8 +544,8 @@ def merge_vocabulary(request: Request, body: Merge):
     except vocabulary.VocabularyError as e:
         raise HTTPException(422, str(e)) from e
     event(request, "vocabulary.merge", result["article"],
-          f"{result['alias']} -> {result['article']} ({result['deliveries']} delivery line(s), "
-          f"{result['list_lines']} list line(s))")
+          f"{result['alias']} -> {result['article']} ({result['inventory']} delivery line(s), "
+          f"{result['order_lines']} list line(s))")
     return result
 
 
@@ -645,7 +645,7 @@ async def force_backup(request: Request):
 
 
 @app.get("/export/backup/{name}.csv")
-def backup_csv(name: str, table: str = "deliveries"):
+def backup_csv(name: str, table: str = "inventory_lines"):
  
     archive = (config.data_dir / "backups" / name).resolve()
     if archive.parent != (config.data_dir / "backups").resolve() or not archive.is_file():
@@ -733,7 +733,7 @@ def export_dataset(request: Request, dataset: str, fmt: str):
 
 @app.get("/export.csv")
 def export_csv(request: Request):
-    columns, rows = db.export_query(config.db_path, "deliveries")
+    columns, rows = db.export_query(config.db_path, "inventory")
     lines = [";".join(columns)]
     for row in rows:
         cells = []
@@ -745,20 +745,20 @@ def export_csv(request: Request):
             else:
                 cells.append(str(_json(value)).replace(";", ","))
         lines.append(";".join(cells))
-    event(request, "export", "deliveries.csv")
+    event(request, "export", "inventory_lines.csv")
     return Response("﻿" + "\n".join(lines), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": 'attachment; filename="deliveries.csv"'})
+                    headers={"Content-Disposition": 'attachment; filename="inventory_lines.csv"'})
 
 
 @app.get("/export.parquet")
 def export_parquet(request: Request):
     with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "deliveries.parquet"
-        db.export_to_file(config.db_path, "deliveries", out)
+        out = Path(tmp) / "inventory_lines.parquet"
+        db.export_to_file(config.db_path, "inventory", out)
         body = out.read_bytes()
-    event(request, "export", "deliveries.parquet")
+    event(request, "export", "inventory_lines.parquet")
     return Response(body, media_type="application/vnd.apache.parquet",
-                    headers={"Content-Disposition": 'attachment; filename="deliveries.parquet"'})
+                    headers={"Content-Disposition": 'attachment; filename="inventory_lines.parquet"'})
 
 
 class Question(BaseModel):

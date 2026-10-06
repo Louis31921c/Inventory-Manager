@@ -1,3 +1,30 @@
+def rename_tables(con):
+    """Step 7, written in Python because the rename has to look before it leaps."""
+    def tables():
+        return {row[0] for row in con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()}
+
+    def rows(name):
+        return con.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
+
+    for old, new in (("deliveries", "inventory_lines"),
+                     ("hardware_lists", "purchase_orders"),
+                     ("hardware_list_lines", "purchase_order_lines")):
+        here = tables()
+        if old not in here:
+            continue
+        if new in here:
+            if rows(new) == 0:
+                con.execute(f"DROP TABLE {new}")
+            elif rows(old) == 0:
+                con.execute(f"DROP TABLE {old}")
+                continue
+            else:
+                raise RuntimeError(f"both {old} and {new} hold rows: merge them by hand")
+        con.execute(f"ALTER TABLE {old} RENAME TO {new}")
+
+
 MIGRATIONS = [
     (
         1,
@@ -143,6 +170,7 @@ MIGRATIONS = [
         );
         """,
     ),
+    (7, "rename the tables: deliveries -> inventory_lines, lists -> purchase orders", rename_tables),
 ]
 
 VERSION_TABLE = """
@@ -169,7 +197,10 @@ def apply(con):
             continue
         con.begin()
         try:
-            con.execute(sql)
+            if callable(sql):
+                sql(con)
+            else:
+                con.execute(sql)
             con.execute("INSERT INTO schema_migrations (version, description) VALUES (?, ?)",
                         [number, description])
             con.commit()
