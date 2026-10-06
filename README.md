@@ -1,6 +1,9 @@
 # Inventory Manager
 
-A lightweight inventory management ERP for tracking your company's hardware. Custom designed on demand to solve a real business need. Snap a photo of a delivery note or a handwritten hardware list, review what the model extracted, edit any fields as needed, and save the results to DuckDB. Then query it with SQL or export it (csv, parquet, xlsx). accessible from your phone or computer.each user has its own session to track activity and be able to communicate within the company
+A lightweight inventory management ERP for tracking your company's hardware. Snap a photo of a delivery note or a handwritten hardware list, review what the model extracted, edit any fields as needed, and save the results to DuckDB. Then query it with SQL or export it (csv, parquet, xlsx). accessible from your phone or computer.each user has its own session to track activity and be able to communicate within the company.
+
+This tool's been custom designed on demand to solve a real business need : tracking two bottlenecks of a company's inventory to funnel its available stock without doing a manual audit of every article. Basic UI UX and possibility to query/export both tables : inventory & purchase order
+
 ```
 photo -> model -> you check it -> DuckDB -> search, SQL, questions, exports
 ```
@@ -13,7 +16,7 @@ stock-manager
 ```
 
 Python 3.11 or newer. Reading photos uses the Claude Code CLI by default (no API key) or the Gemini
-API. You're welcome to make it run on your own model
+API. Feel free to make it run on your own model !
 
 
 ### Search
@@ -36,7 +39,7 @@ what, numbered errors, snapshots, force a backup, each user's commit audit
 
 ![Wanted lists](stock-manager/docs/app-wanted.png)
 
-Photograph a handwritten sheet and every line is read. Tick each one in stock or to order; the
+Photograph a purchase order and every line is read. Tick each one in stock or to order; the
 sheets share the article names with the delivery notes, so the two can be joined.
 
 ## Things worth knowing
