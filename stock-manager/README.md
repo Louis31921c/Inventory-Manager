@@ -15,12 +15,16 @@ for those stored in [Purchase order] "in stock" or "to order" clickable option a
 
 
 ![Search](docs/app-search.png)
+
+![Purchase orders](docs/app-wanted.png)
+
 ## Install
 
 Python 3.11
 
 ```bash
 pipx install git+https://github.com/Louis31921c/Inventory-Manager.git#subdirectory=stock-manager
+```
 
 
 

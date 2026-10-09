@@ -16,13 +16,17 @@ photo -> model -> you check it -> DuckDB -> search, SQL, questions, exports
 
 
 
-![Search](docs/app-search.png)
+![Search](stock-manager/docs/app-search.png)
+
+![Purchase orders](stock-manager/docs/app-wanted.png)
+
 ## Install
 
 Python 3.11
 
 ```bash
 pipx install git+https://github.com/Louis31921c/Inventory-Manager.git#subdirectory=stock-manager
+```
 
 
 
@@ -97,7 +101,7 @@ Press `1` to `5` to navigate between tables.
 Override the data folder with `--data /some/path` or `DATA_DIR`. Copy `.env.example` to the
 settings file to see every key.
 
-![Settings](docs/app-settings.png)
+![Settings](stock-manager/docs/app-settings.png)
 
 ## what it does that a spreadsheet does not
 
