@@ -99,8 +99,6 @@ Press `1` to `5` to navigate between tables.
 Override the data folder with `--data /some/path` or `DATA_DIR`. Copy `.env.example` to the
 settings file to see every key.
 
-![Settings](docs/app-settings.png)
-
 ## what it does that a spreadsheet does not
 
 Article name memory : if you corrected/ tweaked a input after snapping a photo, the algortihm remembers it and wont (at least very not likely) do the same mistake twice : 
@@ -114,6 +112,8 @@ device` to the Admin. Repeats are muted.
 
 
 ## Settings
+
+![Settings](docs/app-settings.png)
 
 - space used gives an indicator on what is used and the space left : snapshots are deleted after 6 weeks not to skyrocket your cloud/disk usage
 - checks on last backup, functionement state and its last check, and more...
