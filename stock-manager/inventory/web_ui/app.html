@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Inventory manager</title>
+<title>Inventory management</title>
 <style>
   @font-face {
     font-display: swap;
@@ -269,7 +269,7 @@
 </style>
 
 <header class="page">
-  <h1>Inventory manager</h1>
+  <h1>Inventory management</h1>
   <span class="count" id="headline-count">...</span>
   <span class="grow"></span>
   <span class="muted" id="who"></span>
@@ -446,31 +446,16 @@
 
   <div class="card">
     <h2>Reading accuracy</h2>
-    <p class="muted">Share of the fields read correctly, before any correction, at review time.</p>
+    <p class="muted">Share of the fields read correctly by the model, before any correction.</p>
     <div id="accuracy-graph"></div>
     <div id="accuracy-note"></div>
   </div>
 
   <div class="card">
-    <p class="eyebrow">Shared vocabulary</p>
-    <h2>Article names</h2>
-    <p class="muted" id="vocabulary-summary"></p>
-    <div class="row">
-      <label class="field grow"><span>Name to merge</span><input id="merge-alias" autocomplete="off"
-        placeholder="HEX BOLT M6"></label>
-      <label class="field grow"><span>Keep this name</span><input id="merge-article" autocomplete="off"
-        placeholder="BOLT M6"></label>
-      <button class="action" id="merge-run" style="align-self: flex-end">merge</button>
-    </div>
-    <div id="merge-note"></div>
-    <div class="scroll-x"><table id="table-vocabulary"></table></div>
-  </div>
-
-  <div class="card">
-    <p class="eyebrow">Audit</p>
-    <h2>Users</h2>
+    <h2>Audit</h2>
+    <p class="eyebrow">Users</p>
     <div class="scroll-x"><table id="table-users"></table></div>
-    <h2>Latest events</h2>
+    <p class="eyebrow">Lastest events</p>
     <div class="scroll-x"><table id="table-audit"></table></div>
     <div id="audit-note"></div>
   </div>
@@ -481,7 +466,6 @@
   </div>
 
   <div class="card">
-    <p class="eyebrow">Traceability</p>
     <h2>Stored notes</h2>
     <div class="scroll-x"><table id="table-notes"></table></div>
   </div>

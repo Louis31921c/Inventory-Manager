@@ -1,4 +1,4 @@
-# Stock manager
+# Inventory manager
 
 A software ERP for Inventory management. Photograph each Delivery note you receive and it is transcripted ,by duckdb, to a database*. You can then check the data under "Inventory", sort it, export it or query it with SQL.
 Same for Purchase orders. The goal is to report a company's inventory without having to manually audit it. The two bottlenecks will narrow down stocks: hardware input and outputs. 
@@ -8,7 +8,9 @@ each article stored in [inventory] database has its own line with indicators suc
 
 for those stored in [Purchase order] "in stock" or "to order" clickable option are available: You can then export them as, regardless of the purchase order #, to bulk order them. 
 
-
+```
+photo -> model -> you check it -> DuckDB -> search, SQL, questions, exports
+```
 
 *computer vision is used, you must synchronize your AI model for recognition. More models compatibility to come.
 
@@ -26,7 +28,7 @@ pipx install git+https://github.com/Louis31921c/Inventory-Manager.git#subdirecto
 
 Once in, plug your model ;
 
-Computer vision is used, you must synchronize your AI model for recognition. As of now, two models are compatible. More models to come.
+Computer vision is used, you must synchronize your AI model for recognition. As of now, two models are compatible. More models to come. Feel free to make it run on your own model !
 
 - **Claude Code CLI** (default): install it, run `claude` once and `/login`. No API key.
 - **Gemini API**: `pip install "stock-manager[gemini]"`, then put `LLM_BACKEND=gemini` and
