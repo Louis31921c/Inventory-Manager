@@ -129,8 +129,6 @@ def unlock_page(error="", user=""):
     }
     for key, value in replacements.items():
         page = page.replace(key, value)
-    if error:
-        page = page.replace("<!--ERROR-->", f'<p class="error">{html.escape(error)}</p>')
     return HTMLResponse(page)
 
 
@@ -816,9 +814,9 @@ def run_sql(request: Request, body: SqlRequest):
     return answer
 
 
-@app.post("/quit")
+@app.post("/exit")
 def quit_app(request: Request):
-    """The window's quit button: stop the server, which closes the app."""
+    """The window's exit button: stop the server, which closes the app."""
     event(request, "quit")
     if stopper is not None:
         stopper()

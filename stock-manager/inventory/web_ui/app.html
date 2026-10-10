@@ -269,15 +269,15 @@
 </style>
 
 <header class="page">
-  <h1>Inventory management</h1>
+  <h1>Inventory manager</h1>
   <span class="count" id="headline-count">...</span>
   <span class="grow"></span>
   <span class="muted" id="who"></span>
   <form method="post" action="/lock" id="lock-form">
-    <button class="mini" type="submit">Remind me</button>
+    <button class="mini" type="submit">Remember me</button>
   </form>
-  <form method="post" action="/quit" id="quit-form">
-    <button class="mini" type="submit">quit</button>
+  <form method="post" action="/exit" id="quit-form">
+    <button class="mini" type="submit">Exit</button>
   </form>
 </header>
 
@@ -293,14 +293,14 @@
 
 <section class="panel" id="panel-capture" role="tabpanel" aria-labelledby="tab-capture">
   <div class="card">
-    <h2>Import</h2>
+    <h2>Scan a delivery note</h2>
     <label class="file-drop" for="photo">
       <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" capture="environment">
       <img class="thumb" id="thumb" alt="" hidden>
-      <span><strong id="photo-name">Choose a photo</strong></span>
+      <span><strong id="photo-name">Take a picture</strong></span>
     </label>
     <div class="row">
-      <button class="action" id="read-btn" disabled>Read the note</button>
+      <button class="action" id="read-btn" disabled>ENTER</button>
       <button class="action ghost" id="cancel-read" hidden>Stop</button>
     </div>
     <div id="read-status" hidden></div>
@@ -333,26 +333,21 @@
   <div class="card">
     <div class="row">
       <label class="field grow"><span>Search</span><input id="q-search" placeholder="article, reference, supplier..."></label>
-      <label class="field grow"><span>Site</span><select id="q-site"><option value="">All</option></select></label>
-      <label class="rel" for="q-backorder" style="align-self: flex-end; padding-bottom: 8px">
-        <input type="checkbox" id="q-backorder"> backorders only
-      </label>
+      <label class="field grow"><span>Project</span><select id="q-site"><option value="">All</option></select></label>
     </div>
     <div class="row">
       <span class="muted" id="q-summary"></span>
       <span class="grow"></span>
-      <a class="mini" id="export-csv" href="/export.csv" download>Export CSV</a>
-    </div>
+   </div>
     <div class="scroll-x"><table id="table-inventory"></table></div>
   </div>
-</section>
+ </section>
 
 <section class="panel" id="panel-query" role="tabpanel" aria-labelledby="tab-query" hidden>
   <div class="card">
-    <h2>Ask</h2>
-    <p class="muted">SELECT * FROM inventory_lines</p>
+    <h2>Query</h2>
     <label class="field"><span>Question</span><textarea id="question"
-      placeholder="..."></textarea></label>
+      placeholder="SELECT * FROM inventory_lines"></textarea></label>
     <div class="chips" id="examples"></div>
     <div class="row">
       <button class="action" id="ask-btn">Run</button>
@@ -371,10 +366,10 @@
     <label class="file-drop" for="photo-list">
       <input type="file" id="photo-list" accept="image/jpeg,image/png,image/webp" capture="environment">
       <img class="thumb" id="thumb-list" alt="" hidden>
-      <span><strong id="photo-list-name">Choose a photo</strong></span>
+      <span><strong id="photo-list-name">ENTER</strong></span>
     </label>
     <div class="row">
-      <button class="action" id="read-list" disabled>Read the list</button>
+      <button class="action" id="read-list" disabled>ENTER</button>
       <button class="action ghost" id="cancel-list" hidden>Stop</button>
     </div>
     <div id="list-status" hidden></div>
@@ -420,7 +415,7 @@
   </div>
 
   <div class="card">
-    <h2>Synchronize AI</h2>
+    <h2>Synchronize AI model</h2>
     <div id="models"></div>
     <div id="model-note"></div>
   </div>
@@ -445,17 +440,17 @@
   </div>
 
   <div class="card">
-    <h2>Reading accuracy</h2>
-    <p class="muted">Share of the fields read correctly by the model, before any correction.</p>
+    <h2>Scan accuracy</h2>
+    <p class="muted">Shares of the fields red correctly by the model, without any correction.</p>
     <div id="accuracy-graph"></div>
     <div id="accuracy-note"></div>
   </div>
 
   <div class="card">
     <h2>Audit</h2>
-    <p class="eyebrow">Users</p>
+    <p class="muted">Users</p>
     <div class="scroll-x"><table id="table-users"></table></div>
-    <p class="eyebrow">Lastest events</p>
+    <p class="muted">Lastest events</p>
     <div class="scroll-x"><table id="table-audit"></table></div>
     <div id="audit-note"></div>
   </div>
@@ -587,7 +582,7 @@ function pickPhoto(input, nameLabel, thumbId, button, onFile) {
     const file = event.target.files?.[0] ?? null;
     onFile(file);
     button.disabled = !file;
-    nameLabel.textContent = file ? file.name : "Choose a photo";
+    nameLabel.textContent = file ? file.name : "Take a picture";
     const thumb = $(thumbId);
     if (file) {
       thumb.src = URL.createObjectURL(file);
@@ -744,7 +739,7 @@ $("discard-btn").addEventListener("click", () => {
   $("review").hidden = true;
   $("photo").value = "";
   $("thumb").hidden = true;
-  $("photo-name").textContent = "Choose a photo";
+  $("photo-name").textContent = "Take a picture";
   $("read-btn").disabled = true;
 });
 
@@ -832,10 +827,8 @@ function renderTable(table, columns, data, empty) {
 function filtered() {
   const search = upper($("q-search").value);
   const site = $("q-site").value;
-  const onlyBackorders = $("q-backorder").checked;
 
   return rows.filter((row) => {
-    if (onlyBackorders && !row.backorder) return false;
     if (site && (row.site ?? "") !== site) return false;
     if (!search) return true;
     const haystack = upper(`${row.article} ${row.designation} ${row.supplier} ${row.site ?? ""}`);
@@ -965,7 +958,7 @@ function refreshSiteFilter() {
   siteMenu.refresh();
 }
 
-for (const id of ["q-search", "q-site", "q-backorder"]) {
+for (const id of ["q-search", "q-site"]) {
   $(id).addEventListener("input", renderDeliveries);
 }
 
@@ -1237,7 +1230,7 @@ $("list-discard").addEventListener("click", () => {
   $("list-review").hidden = true;
   $("photo-list").value = "";
   $("thumb-list").hidden = true;
-  $("photo-list-name").textContent = "Choose a photo";
+  $("photo-list-name").textContent = "Take a picture";
   $("read-list").disabled = true;
 });
 
@@ -1714,8 +1707,8 @@ const FKEYS = [
   ["F4", "Orders", () => openTab("orders")],
   ["F5", "Export CSV", () => { window.location.href = "/export.csv"; }],
   ["F6", "Export Parquet", () => { window.location.href = "/export.parquet"; }],
-  ["F7", "Quit", () => $("quit-form").submit()],
-  ["F8", "Remind me", () => $("lock-form").submit()],
+  ["F7", "Exit", () => $("quit-form").submit()],
+  ["F8", "Remember me", () => $("lock-form").submit()],
 ];
 
 $("fkeys").replaceChildren(

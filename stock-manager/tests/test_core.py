@@ -954,7 +954,7 @@ def test_server_locks_everything_until_the_password(tmp_path, monkeypatch):
     with TestClient(server.app) as client:
         assert client.get("/", follow_redirects=False).status_code == 303
         assert client.get("/api/data").status_code == 401
-        assert "first run" in client.get("/unlock").text
+        assert ">create</button>" in client.get("/unlock").text
 
         assert client.post("/unlock", data={"user": "alex", "password": "x"},
                            headers={"origin": "http://evil.example"}).status_code == 403
@@ -963,7 +963,8 @@ def test_server_locks_everything_until_the_password(tmp_path, monkeypatch):
         answer = client.post("/unlock", data={"user": "alex", "password": "correct horse",
                                               "again": "nope"}, headers=mine,
                              follow_redirects=False)
-        assert "match" in answer.text
+        assert answer.status_code == 200
+        assert client.get("/api/data").status_code == 401
         answer = client.post("/unlock", data={"user": "alex", "password": "correct horse",
                                               "again": "correct horse"}, headers=mine,
                              follow_redirects=False)
@@ -972,10 +973,12 @@ def test_server_locks_everything_until_the_password(tmp_path, monkeypatch):
 
         assert client.post("/lock", headers=mine, follow_redirects=False).status_code == 303
         assert client.get("/api/data").status_code == 401
-        assert "SIGN IN" in client.get("/unlock").text
+        assert ">ENTER</button>" in client.get("/unlock").text
 
-        assert "Wrong password" in client.post("/unlock", data={"password": "guess"},
-                                               headers=mine).text
+        answer = client.post("/unlock", data={"password": "guess"}, headers=mine,
+                             follow_redirects=False)
+        assert answer.status_code == 200
+        assert client.get("/api/data").status_code == 401
         answer = client.post("/unlock", data={"password": "correct horse"}, headers=mine,
                              follow_redirects=False)
         assert answer.status_code == 303

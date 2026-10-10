@@ -115,7 +115,7 @@ def main(argv=None):
             return
         stopped.set()
         try:
-            request = urllib.request.Request(url + "quit", method="POST")
+            request = urllib.request.Request(url + "exit", method="POST")
             urllib.request.urlopen(request, timeout=2).read()
         except Exception:
             pass
