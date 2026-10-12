@@ -1598,6 +1598,8 @@ async function renderAccuracy() {
 }
 
 async function renderVocabulary() {
+  if (!$("table-vocabulary")) return;
+
   let data;
   try {
     data = await api("/api/vocabulary");
@@ -1643,7 +1645,7 @@ async function renderVocabulary() {
   ], articles.slice(0, 60), "No article name yet.");
 }
 
-$("merge-run").addEventListener("click", async () => {
+$("merge-run")?.addEventListener("click", async () => {
   const alias = $("merge-alias").value.trim();
   const article = $("merge-article").value.trim();
   if (!alias || !article) {
