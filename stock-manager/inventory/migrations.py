@@ -171,6 +171,19 @@ MIGRATIONS = [
         """,
     ),
     (7, "rename the tables: deliveries -> inventory_lines, lists -> purchase orders", rename_tables),
+    (
+        8,
+        "stock counts, so the planner knows what is on the shelf",
+        """
+        CREATE TABLE IF NOT EXISTS stock_counts (
+            article    VARCHAR PRIMARY KEY,
+            quantity   DOUBLE NOT NULL,
+            counted_on DATE NOT NULL DEFAULT current_date,
+            counted_by VARCHAR,
+            noted_at   TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

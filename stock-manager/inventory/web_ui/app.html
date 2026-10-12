@@ -75,6 +75,9 @@
   .tab[aria-selected="true"], .tab[aria-selected="true"]:hover {
     background: var(--tab-blue); color: #000;
   }
+  .tab.window { color: var(--ink); margin-left: auto; }
+  .tab.window::before { content: "[\2197 "; }
+  .tab.window:hover { color: var(--bright); }
 
   [hidden] { display: none !important; }
   section.panel { display: flex; flex-direction: column; gap: 14px; }
@@ -287,6 +290,8 @@
   <button class="tab" id="tab-query" role="tab" aria-selected="false" aria-controls="panel-query">SQL</button>
   <button class="tab" id="tab-orders" role="tab" aria-selected="false" aria-controls="panel-orders">Purchase orders</button>
   <button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings">Settings</button>
+  <button class="tab window" id="open-predictions" type="button"
+          title="Demand planning in a window of its own">Predictions</button>
 </nav>
 
 <div id="global-notice" hidden></div>
@@ -417,6 +422,15 @@
   <div class="card">
     <h2>Synchronize AI model</h2>
     <div id="models"></div>
+    <div class="row">
+      <label class="field grow">
+        <span>openai key for dots</span>
+        <input id="openai-key" type="password" placeholder="sk-..." autocomplete="off">
+      </label>
+      <label class="field" style="justify-content: flex-end">
+        <button class="action ghost" id="save-key">save key</button>
+      </label>
+    </div>
     <div id="model-note"></div>
   </div>
 
@@ -523,6 +537,7 @@ const postJson = (body) => ({
 });
 
 const patchJson = (body) => ({ ...postJson(body), method: "PATCH" });
+const putJson = (body) => ({ ...postJson(body), method: "PUT" });
 
 let notes = [];
 let rows = [];
@@ -570,6 +585,35 @@ function openTab(name) {
 }
 
 for (const name of TABS) $(`tab-${name}`).addEventListener("click", () => openTab(name));
+
+let planner = null;
+
+function openPredictions() {
+  if (planner && !planner.closed) {
+    planner.focus();
+    return;
+  }
+  planner = window.open("/predictions", "predictions", "width=1180,height=900");
+  if (!planner) window.location.href = "/predictions";
+}
+
+$("open-predictions").addEventListener("click", openPredictions);
+
+$("save-key").addEventListener("click", async () => {
+  const field = $("openai-key");
+  const button = $("save-key");
+  button.disabled = true;
+  try {
+    const answer = await api("/api/models/key", putJson({ key: field.value.trim() }));
+    field.value = "";
+    notice($("model-note"), "ok", answer.set ? "Dots has its key." : "The key is cleared.");
+    await renderModels();
+  } catch (e) {
+    notice($("model-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 try {
   const saved = localStorage.getItem("tab");
@@ -1711,6 +1755,7 @@ const FKEYS = [
   ["F6", "Export Parquet", () => { window.location.href = "/export.parquet"; }],
   ["F7", "Exit", () => $("quit-form").submit()],
   ["F8", "Remember me", () => $("lock-form").submit()],
+  ["F9", "Predictions", openPredictions],
 ];
 
 $("fkeys").replaceChildren(

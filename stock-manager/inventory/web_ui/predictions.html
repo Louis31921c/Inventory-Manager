@@ -1,0 +1,644 @@
+<meta charset="utf-8">
+<title>Predictions</title>
+<style>
+  @font-face {
+    font-display: swap;
+    font-family: "Cascadia Mono Web";
+    font-weight: 200 700;
+    src: url("/fonts/CascadiaMono.woff2") format("woff2-variations"),
+         url("/fonts/CascadiaMono.woff2") format("woff2");
+  }
+
+  :root {
+    --ground: #000000;
+    --surface-2: #030a05;
+    --ink: #39ff14;
+    --bright: #7dff5c;
+    --muted: #1c9c10;
+    --line: #10600a;
+    --line-strong: #1c9c10;
+    --green-soft: #08240a;
+    --accent-soft: #08240a;
+    --alarm: #ffb000;
+    --ral9003: #f4f4f4;
+    --mono: "Cascadia Mono Web", "Cascadia Mono", "Cascadia Code", "DejaVu Sans Mono",
+            ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 0 auto;
+    max-width: 1100px;
+    padding: 0 16px 40px;
+  }
+  h1, h2 { font-weight: 700; margin: 0; }
+  h1 { font-size: 19px; text-transform: uppercase; }
+  h2 { color: var(--bright); font-size: 15px; }
+  h2::before { color: var(--ink); content: "> "; }
+  p { margin: 0; }
+
+  header.page {
+    align-items: baseline; border-bottom: 1px solid var(--line); display: flex;
+    flex-wrap: wrap; gap: 4px 12px; margin-bottom: 14px; padding-block: 16px 9px;
+  }
+  header.page .count { color: var(--muted); font-size: 12px; }
+  .grow { flex: 1 1 auto; }
+
+  [hidden] { display: none !important; }
+  .cards { display: flex; flex-direction: column; gap: 14px; }
+  .card { border: 1px solid var(--line-strong); padding: 14px 16px; }
+  .card > * + * { margin-top: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .row.tight { gap: 6px; }
+  .side-by-side { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 820px) { .side-by-side { grid-template-columns: 1fr; } }
+
+  button.action {
+    background: var(--accent-soft); border: 1px solid var(--ink); color: var(--ink);
+    cursor: pointer; font-family: var(--mono); font-size: 14px; font-weight: 500;
+    padding: 7px 14px; text-transform: uppercase;
+  }
+  button.action::before { content: "> "; }
+  button.action:hover { background: var(--ink); color: #000; }
+  button.action.ghost { background: none; border-color: var(--line-strong); color: var(--muted); }
+  button.action.ghost:hover { border-color: var(--ink); color: var(--ink); }
+  button.action[disabled] { cursor: not-allowed; opacity: .4; }
+
+  .mini {
+    background: none; border: 1px solid var(--line-strong); color: var(--muted); cursor: pointer;
+    font-family: var(--mono); font-size: 12px; padding: 2px 8px;
+  }
+  .mini:hover { background: var(--ink); border-color: var(--ink); color: #000; }
+  :focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
+
+  label.field { display: flex; flex-direction: column; gap: 2px; }
+  label.field > span {
+    color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  }
+  label.field > span::before { color: var(--ink); content: "$ "; }
+  input, select {
+    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--bright);
+    font-family: var(--mono); font-size: 14px; padding: 7px 9px; width: 100%;
+  }
+  input:focus, select:focus { border-color: var(--ink); outline: none; }
+  label.field.narrow { max-width: 150px; }
+
+  table { border-collapse: collapse; font-size: 13px; width: 100%; }
+  .scroll-x { overflow-x: auto; }
+  th {
+    border-bottom: 1px solid var(--line-strong); font-size: 11px; font-weight: 700;
+    letter-spacing: .1em; padding: 5px 12px 5px 0; text-align: left; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  td { padding: 4px 12px 4px 0; vertical-align: top; }
+  td.num {
+    font-variant-numeric: tabular-nums; padding-right: 16px; text-align: right;
+    white-space: nowrap;
+  }
+  tbody tr:hover { background: var(--green-soft); }
+  tbody strong { color: var(--bright); font-weight: 700; }
+  .desig { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+
+  input.cell {
+    background: none; border: 1px solid transparent; color: var(--ink); font: inherit;
+    padding: 1px 4px; text-align: right; width: 84px;
+  }
+  input.cell:hover { border-color: var(--line); }
+  input.cell:focus { background: var(--surface-2); border-color: var(--ink); outline: none; }
+  input.cell.saved { border-color: var(--ink); }
+
+  .pill {
+    border: 1px solid currentColor; display: inline-block; font-size: 10.5px;
+    letter-spacing: .08em; padding: 0 5px; text-transform: uppercase;
+  }
+  .pill.short { color: var(--alarm); }
+  .pill.watch { color: var(--bright); }
+  .pill.ok { color: var(--muted); }
+  .pill.uncounted { color: var(--muted); }
+
+  .notice { border-left: 2px solid var(--line-strong); font-size: 13px; padding: 6px 10px; }
+  .notice::before { color: var(--ink); content: "> "; }
+  .notice.warn { border-color: var(--alarm); color: var(--alarm); }
+  .notice.bad { border-color: var(--ink); color: var(--ink); }
+  .notice.bad::before { content: "[x] "; }
+  .muted { color: var(--muted); }
+  .legend { color: var(--muted); font-size: 11.5px; }
+
+  svg { display: block; width: 100%; }
+  svg text { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
+  svg text.value { fill: var(--bright); }
+  svg .axis { stroke: var(--line); stroke-width: 1; }
+  svg rect.bar { fill: var(--ink); }
+  svg rect.bar.quiet { fill: var(--line-strong); }
+  svg rect.bar.alarm { fill: var(--alarm); }
+  svg rect.track { fill: var(--surface-2); stroke: var(--line); }
+  svg line.marker { stroke: var(--alarm); stroke-dasharray: 2 2; stroke-width: 1; }
+  svg polyline.trend { fill: none; stroke: var(--bright); stroke-width: 1.5; }
+  svg circle.point { fill: var(--bright); }
+
+  .spin { animation: spin 1s steps(8) infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+</style>
+
+<header class="page">
+  <h1>Predictions</h1>
+  <span class="count" id="window-line">...</span>
+  <span class="grow"></span>
+  <button class="mini" id="reload">refresh</button>
+</header>
+
+<div id="top-notice"></div>
+
+<div class="cards">
+  <div class="card">
+    <h2>Planning rules</h2>
+    <div class="row">
+      <label class="field narrow">
+        <span>lead days</span>
+        <input id="lead" type="number" min="1" max="120" step="1" value="7">
+      </label>
+      <label class="field narrow">
+        <span>service %</span>
+        <select id="service">
+          <option value="80">80</option>
+          <option value="85">85</option>
+          <option value="90">90</option>
+          <option value="95" selected>95</option>
+          <option value="98">98</option>
+          <option value="99">99</option>
+        </select>
+      </label>
+      <label class="field narrow">
+        <span>cover days</span>
+        <input id="horizon" type="number" min="1" max="180" step="1" value="14">
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="apply">apply</button>
+      </label>
+    </div>
+    <p class="legend">
+      Lead days: how long the supplier takes. Service %: how often you want to be covered
+      when a week runs hot. Cover days: how far ahead an order should carry you.
+    </p>
+  </div>
+
+  <div class="side-by-side">
+    <div class="card">
+      <h2>What left the stores</h2>
+      <div id="weeks-chart"></div>
+      <p class="legend" id="weeks-legend"></p>
+    </div>
+    <div class="card">
+      <h2>Where it went</h2>
+      <div id="sites-chart"></div>
+      <p class="legend">Lines booked per site over the same window.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Days of cover</h2>
+    <div id="cover-chart"></div>
+    <p class="legend">
+      Bars are days of stock left at the current rate. The dashed line is the lead time:
+      anything shorter runs out before the delivery lands. Counted articles only.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Shortage watch</h2>
+    <div class="row tight">
+      <button class="mini" id="show-all">all articles</button>
+      <button class="mini" id="show-risky">needs attention</button>
+      <span class="grow"></span>
+      <span class="muted" id="count-line"></span>
+    </div>
+    <div class="scroll-x"><table id="table-plan"></table></div>
+    <p class="legend">
+      On hand is yours to fill in: type a count and it is saved against the article.
+      Everything else is worked out from the delivery notes.
+    </p>
+    <div id="plan-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Dots orders for you</h2>
+    <p class="muted" id="dots-state">...</p>
+    <div class="row">
+      <label class="field grow">
+        <span>site</span>
+        <input id="order-site" placeholder="where it goes">
+      </label>
+      <label class="field grow">
+        <span>work item</span>
+        <input id="order-work" placeholder="what it is for">
+      </label>
+    </div>
+    <div class="row">
+      <button class="action" id="ask-dots">ask dots</button>
+      <button class="action ghost" id="drop-draft" hidden>discard</button>
+    </div>
+    <div id="dots-note"></div>
+    <div id="draft" hidden>
+      <div class="scroll-x"><table id="table-draft"></table></div>
+      <p class="legend" id="draft-reason"></p>
+      <div class="row">
+        <button class="action" id="save-draft">save as purchase order</button>
+      </div>
+    </div>
+    <p class="legend">
+      Dots drafts, you sign. Nothing is sent to a supplier from here: saving writes a
+      purchase order into the app, where you can tick the lines off as they arrive.
+      The "why" of each line is kept with it as the line description.
+    </p>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, props = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key.includes("-")) node.setAttribute(key, value);
+    else node[key] = value;
+  }
+  for (const child of children) node.append(child);
+  return node;
+}
+
+const SVG = "http://www.w3.org/2000/svg";
+
+function svg(tag, props = {}, children = []) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [key, value] of Object.entries(props)) node.setAttribute(key, value);
+  for (const child of children) node.append(child);
+  return node;
+}
+
+const showNum = (value) => (value == null || isNaN(value) ? "—" : Number(value).toLocaleString());
+const short = (text, size = 22) =>
+  String(text ?? "").length > size ? `${String(text).slice(0, size - 1)}…` : String(text ?? "");
+
+function notice(target, kind, text) {
+  target.replaceChildren(text ? el("p", { className: `notice ${kind}`, textContent: text }) : "");
+  target.hidden = !text;
+}
+
+async function api(path, options) {
+  const response = await fetch(path, options);
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+  }
+  if (!response.ok) throw new Error(payload?.detail ?? `Error ${response.status}`);
+  return payload;
+}
+
+const jsonBody = (method, body) => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+let plan = null;
+let draft = null;
+let onlyRisky = true;
+
+function rules() {
+  return {
+    lead: Number($("lead").value) || 7,
+    service: Number($("service").value) || 95,
+    horizon: Number($("horizon").value) || 14,
+  };
+}
+
+function columnChart(points, label, value, options = {}) {
+  const width = 640;
+  const height = 170;
+  const pad = { left: 34, right: 8, top: 10, bottom: 26 };
+  const top = Math.max(...points.map(value), 1);
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const step = plotWidth / Math.max(points.length, 1);
+  const bars = [];
+  const marks = [];
+
+  points.forEach((point, index) => {
+    const tall = (value(point) / top) * plotHeight;
+    const x = pad.left + index * step + step * 0.2;
+    const barWidth = Math.max(step * 0.6, 2);
+    bars.push(svg("rect", {
+      class: `bar${options.quiet ? " quiet" : ""}`, x, width: barWidth,
+      y: pad.top + plotHeight - tall, height: Math.max(tall, 1),
+    }));
+    marks.push(svg("text", {
+      x: x + barWidth / 2, y: height - 14, "text-anchor": "middle",
+    }, [label(point)]));
+    if (value(point) > 0) {
+      marks.push(svg("text", {
+        class: "value", x: x + barWidth / 2, y: pad.top + plotHeight - tall - 3,
+        "text-anchor": "middle",
+      }, [showNum(Math.round(value(point)))]));
+    }
+  });
+
+  return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, [
+    svg("line", {
+      class: "axis", x1: pad.left, y1: pad.top + plotHeight, x2: width - pad.right,
+      y2: pad.top + plotHeight,
+    }),
+    svg("text", { x: 0, y: pad.top + 8 }, [showNum(Math.round(top))]),
+    ...bars,
+    ...marks,
+  ]);
+}
+
+function barList(points, label, value, options = {}) {
+  const width = 640;
+  const rowHeight = 20;
+  const pad = { left: 150, right: 42, top: 6 };
+  const height = pad.top + points.length * rowHeight + 6;
+  const top = Math.max(...points.map(value), options.floor ?? 1);
+  const plotWidth = width - pad.left - pad.right;
+  const parts = [];
+
+  points.forEach((point, index) => {
+    const y = pad.top + index * rowHeight;
+    const long = Math.max((Math.min(value(point), top) / top) * plotWidth, 1);
+    parts.push(svg("text", { x: 0, y: y + 12 }, [short(label(point))]));
+    parts.push(svg("rect", { class: "track", x: pad.left, y: y + 3, width: plotWidth, height: 12 }));
+    parts.push(svg("rect", {
+      class: `bar${options.flag && options.flag(point) ? " alarm" : ""}`,
+      x: pad.left, y: y + 3, width: long, height: 12,
+    }));
+    parts.push(svg("text", {
+      class: "value", x: width - pad.right + 4, y: y + 13,
+    }, [options.text ? options.text(point) : showNum(value(point))]));
+  });
+
+  if (options.marker != null && options.marker <= top) {
+    const x = pad.left + (options.marker / top) * plotWidth;
+    parts.push(svg("line", { class: "marker", x1: x, y1: pad.top, x2: x, y2: height - 6 }));
+  }
+
+  return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
+}
+
+function renderCharts() {
+  const weeks = plan.weeks ?? [];
+  $("weeks-chart").replaceChildren(weeks.length
+    ? columnChart(weeks, (week) => week.week.slice(5), (week) => week.quantity)
+    : el("p", { className: "muted", textContent: "No delivery note yet." }));
+  const lines = weeks.reduce((sum, week) => sum + week.lines, 0);
+  $("weeks-legend").textContent = weeks.length
+    ? `${showNum(lines)} line(s) over ${weeks.length} week(s), by quantity booked in.`
+    : "";
+
+  const sites = plan.sites ?? [];
+  $("sites-chart").replaceChildren(sites.length
+    ? barList(sites, (site) => site.site, (site) => site.lines)
+    : el("p", { className: "muted", textContent: "No site named yet." }));
+
+  const counted = (plan.articles ?? [])
+    .filter((row) => row.cover_days != null)
+    .sort((a, b) => a.cover_days - b.cover_days)
+    .slice(0, 12);
+  const lead = plan.settings.lead_days;
+  $("cover-chart").replaceChildren(counted.length
+    ? barList(counted, (row) => row.article, (row) => row.cover_days, {
+        floor: lead * 2,
+        marker: lead,
+        flag: (row) => row.cover_days < lead,
+        text: (row) => `${showNum(row.cover_days)} d`,
+      })
+    : el("p", {
+        className: "muted",
+        textContent: "Nothing counted yet. Fill in a few on-hand counts below.",
+      }));
+}
+
+function statePill(state) {
+  const words = { short: "short", watch: "watch", ok: "ok", uncounted: "not counted" };
+  return el("span", { className: `pill ${state}`, textContent: words[state] ?? state });
+}
+
+function countCell(row) {
+  const box = el("input", {
+    className: "cell", type: "number", step: "any", min: "0",
+    value: row.on_hand == null ? "" : row.on_hand,
+    title: row.counted_on ? `counted ${row.counted_on}` : "never counted",
+  });
+  box.addEventListener("change", async () => {
+    const quantity = box.value.trim() === "" ? null : Number(box.value);
+    if (quantity != null && (isNaN(quantity) || quantity < 0)) {
+      notice($("plan-note"), "warn", "A count is a number, zero or more.");
+      return;
+    }
+    box.disabled = true;
+    try {
+      await api("/api/stock-count", jsonBody("PUT", { article: row.article, quantity }));
+      box.classList.add("saved");
+      notice($("plan-note"), "", "");
+      await load({ keepDraft: true });
+    } catch (e) {
+      notice($("plan-note"), "bad", e.message);
+    } finally {
+      box.disabled = false;
+    }
+  });
+  return box;
+}
+
+function renderPlan() {
+  const rows = onlyRisky
+    ? (plan.articles ?? []).filter((row) => row.state !== "ok" && row.per_week > 0)
+    : (plan.articles ?? []);
+  const table = $("table-plan");
+  const head = ["Article", "Per week", "On hand", "On order", "Reorder at", "Safety",
+                "Cover", "Order", "State"];
+
+  table.replaceChildren(
+    el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
+    el("tbody", {}, rows.length
+      ? rows.map((row) => el("tr", {}, [
+          el("td", {}, [
+            el("div", {}, [el("strong", { textContent: row.article })]),
+            el("div", {
+              className: "desig",
+              textContent: [row.supplier, row.designation].filter(Boolean).join(" · "),
+            }),
+          ]),
+          el("td", { className: "num", textContent: showNum(row.per_week) }),
+          el("td", { className: "num" }, [countCell(row)]),
+          el("td", { className: "num", textContent: row.on_order ? showNum(row.on_order) : "—" }),
+          el("td", { className: "num", textContent: showNum(row.reorder_point) }),
+          el("td", { className: "num", textContent: showNum(row.safety_stock) }),
+          el("td", {
+            className: "num",
+            textContent: row.cover_days == null ? "—" : `${showNum(row.cover_days)} d`,
+          }),
+          el("td", { className: "num", textContent: row.suggested ? showNum(row.suggested) : "—" }),
+          el("td", {}, [statePill(row.state)]),
+        ]))
+      : [el("tr", {}, [el("td", { colSpan: head.length, className: "muted",
+                                  textContent: "Nothing to watch." })])]),
+  );
+
+  const counts = plan.counts;
+  $("count-line").textContent =
+    `${counts.articles} article(s) · ${counts.counted} counted · ${counts.short} short · `
+    + `${counts.watch} on watch`;
+}
+
+function renderDraft() {
+  $("draft").hidden = draft == null;
+  $("drop-draft").hidden = draft == null;
+  if (!draft) return;
+
+  const head = ["Article", "Quantity", "Unit", "Supplier", "Why"];
+  $("table-draft").replaceChildren(
+    el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
+    el("tbody", {}, draft.lines.map((line, index) => {
+      const quantity = el("input", {
+        className: "cell", type: "number", step: "any", min: "0", value: line.quantity,
+      });
+      quantity.addEventListener("change", () => {
+        draft.lines[index].quantity = Number(quantity.value) || 0;
+      });
+      return el("tr", {}, [
+        el("td", {}, [
+          el("div", {}, [el("strong", { textContent: line.article })]),
+          line.reference
+            ? el("div", { className: "desig", textContent: line.reference })
+            : el("span"),
+        ]),
+        el("td", { className: "num" }, [quantity]),
+        el("td", { textContent: line.unit ?? "—" }),
+        el("td", { textContent: line.supplier ?? "—" }),
+        el("td", { className: "desig", textContent: line.reason }),
+      ]);
+    })),
+  );
+  $("draft-reason").textContent = draft.note
+    ? `${draft.note} — drafted by ${draft.model} from ${draft.drafted_from} article(s).`
+    : `Drafted by ${draft.model} from ${draft.drafted_from} article(s).`;
+}
+
+async function renderDots() {
+  try {
+    const data = await api("/api/models");
+    const dots = (data.providers ?? []).find((provider) => provider.id === "openai");
+    $("dots-state").textContent = dots
+      ? `Dots: ${dots.detail}`
+      : "Dots is not listed on this build.";
+    $("ask-dots").disabled = !dots || dots.state === "missing";
+    if (dots && dots.state === "missing") {
+      notice($("dots-note"), "warn",
+        "Paste an OpenAI key in the Settings tab of the main window, then come back.");
+    }
+  } catch (e) {
+    $("dots-state").textContent = `Dots: ${e.message}`;
+  }
+}
+
+async function load(options = {}) {
+  const { lead, service, horizon } = rules();
+  try {
+    plan = await api(`/api/forecast?lead=${lead}&service=${service}&horizon=${horizon}`);
+  } catch (e) {
+    notice($("top-notice"), "bad", e.message);
+    return;
+  }
+  if (!options.keepDraft) draft = null;
+
+  const window_ = plan.window;
+  $("window-line").textContent =
+    `${window_.first} to ${window_.last} · ${window_.weeks} week(s) of history`;
+  notice($("top-notice"), plan.thin ? "warn" : "",
+    plan.thin
+      ? `Only ${window_.weeks} week(s) of deliveries so far, so read these numbers as a `
+        + "direction, not a promise. They sharpen as the notes pile up."
+      : "");
+
+  renderCharts();
+  renderPlan();
+  renderDraft();
+}
+
+$("apply").addEventListener("click", () => load());
+$("reload").addEventListener("click", () => load());
+$("show-all").addEventListener("click", () => { onlyRisky = false; renderPlan(); });
+$("show-risky").addEventListener("click", () => { onlyRisky = true; renderPlan(); });
+$("drop-draft").addEventListener("click", () => { draft = null; renderDraft(); });
+
+$("ask-dots").addEventListener("click", async () => {
+  const button = $("ask-dots");
+  button.disabled = true;
+  notice($("dots-note"), "", "Dots is reading the numbers...");
+  try {
+    draft = await api("/api/forecast/draft", jsonBody("POST", {
+      ...rules(),
+      site: $("order-site").value.trim() || null,
+      work_item: $("order-work").value.trim() || null,
+    }));
+    notice($("dots-note"), "ok", `${draft.lines.length} line(s) drafted. Check them, then save.`);
+    renderDraft();
+  } catch (e) {
+    notice($("dots-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("save-draft").addEventListener("click", async () => {
+  if (!draft) return;
+  const button = $("save-draft");
+  const lines = draft.lines
+    .filter((line) => line.quantity > 0)
+    .map((line) => ({
+      article: line.article,
+      designation: line.reason || null,
+      reference: line.reference || null,
+      quantity: line.quantity,
+      in_stock: false,
+    }));
+  if (!lines.length) {
+    notice($("dots-note"), "warn", "Every line is at zero. Nothing to save.");
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const answer = await api("/api/orders", jsonBody("POST", {
+      list: {
+        list_date: new Date().toISOString().slice(0, 10),
+        site: $("order-site").value.trim() || null,
+        work_item: $("order-work").value.trim() || null,
+        drafter: "DOTS",
+        lines,
+      },
+    }));
+    notice($("dots-note"), "ok",
+      `Saved as purchase order #${answer.list_id}. It is in the Purchase orders tab now.`);
+    draft = null;
+    renderDraft();
+    await load();
+  } catch (e) {
+    notice($("dots-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+renderDots();
+load();
+</script>

@@ -21,14 +21,16 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import account, alerts, audit, backup, catalog, db, llm, models_info, vocabulary
-from .config import load_config
+from . import (account, alerts, audit, backup, catalog, db, forecast, llm, models_info,
+               vocabulary)
+from .config import load_config, set_setting
 from .models import Note, parse_date
 
 log = logging.getLogger("inventory.web")
 
 WEB = Path(__file__).resolve().parent / "web_ui"
 PAGE = WEB / "app.html"
+PREDICTIONS = WEB / "predictions.html"
 LICENCE = WEB / "license.html"
 UNLOCK = WEB / "unlock.html"
 SUPPORTED = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
@@ -250,6 +252,11 @@ def robots():
 @app.get("/", response_class=HTMLResponse)
 def page():
     return HTMLResponse(PAGE.read_text(encoding="utf-8"))
+
+
+@app.get("/predictions", response_class=HTMLResponse)
+def predictions_page():
+    return HTMLResponse(PREDICTIONS.read_text(encoding="utf-8"))
 
 
 @app.get("/license", response_class=HTMLResponse)
@@ -582,6 +589,116 @@ def use_model(request: Request, body: ModelChoice):
     backend = None
     event(request, "model.use", chosen)
     return {"current": chosen, "providers": models_info.status(chosen)}
+
+
+def _planner_settings(lead, service, horizon):
+    lead = min(max(int(lead), 1), 120)
+    service = min(max(int(service), 50), 99)
+    horizon = min(max(int(horizon), 1), 180)
+    return lead, service, horizon
+
+
+@app.get("/api/forecast")
+def read_forecast(lead: int = forecast.DEFAULT_LEAD, service: int = forecast.DEFAULT_SERVICE,
+                  horizon: int = forecast.DEFAULT_HORIZON):
+    lead, service, horizon = _planner_settings(lead, service, horizon)
+    answer = forecast.summary(config.db_path, lead, service, horizon)
+    answer["counts_source"] = len(db.stock_counts(config.db_path))
+    return answer
+
+
+class StockCount(BaseModel):
+    article: str
+    quantity: float | None = None
+
+
+@app.put("/api/stock-count")
+def put_stock_count(request: Request, body: StockCount):
+    try:
+        article = db.save_stock_count(config.db_path, body.article, body.quantity,
+                                      who(request)[0])
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "stock.count", body.article,
+          "cleared" if body.quantity is None else str(body.quantity))
+    return {"article": article or body.article, "quantity": body.quantity}
+
+
+class OrderDraft(BaseModel):
+    lead: int = forecast.DEFAULT_LEAD
+    service: int = forecast.DEFAULT_SERVICE
+    horizon: int = forecast.DEFAULT_HORIZON
+    site: str | None = None
+    work_item: str | None = None
+    only: list[str] | None = None
+
+
+@app.post("/api/forecast/draft")
+async def draft_order(request: Request, body: OrderDraft):
+    """Dots turns the planner's numbers into a purchase order for someone to approve."""
+    lead, service, horizon = _planner_settings(body.lead, body.service, body.horizon)
+    plan = forecast.summary(config.db_path, lead, service, horizon)
+    rows = plan["articles"]
+    if body.only:
+        wanted = {name.strip().upper() for name in body.only}
+        rows = [row for row in rows if row["article"].upper() in wanted]
+    else:
+        rows = plan["shortlist"]
+    if not rows:
+        raise HTTPException(422, "Nothing worth ordering: no article is under its reorder point.")
+
+    keep = ("article", "designation", "reference", "supplier", "per_week", "on_hand", "on_order",
+            "lead_demand", "safety_stock", "reorder_point", "cover_days", "suggested", "state",
+            "risk", "backorders")
+    planner = {
+        "settings": plan["settings"],
+        "window": plan["window"],
+        "counted_articles": plan["counts"]["counted"],
+        "history_is_thin": plan["thin"],
+        "articles": [{key: row[key] for key in keep} for row in rows[:60]],
+    }
+
+    dots = llm.planner_backend(config)
+    try:
+        answer = await dots.draft_order(planner)
+    except llm.ExtractionError as e:
+        report(request, "draft", str(e), "Predictions window")
+        raise HTTPException(502, str(e)) from e
+
+    lines = []
+    for line in answer.get("lines", []):
+        article = str(line.get("article") or "").strip()
+        quantity = line.get("quantity")
+        if not article or quantity is None:
+            continue
+        lines.append({"article": article, "quantity": float(quantity),
+                      "unit": line.get("unit"), "supplier": line.get("supplier"),
+                      "reference": line.get("reference"),
+                      "reason": str(line.get("reason") or "")})
+    if not lines:
+        raise HTTPException(502, "Dots came back with no line.")
+
+    event(request, "order.draft", f"{len(lines)} line(s)", f"by Dots, {dots.model}")
+    return {"lines": lines, "note": str(answer.get("note") or ""), "model": dots.model,
+            "drafted_from": len(planner["articles"]), "site": body.site,
+            "work_item": body.work_item}
+
+
+class ModelKey(BaseModel):
+    key: str
+
+
+@app.put("/api/models/key")
+def put_model_key(request: Request, body: ModelKey):
+    """The OpenAI key, straight into the settings file. It is never read back out."""
+    global config
+    key = body.key.strip()
+    if key and not key.startswith("sk-"):
+        raise HTTPException(422, "An OpenAI key starts with sk-.")
+    set_setting("OPENAI_API_KEY", key)
+    config = replace(config, openai_api_key=key)
+    event(request, "model.key", "openai", "cleared" if not key else "set")
+    return {"set": bool(key), "providers": models_info.status(config.backend)}
 
 
 @app.get("/api/errors")

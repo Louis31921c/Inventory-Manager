@@ -16,7 +16,7 @@ LIST_COLUMNS = ("list_date", "site", "work_item", "drafter", "image_sha256", "im
 LIST_LINE_COLUMNS = ("list_id", "line_no", "article", "designation", "reference", "quantity",
                      "stock", "in_stock")
 COUNTED_TABLES = ("notes", "inventory_lines", "purchase_orders", "purchase_order_lines", "catalog",
-                  "article_names", "audit")
+                  "article_names", "audit", "stock_counts")
 
 
 class QueryError(Exception):
@@ -134,6 +134,37 @@ def stock_by_article(db_path):
              "supplier": supplier, "site": site, "work_item": work_item,
              "lines": lines, "backorders": backorders}
             for article, quantity, last, supplier, site, work_item, lines, backorders in rows]
+
+
+def stock_counts(db_path):
+    rows = read(db_path, """
+            SELECT article, quantity, counted_on, counted_by
+            FROM stock_counts
+            ORDER BY article
+            """)
+    return [{"article": article, "quantity": quantity,
+             "counted_on": counted_on.isoformat() if counted_on else None,
+             "counted_by": counted_by}
+            for article, quantity, counted_on, counted_by in rows]
+
+
+def save_stock_count(db_path, article, quantity, user=None):
+    """One count per article: a new one replaces the old."""
+    article = normalize_name(article)
+    if not article:
+        raise ValueError("no article")
+    if quantity is None:
+        write(db_path, "DELETE FROM stock_counts WHERE article = ?", (article,))
+        return None
+    write(db_path, """
+            INSERT INTO stock_counts (article, quantity, counted_on, counted_by)
+            VALUES (?, ?, current_date, ?)
+            ON CONFLICT (article) DO UPDATE SET quantity = excluded.quantity,
+                                                counted_on = excluded.counted_on,
+                                                counted_by = excluded.counted_by,
+                                                noted_at = now()
+            """, (article, float(quantity), user))
+    return article
 
 
 EXPORTS = {

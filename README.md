@@ -84,9 +84,43 @@ Press `1` to `5` to navigate between tables.
 | F4 | purchase orders |
 | F5 / F6 | export |
 | F7 | quit |
+| F9 | predictions |
 | Ctrl-U | clear the line you are typing |
 | Esc | cancel |
 
+
+
+## Predictions
+
+`Predictions`, at the right of the tabs (or `F9`), opens a window of its own: demand planning
+off the delivery notes you already scanned.
+
+| What it shows | Where it comes from |
+|---|---|
+| What left the stores, week by week | quantities booked in on the delivery notes |
+| Where it went | lines per site over the same window |
+| Days of cover | what is on the shelf divided by the weekly rate, against the lead time |
+| Shortage watch | per article: rate, on hand, on order, reorder point, safety stock, suggestion |
+
+Three rules drive the arithmetic, and you set them at the top of the window: **lead days** (how
+long the supplier takes), **service %** (how often you want to be covered when a week runs hot)
+and **cover days** (how far ahead an order should carry you). Safety stock is the service factor
+times the week to week swing over the lead time; the reorder point is the lead time demand plus
+that safety stock. Under it, the article is on watch; under the lead time demand alone, it is
+short.
+
+On hand is the one number the app cannot read off a photo, so type it in: the `on hand` cell in
+the shortage table saves the count against the article, dated. Articles nobody counted are
+marked `not counted` and left out of the cover graph rather than guessed at.
+
+### Dots orders for you
+
+With an OpenAI key in Settings, `ask dots` hands the planner's numbers to Dots, which writes a
+purchase order back: article, quantity rounded to how the trade buys, supplier, and one line
+saying why. Check it, change any quantity, then `save as purchase order` and it lands in the
+Purchase orders tab like any other sheet.
+
+Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
 
 
 ## Where things are stored
@@ -136,7 +170,8 @@ device` to the Admin. Repeats are muted.
 | `inventory/cli.py` | the commands |
 | `inventory/screen.py` | the character grid both the terminal and the screenshots draw into |
 | `inventory/db.py` | DuckDB storage and exports |
-| `inventory/llm.py` | the two model backends |
+| `inventory/llm.py` | the model backends, Dots among them |
+| `inventory/forecast.py` | rates, safety stock, reorder points, shortage risk |
 | `inventory/vocabulary.py` | shared article names, aliases, merges |
 | `inventory/audit.py`, `alerts.py` | who did what, and what broke |
 

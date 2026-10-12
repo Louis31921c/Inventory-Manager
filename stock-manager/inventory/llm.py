@@ -4,6 +4,8 @@ import json
 import os
 import shutil
 import tempfile
+import urllib.error
+import urllib.request
 from datetime import date
 from pathlib import Path
 
@@ -88,6 +90,31 @@ SQL_SCHEMA = {
     "type": "object",
     "properties": {"sql": _STR, "note": _STR},
     "required": ["sql", "note"],
+    "additionalProperties": False,
+}
+
+ORDER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "lines": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "article": {"type": "string"},
+                    "quantity": {"type": "number"},
+                    "unit": {"type": ["string", "null"]},
+                    "supplier": {"type": ["string", "null"]},
+                    "reference": {"type": ["string", "null"]},
+                    "reason": {"type": "string"},
+                },
+                "required": ["article", "quantity", "unit", "supplier", "reference", "reason"],
+                "additionalProperties": False,
+            },
+        },
+        "note": {"type": "string"},
+    },
+    "required": ["lines", "note"],
     "additionalProperties": False,
 }
 
@@ -277,7 +304,100 @@ def _json_format(schema):
     return {"type": "text", "mime_type": "application/json", "schema": schema}
 
 
+OPENAI_URL = "https://api.openai.com/v1/responses"
+OPENAI_MODEL = "gpt-6.1-sol"
+NO_EYES = ("Dots reads numbers, not photos. Keep Claude or Gemini for scanning, "
+           "Dots does the planning.")
+
+
+class OpenAIBackend:
+    """Dots. It plans and writes purchase orders from the planner's own numbers."""
+
+    def __init__(self, api_key, model=None, timeout=180):
+        self.api_key = (api_key or "").strip()
+        self.model = model or os.environ.get("OPENAI_MODEL", "").strip() or OPENAI_MODEL
+        self.timeout = timeout
+
+    async def extract(self, data, media_type, known_articles=()):
+        raise ExtractionError(NO_EYES)
+
+    async def extract_list(self, data, media_type, known_articles=()):
+        raise ExtractionError(NO_EYES)
+
+    async def to_sql(self, question, previous=None):
+        answer = await self._call(prompt_text("sql.md"), _question_prompt(question, previous),
+                                  SQL_SCHEMA, "sql_answer")
+        return answer.get("sql"), answer.get("note")
+
+    async def draft_order(self, planner):
+        return await self._call(prompt_text("order_draft.md"),
+                                json.dumps(planner, ensure_ascii=False, default=str),
+                                ORDER_SCHEMA, "purchase_order")
+
+    async def _call(self, system, user, schema, name):
+        if not self.api_key:
+            raise ExtractionError("Dots has no OpenAI key yet. Settings, then paste one in.")
+        body = {
+            "model": self.model,
+            "input": [{"role": "system", "content": system},
+                      {"role": "user", "content": user}],
+            "text": {"format": {"type": "json_schema", "name": name, "strict": True,
+                                "schema": schema}},
+        }
+        payload = await asyncio.to_thread(self._post, body)
+        return self._answer(payload)
+
+    def _post(self, body):
+        request = urllib.request.Request(
+            OPENAI_URL, data=json.dumps(body).encode(), method="POST",
+            headers={"Authorization": f"Bearer {self.api_key}",
+                     "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as answer:
+                return json.loads(answer.read())
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")[:300]
+            if e.code == 401:
+                raise ExtractionError("OpenAI refused the key. Check it in Settings.") from e
+            if e.code == 429:
+                raise ExtractionError("OpenAI is rate limiting, try again in a minute.") from e
+            raise ExtractionError(f"OpenAI said {e.code}: {detail}") from e
+        except urllib.error.URLError as e:
+            raise ExtractionError(f"Cannot reach OpenAI: {e.reason}") from e
+        except json.JSONDecodeError as e:
+            raise ExtractionError("Unreadable answer from OpenAI.") from e
+
+    @staticmethod
+    def _answer(payload):
+        if payload.get("status") not in (None, "completed"):
+            raise ExtractionError(f"Incomplete answer from Dots (status: {payload['status']}).")
+        text = payload.get("output_text")
+        if not text:
+            for item in payload.get("output", []):
+                for part in item.get("content", []) if isinstance(item, dict) else []:
+                    if part.get("type") == "refusal":
+                        raise ExtractionError(f"Dots declined: {part.get('refusal')}")
+                    if part.get("type") == "output_text":
+                        text = part.get("text")
+                        break
+                if text:
+                    break
+        if not text:
+            raise ExtractionError("Dots answered with nothing.")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            raise ExtractionError(f"Unreadable answer from Dots: {e}") from e
+
+
 def make_backend(config):
     if config.backend == "gemini":
         return GeminiBackend(config.gemini_api_key, config.model or "gemini-3.8-flash")
+    if config.backend == "openai":
+        return OpenAIBackend(config.openai_api_key, config.model or None)
     return ClaudeCodeBackend(config.model or None)
+
+
+def planner_backend(config):
+    """Dots does the ordering, whatever reads the photos."""
+    return OpenAIBackend(config.openai_api_key)

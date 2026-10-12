@@ -41,6 +41,14 @@ def start_server(port):
     return thread
 
 
+def _name_of(action):
+    try:
+        path = action.get_request().get_uri().rstrip("/").rsplit("/", 1)[-1]
+    except Exception:
+        path = ""
+    return path or "window"
+
+
 def open_window(url, stop):
     """A GTK WebKit window. Returns False when the toolkit is not installed."""
     try:
@@ -72,16 +80,32 @@ def open_window(url, stop):
 
     window.connect("destroy", shut)
 
-    def on_key(_widget, event):
-        if event.keyval == Gdk.KEY_F11:
-            if window.get_window().get_state() & Gdk.WindowState.FULLSCREEN:
-                window.unfullscreen()
+    def fullscreen_key(which):
+        def on_key(_widget, event):
+            if event.keyval != Gdk.KEY_F11:
+                return False
+            if which.get_window().get_state() & Gdk.WindowState.FULLSCREEN:
+                which.unfullscreen()
             else:
-                window.fullscreen()
+                which.fullscreen()
             return True
-        return False
+        return on_key
 
-    window.connect("key-press-event", on_key)
+    def second_window(source, action):
+        """window.open() from the page: its own window, not a tab and not a browser."""
+        child = WebKit2.WebView.new_with_related_view(source)
+        extra = Gtk.Window(title=f"{TITLE} - {_name_of(action)}")
+        extra.set_default_size(1180, 900)
+        extra.set_icon_name("utilities-terminal")
+        extra.add(child)
+        extra.connect("key-press-event", fullscreen_key(extra))
+        child.connect("create", second_window)
+        child.connect("ready-to-show", lambda *_: extra.show_all())
+        child.connect("close", lambda *_: extra.destroy())
+        return child
+
+    view.connect("create", second_window)
+    window.connect("key-press-event", fullscreen_key(window))
     window.show_all()
     Gtk.main()
     return True

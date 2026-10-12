@@ -1,6 +1,7 @@
+import asyncio
 import json
 import pathlib
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -28,7 +29,7 @@ def make_config(tmp_path, **kw):
     sms = kw.pop("sms", None) or SmsConfig(provider="none", to="", sender="", account_sid="",
                                            auth_token="", webhook_url="", webhook_token="",
                                            max_per_hour=6)
-    base = dict(backend="claude", gemini_api_key="", photo_retention_days=42,
+    base = dict(backend="claude", gemini_api_key="", openai_api_key="", photo_retention_days=42,
                 data_dir=tmp_path, model="", user="ALEX", sms=sms)
     base.update(kw)
     return Config(**base)
@@ -699,8 +700,8 @@ def temp_config(tmp_path):
 
     sms = SmsConfig(provider="none", to="", sender="", account_sid="", auth_token="",
                     webhook_url="", webhook_token="", max_per_hour=6)
-    return Config(backend="claude", gemini_api_key="", photo_retention_days=42, data_dir=tmp_path,
-                  model="", user="ALEX", sms=sms)
+    return Config(backend="claude", gemini_api_key="", openai_api_key="", photo_retention_days=42,
+                  data_dir=tmp_path, model="", user="ALEX", sms=sms)
 
 
 def filled(tmp_path):
@@ -1068,17 +1069,22 @@ def test_model_panel_lists_providers(monkeypatch, tmp_path):
     from inventory import models_info
 
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     rows = {row["id"]: row for row in models_info.status("claude")}
     assert set(rows) == {"claude", "gemini", "openai"}
     assert rows["claude"]["current"] is True
-    assert rows["openai"]["state"] == "unsupported"
+    assert rows["openai"]["state"] == "missing"
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    assert {row["id"]: row for row in models_info.status("claude")}["openai"]["state"] == "ready"
+    monkeypatch.delenv("OPENAI_API_KEY")
 
     monkeypatch.setenv("GEMINI_API_KEY", "key")
     gemini = {row["id"]: row for row in models_info.status("gemini")}["gemini"]
     assert gemini["state"] in ("ready", "configured") and gemini["current"] is True
 
     ok, detail = models_info.probe("openai")
-    assert ok is False and "not built" in detail
+    assert ok is False and "no OpenAI key" in detail
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     from inventory import config as config_module
@@ -1093,3 +1099,162 @@ def test_model_panel_lists_providers(monkeypatch, tmp_path):
         models_info.use("openai")
     with pytest.raises(ValueError):
         models_info.use("nonsense")
+
+
+def planning_database(path):
+    from inventory.models import Line, Note
+
+    db.init(path)
+    for week, (bolts, sheets) in enumerate([(700, 2), (500, 3), (600, 1)]):
+        day = date(2026, 9, 7) + timedelta(days=7 * week)
+        note = Note(supplier="NORTHGATE", delivery_date=day.isoformat(), site="PARAPET",
+                    lines=[Line(article="BOLT M6", quantity=bolts, designation="BOLT M6 ZINC"),
+                           Line(article="SHEET ALU", quantity=sheets)])
+        db.save_note(path, note, f"sha-{week}", "", "ALEX")
+    return path
+
+
+def test_forecast_reads_the_shelf_and_the_rate(tmp_path):
+    from inventory import forecast
+
+    path = planning_database(tmp_path / "plan.duckdb")
+    rows, (first, last, days) = forecast.articles(path, lead=7, service=95, horizon=14)
+    bolts = {row["article"]: row for row in rows}["BOLT M6"]
+
+    assert (first, last, days) == (date(2026, 9, 7), date(2026, 9, 21), 15)
+    assert bolts["used"] == 1800
+    assert bolts["per_day"] == round(1800 / 15, 3)
+    assert bolts["lead_demand"] == round(1800 / 15 * 7, 2)
+    assert bolts["safety_stock"] > 0
+    assert bolts["reorder_point"] > bolts["lead_demand"]
+    assert bolts["state"] == "uncounted"
+    assert bolts["on_hand"] is None and bolts["cover_days"] is None
+
+    db.save_stock_count(path, "BOLT M6", 300, "ALEX")
+    rows, _ = forecast.articles(path, lead=7, service=95, horizon=14)
+    bolts = {row["article"]: row for row in rows}["BOLT M6"]
+    assert bolts["on_hand"] == 300
+    assert bolts["cover_days"] == round(300 / (1800 / 15), 1)
+    assert bolts["state"] == "short"
+    assert bolts["suggested"] > 0
+    assert 0 < bolts["risk"] <= 100
+
+    db.save_stock_count(path, "BOLT M6", 99999, "ALEX")
+    rows, _ = forecast.articles(path, lead=7, service=95, horizon=14)
+    bolts = {row["article"]: row for row in rows}["BOLT M6"]
+    assert bolts["state"] == "ok" and bolts["suggested"] == 0 and bolts["risk"] == 0
+
+    db.save_stock_count(path, "BOLT M6", None, "ALEX")
+    assert db.stock_counts(path) == []
+
+
+def test_forecast_summary_counts_and_series(tmp_path):
+    from inventory import forecast
+
+    path = planning_database(tmp_path / "plan.duckdb")
+    db.save_stock_count(path, "SHEET ALU", 0, "ALEX")
+    answer = forecast.summary(path, lead=5, service=90, horizon=10)
+
+    assert answer["settings"] == {"lead_days": 5, "service_level": 90, "horizon_days": 10}
+    assert answer["counts"]["articles"] == 2
+    assert answer["counts"]["counted"] == 1
+    assert answer["counts"]["short"] == 1
+    assert answer["thin"] is True
+    assert [week["week"] for week in answer["weeks"]] == ["2026-09-07", "2026-09-14",
+                                                          "2026-09-21"]
+    assert [week["lines"] for week in answer["weeks"]] == [2, 2, 2]
+    assert answer["sites"][0]["site"] == "PARAPET"
+    assert len(answer["articles"][0]["weekly"]) == 3
+    assert answer["shortlist"] and answer["shortlist"][0]["suggested"] > 0
+
+
+def test_dots_reads_numbers_not_photos(monkeypatch):
+    from inventory import llm
+
+    dots = llm.OpenAIBackend("sk-test", model="test-model")
+    with pytest.raises(llm.ExtractionError):
+        asyncio.run(dots.extract(b"x", "image/jpeg"))
+
+    sent = {}
+
+    def fake_post(body):
+        sent.update(body)
+        return {"status": "completed",
+                "output": [{"content": [{"type": "output_text",
+                                         "text": '{"lines": [{"article": "BOLT M6", '
+                                                 '"quantity": 500, "unit": "box", '
+                                                 '"supplier": "NORTHGATE", "reference": null, '
+                                                 '"reason": "under the reorder point"}], '
+                                                 '"note": "one line only"}'}]}]}
+
+    monkeypatch.setattr(dots, "_post", fake_post)
+    answer = asyncio.run(dots.draft_order({"articles": [{"article": "BOLT M6"}]}))
+    assert answer["lines"][0]["quantity"] == 500
+    assert answer["note"] == "one line only"
+    assert sent["model"] == "test-model"
+    assert sent["text"]["format"]["name"] == "purchase_order"
+    assert sent["text"]["format"]["strict"] is True
+    assert "purchase order" in sent["input"][0]["content"].lower()
+
+    monkeypatch.setattr(dots, "_post", lambda body: {
+        "status": "completed",
+        "output": [{"content": [{"type": "refusal", "refusal": "no"}]}]})
+    with pytest.raises(llm.ExtractionError):
+        asyncio.run(dots.draft_order({}))
+
+    with pytest.raises(llm.ExtractionError):
+        asyncio.run(llm.OpenAIBackend("").draft_order({}))
+
+
+def test_planner_routes(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+    planning_database(server.config.db_path)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        plan = client.get("/api/forecast?lead=7&service=95&horizon=14").json()
+        assert plan["settings"]["lead_days"] == 7
+        assert plan["counts"]["articles"] == 2
+
+        clamped = client.get("/api/forecast?lead=0&service=400&horizon=9999").json()
+        assert clamped["settings"] == {"lead_days": 1, "service_level": 99, "horizon_days": 180}
+
+        assert client.put("/api/stock-count", json={"article": "BOLT M6", "quantity": 120},
+                          headers=mine).status_code == 200
+        counted = client.get("/api/forecast").json()["articles"]
+        assert {row["article"]: row for row in counted}["BOLT M6"]["on_hand"] == 120
+        assert client.put("/api/stock-count", json={"article": "  ", "quantity": 1},
+                          headers=mine).status_code == 422
+
+        assert "Predictions" in client.get("/").text
+        assert "Dots orders for you" in client.get("/predictions").text
+
+        answer = client.post("/api/forecast/draft", json={}, headers=mine)
+        assert answer.status_code == 502
+        assert "key" in answer.json()["detail"]
+
+        assert client.put("/api/models/key", json={"key": "not-a-key"},
+                          headers=mine).status_code == 422
+        assert client.put("/api/models/key", json={"key": "sk-test"},
+                          headers=mine).json()["set"] is True
+        settings = tmp_path / "config" / "stock-manager" / "settings.env"
+        assert "OPENAI_API_KEY=sk-test" in settings.read_text()
+        assert client.put("/api/models/key", json={"key": ""}, headers=mine).json()["set"] is False
+
+        actions = [row["action"] for row in client.get("/api/audit").json()["events"]]
+        assert "stock.count" in actions and "model.key" in actions

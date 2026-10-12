@@ -48,6 +48,7 @@ class SmsConfig:
 class Config:
     backend: str
     gemini_api_key: str
+    openai_api_key: str
     photo_retention_days: int
     data_dir: Path
     model: str
@@ -108,6 +109,7 @@ def load_config(data_dir=None, user=None):
     return Config(
         backend=os.environ.get("LLM_BACKEND", "claude").strip().lower(),
         gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
+        openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
         photo_retention_days=int(os.environ.get("PHOTO_RETENTION_DAYS", "42")),
         data_dir=Path(chosen).expanduser(),
         model=os.environ.get("LLM_MODEL", ""),

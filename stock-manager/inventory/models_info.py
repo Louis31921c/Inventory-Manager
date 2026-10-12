@@ -1,8 +1,11 @@
 """Which model backends are set up on this machine, and switching between them."""
 
+import json
 import os
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 
 from .config import set_setting
 
@@ -35,10 +38,9 @@ def _gemini():
 
 def _openai():
     key = os.environ.get("OPENAI_API_KEY", "").strip()
-    detail = "not built into this version yet"
     if key:
-        detail += " (the key is there, the backend is not)"
-    return "unsupported", detail
+        return "ready", "API key set, plans and drafts purchase orders"
+    return "missing", "needs an OpenAI API key, paste one below"
 
 
 CHECKS = {"claude": _claude, "gemini": _gemini, "openai": _openai}
@@ -73,14 +75,41 @@ def probe(provider):
         state, detail = _gemini()
         return state == "ready", detail
 
+    if provider == "openai":
+        return _ask_openai()
+
     state, detail = CHECKS.get(provider, _openai)()
-    return False, detail
+    return state == "ready", detail
+
+
+def _ask_openai():
+    """Ask OpenAI for its model list: it proves the key without spending tokens."""
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not key:
+        return False, "no OpenAI key yet"
+    request = urllib.request.Request("https://api.openai.com/v1/models",
+                                     headers={"Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(request, timeout=20) as answer:
+            models = json.loads(answer.read()).get("data", [])
+        return True, f"key works, {len(models)} model(s) on this account"
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return False, "OpenAI refused the key"
+        return False, f"OpenAI said {e.code}"
+    except urllib.error.URLError as e:
+        return False, f"cannot reach OpenAI: {e.reason}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
 
 
 def use(provider):
     """Switch the backend and remember it in the settings file."""
     if provider not in PROVIDERS:
         raise ValueError(f"unknown model: {provider}")
+    if provider == "openai":
+        raise ValueError("Dots cannot read photos. It plans and orders from the "
+                         "Predictions window instead, whichever model reads the notes.")
     state, detail = CHECKS[provider]()
     if state in ("missing", "unsupported"):
         raise ValueError(detail)
