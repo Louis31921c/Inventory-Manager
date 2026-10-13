@@ -24,7 +24,7 @@
     --tab-blue-bright: #8f8fff;
     --ral9003: #f4f4f4;
     --ral9016: #fbfdfd;
-    --head-wash: rgba(251, 253, 253, .14);
+    --head-wash: rgba(251, 253, 253, .10);
     --mono: "Cascadia Mono Web", "Cascadia Mono", "Cascadia Code", "DejaVu Sans Mono",
             ui-monospace, Menlo, Consolas, monospace;
     color-scheme: dark;
@@ -192,6 +192,12 @@
     align-items: center; display: grid; gap: 4px 10px;
     grid-template-columns: 26px minmax(0, 1fr) 70px auto; padding: 4px 0;
   }
+  .sheet-body { align-items: flex-start; display: flex; gap: 12px; }
+  .sheet-body .scroll-x { flex: 1 1 auto; min-width: 0; }
+  .stock-rail { display: flex; flex: 0 0 auto; flex-direction: column; }
+  .stock-rail .rail-head, .stock-rail .rail-row { align-items: center; display: flex; }
+  .order-table td { vertical-align: middle; }
+
   .stock-choice { display: flex; gap: 4px; }
   .stock-choice button {
     background: none; border: 1px solid var(--line); color: var(--muted); cursor: pointer;
@@ -1336,6 +1342,23 @@ function stockButtons(sheet, line) {
   return choice;
 }
 
+function alignRail(table, rail) {
+  const head = table.tHead?.rows[0];
+  const rows = [...(table.tBodies[0]?.rows ?? [])];
+  const slots = [...rail.children];
+  if (!head || slots.length !== rows.length + 1) return;
+
+  slots[0].style.height = `${head.getBoundingClientRect().height}px`;
+  rows.forEach((row, index) => {
+    slots[index + 1].style.height = `${row.getBoundingClientRect().height}px`;
+  });
+}
+
+function alignLater(table, rail) {
+  requestAnimationFrame(() => alignRail(table, rail));
+  new ResizeObserver(() => alignRail(table, rail)).observe(table);
+}
+
 function renderOrders() {
   if (!lists.length) {
     $("lists").replaceChildren(el("p", { className: "muted", textContent: "No purchase order stored." }));
@@ -1364,15 +1387,35 @@ function renderOrders() {
     actions.append(confirmButton("Delete", () => api(`/api/orders/${sheet.id}`, { method: "DELETE" })));
     title.append(actions);
 
-    const block = el("div", { className: "sheet" }, [title]);
+    const table = el("table", { className: "order-table" });
+    renderTable(table, [
+      { label: "#", numeric: true, cell: (line) => String(line.line_no) },
+      {
+        label: "Article",
+        cell: (line) => {
+          const box = el("span", {}, [el("strong", { textContent: line.article })]);
+          const under = [line.reference, line.designation].filter(Boolean).join(" · ");
+          if (under) box.append(el("div", { className: "desig", textContent: under }));
+          return box;
+        },
+      },
+      { label: "Quantity", numeric: true, cell: (line) => showNum(line.quantity) },
+      { label: "Counted", numeric: true, cell: (line) => showNum(line.stock) },
+    ], lines, "No line on this sheet.");
+
+    const rail = el("div", { className: "stock-rail" }, [el("div", { className: "rail-head" })]);
     for (const line of lines) {
-      block.append(el("div", { className: "sheet-line" }, [
-        el("span", { className: "num", textContent: line.line_no }),
-        el("span", {}, [el("strong", { textContent: line.article })]),
-        el("span", { className: "num", textContent: showNum(line.quantity) }),
-        stockButtons(sheet, line),
-      ]));
+      rail.append(el("div", { className: "rail-row" }, [stockButtons(sheet, line)]));
     }
+
+    const block = el("div", { className: "sheet" }, [
+      title,
+      el("div", { className: "sheet-body" }, [
+        el("div", { className: "scroll-x" }, [table]),
+        rail,
+      ]),
+    ]);
+    alignLater(table, rail);
     return block;
   }));
 }
