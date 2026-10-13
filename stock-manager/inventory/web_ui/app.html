@@ -1367,14 +1367,9 @@ function renderOrders() {
 
   $("lists").replaceChildren(...lists.map((sheet) => {
     const lines = sheet.lines ?? [];
-    const ticked = lines.filter((line) => line.in_stock !== null).length;
-    const summary = `${sheet.work_item ?? "—"} · ${showDate(sheet.list_date)} · `
-      + `#${sheet.id} · ${ticked}/${lines.length} ticked`
-      + (sheet.created_by ? ` · by ${sheet.created_by}` : "");
-
     const title = el("div", { className: "sheet-title" }, [
       el("strong", { textContent: sheet.site ?? "no site" }),
-      el("span", { className: "muted", textContent: summary }),
+      el("span", { className: "muted", textContent: sheet.work_item ?? "" }),
     ]);
 
     const actions = el("span", { className: "row tight", style: "margin-left:auto" });
@@ -1400,7 +1395,6 @@ function renderOrders() {
         },
       },
       { label: "Quantity", numeric: true, cell: (line) => showNum(line.quantity) },
-      { label: "Counted", numeric: true, cell: (line) => showNum(line.stock) },
     ], lines, "No line on this sheet.");
 
     const rail = el("div", { className: "stock-rail" }, [el("div", { className: "rail-head" })]);
