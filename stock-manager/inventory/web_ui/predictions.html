@@ -74,6 +74,9 @@
     font-family: var(--mono); font-size: 12px; padding: 2px 8px;
   }
   .mini:hover { background: var(--ink); border-color: var(--ink); color: #000; }
+  .mini[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+  .mini[aria-pressed="true"]::before { content: "> "; }
+  a.mini { display: inline-block; text-decoration: none; }
   :focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
 
   label.field { display: flex; flex-direction: column; gap: 2px; }
@@ -102,6 +105,7 @@
   }
   tbody tr:hover { background: var(--green-soft); }
   tbody strong { color: var(--bright); font-weight: 700; }
+  tfoot th { border-bottom: 0; border-top: 1px solid var(--line-strong); padding-top: 6px; }
   .desig { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
 
   input.cell {
@@ -134,12 +138,7 @@
   svg text.value { fill: var(--bright); }
   svg .axis { stroke: var(--line); stroke-width: 1; }
   svg rect.bar { fill: var(--ink); }
-  svg rect.bar.quiet { fill: var(--line-strong); }
-  svg rect.bar.alarm { fill: var(--alarm); }
   svg rect.track { fill: var(--surface-2); stroke: var(--line); }
-  svg line.marker { stroke: var(--alarm); stroke-dasharray: 2 2; stroke-width: 1; }
-  svg polyline.trend { fill: none; stroke: var(--bright); stroke-width: 1.5; }
-  svg circle.point { fill: var(--bright); }
 
   .spin { animation: spin 1s steps(8) infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -156,8 +155,38 @@
 <div id="top-notice"></div>
 
 <div class="cards">
+  <div class="side-by-side">
+    <div class="card">
+      <h2>What left the stores</h2>
+      <div id="weeks-chart"></div>
+      <p class="legend" id="weeks-legend"></p>
+    </div>
+    <div class="card">
+      <h2>Where it went</h2>
+      <div id="sites-chart"></div>
+      <p class="legend">Lines booked per site over the same window.</p>
+    </div>
+  </div>
+
   <div class="card">
-    <h2>Planning rules</h2>
+    <h2>In and out</h2>
+    <div class="row tight">
+      <button class="mini period" id="period-week" aria-pressed="true">per week</button>
+      <button class="mini period" id="period-month" aria-pressed="false">per month</button>
+      <button class="mini period" id="period-half" aria-pressed="false">per 6 months</button>
+      <span class="grow"></span>
+      <a class="mini" id="movements-csv" href="/export/movements.csv?period=week">export csv</a>
+      <a class="mini" id="movements-xlsx" href="/export/movements.xlsx?period=week">export xlsx</a>
+    </div>
+    <div class="scroll-x"><table id="table-movements"></table></div>
+    <p class="legend">
+      In is what the delivery notes brought into the stores. Out is what the purchase orders
+      asked for over the same stretch. Net is what the shelves kept.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Safety stock</h2>
     <div class="row">
       <label class="field narrow">
         <span>lead days</span>
@@ -174,54 +203,32 @@
           <option value="99">99</option>
         </select>
       </label>
-      <label class="field narrow">
-        <span>cover days</span>
-        <input id="horizon" type="number" min="1" max="180" step="1" value="14">
-      </label>
       <label class="field narrow" style="justify-content: flex-end">
         <button class="action" id="apply">apply</button>
       </label>
+      <span class="grow"></span>
+      <label class="field narrow" style="justify-content: flex-end">
+        <a class="mini" id="safety-csv" href="/export/safety-stock.csv">export csv</a>
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <a class="mini" id="safety-xlsx" href="/export/safety-stock.xlsx">export xlsx</a>
+      </label>
     </div>
     <p class="legend">
-      Lead days: how long the supplier takes. Service %: how often you want to be covered
-      when a week runs hot. Cover days: how far ahead an order should carry you.
+      Lead days is how long the supplier takes. Service % is how often you want to be covered
+      when a week runs hot. Safety stock is the service factor times the week to week swing
+      over the lead time; the reorder point is the lead time demand on top of it.
     </p>
-  </div>
-
-  <div class="side-by-side">
-    <div class="card">
-      <h2>What left the stores</h2>
-      <div id="weeks-chart"></div>
-      <p class="legend" id="weeks-legend"></p>
-    </div>
-    <div class="card">
-      <h2>Where it went</h2>
-      <div id="sites-chart"></div>
-      <p class="legend">Lines booked per site over the same window.</p>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Days of cover</h2>
-    <div id="cover-chart"></div>
-    <p class="legend">
-      Bars are days of stock left at the current rate. The dashed line is the lead time:
-      anything shorter runs out before the delivery lands. Counted articles only.
-    </p>
-  </div>
-
-  <div class="card">
-    <h2>Shortage watch</h2>
     <div class="row tight">
-      <button class="mini" id="show-all">all articles</button>
-      <button class="mini" id="show-risky">needs attention</button>
+      <button class="mini" id="show-risky" aria-pressed="true">under the reorder point</button>
+      <button class="mini" id="show-all" aria-pressed="false">all articles</button>
       <span class="grow"></span>
       <span class="muted" id="count-line"></span>
     </div>
-    <div class="scroll-x"><table id="table-plan"></table></div>
+    <div class="scroll-x"><table id="table-safety"></table></div>
     <p class="legend">
-      On hand is yours to fill in: type a count and it is saved against the article.
-      Everything else is worked out from the delivery notes.
+      On hand is yours to fill in: type a count and it is saved against the article, dated.
+      Without it the shelf is a guess, and the article is marked not counted.
     </p>
     <div id="plan-note"></div>
   </div>
@@ -310,18 +317,19 @@ const jsonBody = (method, body) => ({
 });
 
 let plan = null;
+let moves = null;
 let draft = null;
+let period = "week";
 let onlyRisky = true;
 
 function rules() {
   return {
     lead: Number($("lead").value) || 7,
     service: Number($("service").value) || 95,
-    horizon: Number($("horizon").value) || 14,
   };
 }
 
-function columnChart(points, label, value, options = {}) {
+function columnChart(points, label, value) {
   const width = 640;
   const height = 170;
   const pad = { left: 34, right: 8, top: 10, bottom: 26 };
@@ -329,22 +337,21 @@ function columnChart(points, label, value, options = {}) {
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
   const step = plotWidth / Math.max(points.length, 1);
-  const bars = [];
-  const marks = [];
+  const parts = [];
 
   points.forEach((point, index) => {
     const tall = (value(point) / top) * plotHeight;
     const x = pad.left + index * step + step * 0.2;
     const barWidth = Math.max(step * 0.6, 2);
-    bars.push(svg("rect", {
-      class: `bar${options.quiet ? " quiet" : ""}`, x, width: barWidth,
+    parts.push(svg("rect", {
+      class: "bar", x, width: barWidth,
       y: pad.top + plotHeight - tall, height: Math.max(tall, 1),
     }));
-    marks.push(svg("text", {
+    parts.push(svg("text", {
       x: x + barWidth / 2, y: height - 14, "text-anchor": "middle",
     }, [label(point)]));
     if (value(point) > 0) {
-      marks.push(svg("text", {
+      parts.push(svg("text", {
         class: "value", x: x + barWidth / 2, y: pad.top + plotHeight - tall - 3,
         "text-anchor": "middle",
       }, [showNum(Math.round(value(point)))]));
@@ -357,38 +364,29 @@ function columnChart(points, label, value, options = {}) {
       y2: pad.top + plotHeight,
     }),
     svg("text", { x: 0, y: pad.top + 8 }, [showNum(Math.round(top))]),
-    ...bars,
-    ...marks,
+    ...parts,
   ]);
 }
 
-function barList(points, label, value, options = {}) {
+function barList(points, label, value) {
   const width = 640;
   const rowHeight = 20;
   const pad = { left: 150, right: 42, top: 6 };
   const height = pad.top + points.length * rowHeight + 6;
-  const top = Math.max(...points.map(value), options.floor ?? 1);
+  const top = Math.max(...points.map(value), 1);
   const plotWidth = width - pad.left - pad.right;
   const parts = [];
 
   points.forEach((point, index) => {
     const y = pad.top + index * rowHeight;
-    const long = Math.max((Math.min(value(point), top) / top) * plotWidth, 1);
+    const long = Math.max((value(point) / top) * plotWidth, 1);
     parts.push(svg("text", { x: 0, y: y + 12 }, [short(label(point))]));
     parts.push(svg("rect", { class: "track", x: pad.left, y: y + 3, width: plotWidth, height: 12 }));
-    parts.push(svg("rect", {
-      class: `bar${options.flag && options.flag(point) ? " alarm" : ""}`,
-      x: pad.left, y: y + 3, width: long, height: 12,
-    }));
+    parts.push(svg("rect", { class: "bar", x: pad.left, y: y + 3, width: long, height: 12 }));
     parts.push(svg("text", {
       class: "value", x: width - pad.right + 4, y: y + 13,
-    }, [options.text ? options.text(point) : showNum(value(point))]));
+    }, [showNum(value(point))]));
   });
-
-  if (options.marker != null && options.marker <= top) {
-    const x = pad.left + (options.marker / top) * plotWidth;
-    parts.push(svg("line", { class: "marker", x1: x, y1: pad.top, x2: x, y2: height - 6 }));
-  }
 
   return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
 }
@@ -407,23 +405,39 @@ function renderCharts() {
   $("sites-chart").replaceChildren(sites.length
     ? barList(sites, (site) => site.site, (site) => site.lines)
     : el("p", { className: "muted", textContent: "No site named yet." }));
+}
 
-  const counted = (plan.articles ?? [])
-    .filter((row) => row.cover_days != null)
-    .sort((a, b) => a.cover_days - b.cover_days)
-    .slice(0, 12);
-  const lead = plan.settings.lead_days;
-  $("cover-chart").replaceChildren(counted.length
-    ? barList(counted, (row) => row.article, (row) => row.cover_days, {
-        floor: lead * 2,
-        marker: lead,
-        flag: (row) => row.cover_days < lead,
-        text: (row) => `${showNum(row.cover_days)} d`,
-      })
-    : el("p", {
-        className: "muted",
-        textContent: "Nothing counted yet. Fill in a few on-hand counts below.",
-      }));
+function renderMovements() {
+  const head = ["Period", "Quantity in", "Lines in", "Quantity out", "Lines out", "Net"];
+  const rows = moves.rows ?? [];
+  $("table-movements").replaceChildren(
+    el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
+    el("tbody", {}, rows.length
+      ? rows.map((row) => el("tr", {}, [
+          el("td", {}, [el("strong", { textContent: row.label })]),
+          el("td", { className: "num", textContent: showNum(row.in_quantity) }),
+          el("td", { className: "num", textContent: showNum(row.in_lines) }),
+          el("td", { className: "num", textContent: showNum(row.out_quantity) }),
+          el("td", { className: "num", textContent: showNum(row.out_lines) }),
+          el("td", { className: "num", textContent: showNum(row.net) }),
+        ]))
+      : [el("tr", {}, [el("td", { colSpan: head.length, className: "muted",
+                                  textContent: "Nothing booked in yet." })])]),
+    el("tfoot", {}, [el("tr", {}, [
+      el("th", { textContent: "total" }),
+      el("th", { className: "num", textContent: showNum(moves.totals.in_quantity) }),
+      el("th", {}),
+      el("th", { className: "num", textContent: showNum(moves.totals.out_quantity) }),
+      el("th", {}),
+      el("th", { className: "num", textContent: showNum(moves.totals.net) }),
+    ])]),
+  );
+
+  for (const name of ["week", "month", "half"]) {
+    $(`period-${name}`).setAttribute("aria-pressed", String(name === period));
+  }
+  $("movements-csv").href = `/export/movements.csv?period=${period}`;
+  $("movements-xlsx").href = `/export/movements.xlsx?period=${period}`;
 }
 
 function statePill(state) {
@@ -446,9 +460,8 @@ function countCell(row) {
     box.disabled = true;
     try {
       await api("/api/stock-count", jsonBody("PUT", { article: row.article, quantity }));
-      box.classList.add("saved");
       notice($("plan-note"), "", "");
-      await load({ keepDraft: true });
+      await loadPlan({ keepDraft: true });
     } catch (e) {
       notice($("plan-note"), "bad", e.message);
     } finally {
@@ -458,15 +471,14 @@ function countCell(row) {
   return box;
 }
 
-function renderPlan() {
+function renderSafety() {
   const rows = onlyRisky
     ? (plan.articles ?? []).filter((row) => row.state !== "ok" && row.per_week > 0)
     : (plan.articles ?? []);
-  const table = $("table-plan");
-  const head = ["Article", "Per week", "On hand", "On order", "Reorder at", "Safety",
-                "Cover", "Order", "State"];
+  const head = ["Article", "Per week", "Swing", "On hand", "On order", "Safety stock",
+                "Reorder at", "State"];
 
-  table.replaceChildren(
+  $("table-safety").replaceChildren(
     el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
     el("tbody", {}, rows.length
       ? rows.map((row) => el("tr", {}, [
@@ -478,25 +490,27 @@ function renderPlan() {
             }),
           ]),
           el("td", { className: "num", textContent: showNum(row.per_week) }),
+          el("td", { className: "num", textContent: showNum(row.spread_per_week) }),
           el("td", { className: "num" }, [countCell(row)]),
           el("td", { className: "num", textContent: row.on_order ? showNum(row.on_order) : "—" }),
-          el("td", { className: "num", textContent: showNum(row.reorder_point) }),
           el("td", { className: "num", textContent: showNum(row.safety_stock) }),
-          el("td", {
-            className: "num",
-            textContent: row.cover_days == null ? "—" : `${showNum(row.cover_days)} d`,
-          }),
-          el("td", { className: "num", textContent: row.suggested ? showNum(row.suggested) : "—" }),
+          el("td", { className: "num", textContent: showNum(row.reorder_point) }),
           el("td", {}, [statePill(row.state)]),
         ]))
       : [el("tr", {}, [el("td", { colSpan: head.length, className: "muted",
-                                  textContent: "Nothing to watch." })])]),
+                                  textContent: "Nothing under its reorder point." })])]),
   );
 
   const counts = plan.counts;
   $("count-line").textContent =
     `${counts.articles} article(s) · ${counts.counted} counted · ${counts.short} short · `
     + `${counts.watch} on watch`;
+  $("show-risky").setAttribute("aria-pressed", String(onlyRisky));
+  $("show-all").setAttribute("aria-pressed", String(!onlyRisky));
+
+  const { lead, service } = rules();
+  $("safety-csv").href = `/export/safety-stock.csv?lead=${lead}&service=${service}`;
+  $("safety-xlsx").href = `/export/safety-stock.xlsx?lead=${lead}&service=${service}`;
 }
 
 function renderDraft() {
@@ -550,10 +564,20 @@ async function renderDots() {
   }
 }
 
-async function load(options = {}) {
-  const { lead, service, horizon } = rules();
+async function loadMovements() {
   try {
-    plan = await api(`/api/forecast?lead=${lead}&service=${service}&horizon=${horizon}`);
+    moves = await api(`/api/movements?period=${period}`);
+  } catch (e) {
+    notice($("top-notice"), "bad", e.message);
+    return;
+  }
+  renderMovements();
+}
+
+async function loadPlan(options = {}) {
+  const { lead, service } = rules();
+  try {
+    plan = await api(`/api/forecast?lead=${lead}&service=${service}`);
   } catch (e) {
     notice($("top-notice"), "bad", e.message);
     return;
@@ -570,15 +594,26 @@ async function load(options = {}) {
       : "");
 
   renderCharts();
-  renderPlan();
+  renderSafety();
   renderDraft();
 }
 
-$("apply").addEventListener("click", () => load());
+function load(options) {
+  return Promise.all([loadPlan(options), loadMovements()]);
+}
+
+$("apply").addEventListener("click", () => loadPlan());
 $("reload").addEventListener("click", () => load());
-$("show-all").addEventListener("click", () => { onlyRisky = false; renderPlan(); });
-$("show-risky").addEventListener("click", () => { onlyRisky = true; renderPlan(); });
+$("show-all").addEventListener("click", () => { onlyRisky = false; renderSafety(); });
+$("show-risky").addEventListener("click", () => { onlyRisky = true; renderSafety(); });
 $("drop-draft").addEventListener("click", () => { draft = null; renderDraft(); });
+
+for (const name of ["week", "month", "half"]) {
+  $(`period-${name}`).addEventListener("click", () => {
+    period = name;
+    loadMovements();
+  });
+}
 
 $("ask-dots").addEventListener("click", async () => {
   const button = $("ask-dots");

@@ -92,26 +92,24 @@ Press `1` to `5` to navigate between tables.
 
 ## Predictions
 
-`Predictions`, at the right of the tabs (or `F9`), opens a window of its own: demand planning
-off the delivery notes you already scanned.
+`Predictions`, at the right of the tabs (or `F9`), opens a window of its own.
 
-| What it shows | Where it comes from |
+| Cell | What it gives you |
 |---|---|
-| What left the stores, week by week | quantities booked in on the delivery notes |
+| What left the stores | quantity booked in, week by week |
 | Where it went | lines per site over the same window |
-| Days of cover | what is on the shelf divided by the weekly rate, against the lead time |
-| Shortage watch | per article: rate, on hand, on order, reorder point, safety stock, suggestion |
+| In and out | quantities in against quantities out, per week, per month or per 6 months, with the net, and the table out as csv or xlsx |
+| Safety stock | lead days and service % to tweak, the safety stock and reorder point they produce per article, and the table out as csv or xlsx |
+| Dots orders for you | an OpenAI drafted purchase order to check and save |
 
-Three rules drive the arithmetic, and you set them at the top of the window: **lead days** (how
-long the supplier takes), **service %** (how often you want to be covered when a week runs hot)
-and **cover days** (how far ahead an order should carry you). Safety stock is the service factor
-times the week to week swing over the lead time; the reorder point is the lead time demand plus
-that safety stock. Under it, the article is on watch; under the lead time demand alone, it is
-short.
+In is what the delivery notes brought in. Out is what the purchase orders asked for over the
+same stretch. Net is what the shelves kept.
 
-On hand is the one number the app cannot read off a photo, so type it in: the `on hand` cell in
-the shortage table saves the count against the article, dated. Articles nobody counted are
-marked `not counted` and left out of the cover graph rather than guessed at.
+Safety stock is the service factor times the week to week swing over the lead time; the reorder
+point is the lead time demand on top of it. Under it, the article is on watch; under the lead
+time demand alone, it is short. On hand is the one number no photo carries, so type it into the
+`on hand` cell: it is saved against the article, dated. Articles nobody counted are marked
+`not counted` rather than guessed at.
 
 ### Dots orders for you
 
@@ -121,7 +119,6 @@ saying why. Check it, change any quantity, then `save as purchase order` and it 
 Purchase orders tab like any other sheet.
 
 Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
-
 
 ## Where things are stored
 

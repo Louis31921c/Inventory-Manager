@@ -252,3 +252,69 @@ def summary(db_path, lead=DEFAULT_LEAD, service=DEFAULT_SERVICE, horizon=DEFAULT
         "shortlist": to_order[:40],
         "thin": days < 56,
     }
+
+
+PERIODS = ("week", "month", "half")
+
+_BUCKET = {
+    "week": "date_trunc('week', {column})::DATE",
+    "month": "date_trunc('month', {column})::DATE",
+    "half": "make_date(year({column}), 1 + 6 * floor((month({column}) - 1) / 6)::INTEGER, 1)",
+}
+
+
+def _bucket(period, column):
+    return _BUCKET[period if period in _BUCKET else "week"].format(column=column)
+
+
+def _movement_rows(db_path, sql):
+    return {period: (float(quantity or 0), lines, articles)
+            for period, quantity, lines, articles in db.read(db_path, sql)}
+
+
+def movements(db_path, period="week"):
+    """What came in on delivery notes against what the jobs asked for, period by period."""
+    coming_in = _movement_rows(db_path, f"""
+            SELECT {_bucket(period, 'delivery_date')} AS period,
+                   sum(quantity)                      AS quantity,
+                   count(*)                           AS lines,
+                   count(DISTINCT article)            AS articles
+            FROM inventory_lines
+            WHERE delivery_date IS NOT NULL
+            GROUP BY period
+            """)
+    going_out = _movement_rows(db_path, f"""
+            SELECT {_bucket(period, 'sheet.list_date')} AS period,
+                   sum(line.quantity)                  AS quantity,
+                   count(*)                            AS lines,
+                   count(DISTINCT line.article)        AS articles
+            FROM purchase_order_lines line
+            JOIN purchase_orders sheet USING (list_id)
+            WHERE sheet.list_date IS NOT NULL
+            GROUP BY period
+            """)
+
+    rows = []
+    for stamp in sorted(set(coming_in) | set(going_out)):
+        came_in, in_lines, in_articles = coming_in.get(stamp, (0.0, 0, 0))
+        went_out, out_lines, out_articles = going_out.get(stamp, (0.0, 0, 0))
+        rows.append({
+            "period": stamp.isoformat(),
+            "label": _label(stamp, period),
+            "in_quantity": round(came_in, 2),
+            "in_lines": in_lines,
+            "in_articles": in_articles,
+            "out_quantity": round(went_out, 2),
+            "out_lines": out_lines,
+            "out_articles": out_articles,
+            "net": round(came_in - went_out, 2),
+        })
+    return rows
+
+
+def _label(stamp, period):
+    if period == "month":
+        return stamp.strftime("%Y-%m")
+    if period == "half":
+        return f"{stamp.year} H{1 if stamp.month == 1 else 2}"
+    return stamp.isoformat()

@@ -1242,7 +1242,33 @@ def test_planner_routes(tmp_path, monkeypatch):
                           headers=mine).status_code == 422
 
         assert "Predictions" in client.get("/").text
-        assert "Dots orders for you" in client.get("/predictions").text
+        page = client.get("/predictions").text
+        assert "Dots orders for you" in page
+        assert "In and out" in page and "Safety stock" in page
+
+        moves = client.get("/api/movements?period=month").json()
+        assert moves["period"] == "month"
+        assert [row["label"] for row in moves["rows"]] == ["2026-09"]
+        assert moves["rows"][0]["in_quantity"] == 1800 + 6
+        assert moves["totals"]["net"] == moves["rows"][0]["net"]
+        assert client.get("/api/movements?period=decade").status_code == 422
+
+        week = client.get("/api/movements?period=week").json()
+        assert len(week["rows"]) == 3
+        half = client.get("/api/movements?period=half").json()
+        assert [row["label"] for row in half["rows"]] == ["2026 H2"]
+
+        sheet = client.get("/export/movements.csv?period=month")
+        assert sheet.headers["content-disposition"].endswith('"movements-month.csv"')
+        assert "quantity in" in sheet.text and "2026-09" in sheet.text
+        assert client.get("/export/movements.xlsx?period=week").status_code == 200
+        assert client.get("/export/movements.json").status_code == 404
+        assert client.get("/export/movements.csv?period=decade").status_code == 422
+
+        safety = client.get("/export/safety-stock.csv?lead=10&service=98")
+        assert safety.headers["content-disposition"].endswith('"safety-stock-10d-98pc.csv"')
+        assert "safety stock" in safety.text and "BOLT M6" in safety.text
+        assert client.get("/export/safety-stock.xlsx").status_code == 200
 
         answer = client.post("/api/forecast/draft", json={}, headers=mine)
         assert answer.status_code == 502

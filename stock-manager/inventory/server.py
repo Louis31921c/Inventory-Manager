@@ -1,7 +1,9 @@
 import argparse
 import asyncio
+import csv
 import hashlib
 import html
+import io
 import json
 import logging
 import time
@@ -596,6 +598,85 @@ def _planner_settings(lead, service, horizon):
     service = min(max(int(service), 50), 99)
     horizon = min(max(int(horizon), 1), 180)
     return lead, service, horizon
+
+
+@app.get("/api/movements")
+def read_movements(period: str = "week"):
+    if period not in forecast.PERIODS:
+        raise HTTPException(422, f"Unknown period: {period}.")
+    rows = forecast.movements(config.db_path, period)
+    return {"period": period, "rows": rows,
+            "totals": {
+                "in_quantity": round(sum(row["in_quantity"] for row in rows), 2),
+                "out_quantity": round(sum(row["out_quantity"] for row in rows), 2),
+                "net": round(sum(row["net"] for row in rows), 2),
+            }}
+
+
+MOVEMENT_COLUMNS = (("label", "period"), ("in_quantity", "quantity in"), ("in_lines", "lines in"),
+                    ("out_quantity", "quantity out"), ("out_lines", "lines out"), ("net", "net"))
+
+SAFETY_COLUMNS = (("article", "article"), ("supplier", "supplier"), ("per_week", "per week"),
+                  ("spread_per_week", "swing per week"), ("on_hand", "on hand"),
+                  ("on_order", "on order"), ("lead_demand", "lead time demand"),
+                  ("safety_stock", "safety stock"), ("reorder_point", "reorder point"),
+                  ("suggested", "suggested order"), ("state", "state"))
+
+
+def _sheet(request, columns, rows, stem, fmt):
+    """One table, out as a file, the same way the other exports go."""
+    if fmt not in ("csv", "xlsx"):
+        raise HTTPException(404, f"Unknown format: {fmt}.")
+    headers = [title for _, title in columns]
+    table = [[_cell(row.get(key)) for key, _ in columns] for row in rows]
+    name = f"{stem}.{fmt}"
+
+    if fmt == "xlsx":
+        from openpyxl import Workbook
+
+        book = Workbook()
+        sheet = book.active
+        sheet.title = stem[:31]
+        sheet.append(headers)
+        for line in table:
+            sheet.append(line)
+        sheet.freeze_panes = "A2"
+        for index, title in enumerate(headers, 1):
+            width = max([len(title)] + [len(str(line[index - 1])) for line in table[:200]] or [10])
+            letter = sheet.cell(row=1, column=index).column_letter
+            sheet.column_dimensions[letter].width = min(width + 2, 60)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / name
+            book.save(out)
+            body = out.read_bytes()
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(headers)
+        writer.writerows(table)
+        body = "\ufeff".encode() + buffer.getvalue().encode()
+        media = "text/csv; charset=utf-8"
+
+    event(request, "export", name)
+    return Response(body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@app.get("/export/movements.{fmt}")
+def export_movements(request: Request, fmt: str, period: str = "week"):
+    if period not in forecast.PERIODS:
+        raise HTTPException(422, f"Unknown period: {period}.")
+    rows = forecast.movements(config.db_path, period)
+    return _sheet(request, MOVEMENT_COLUMNS, rows, f"movements-{period}", fmt)
+
+
+@app.get("/export/safety-stock.{fmt}")
+def export_safety(request: Request, fmt: str, lead: int = forecast.DEFAULT_LEAD,
+                  service: int = forecast.DEFAULT_SERVICE):
+    lead, service, horizon = _planner_settings(lead, service, forecast.DEFAULT_HORIZON)
+    rows, _ = forecast.articles(config.db_path, lead, service, horizon)
+    return _sheet(request, SAFETY_COLUMNS, rows, f"safety-stock-{lead}d-{service}pc", fmt)
 
 
 @app.get("/api/forecast")
