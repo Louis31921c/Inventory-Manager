@@ -1243,8 +1243,7 @@ def test_planner_routes(tmp_path, monkeypatch):
 
         assert "Predictions" in client.get("/").text
         page = client.get("/predictions").text
-        assert "Dots orders for you" in page
-        assert "In and out" in page
+        assert 'id="ask-dots"' in page and 'id="table-movements"' in page
         assert 'href="/export/safety-stock.xlsx"' in page
 
         moves = client.get("/api/movements?period=month").json()
@@ -1283,5 +1282,30 @@ def test_planner_routes(tmp_path, monkeypatch):
         assert "OPENAI_API_KEY=sk-test" in settings.read_text()
         assert client.put("/api/models/key", json={"key": ""}, headers=mine).json()["set"] is False
 
+        for dataset in db.EXPORTS:
+            for fmt in ("csv", "xlsx", "parquet"):
+                answer = client.get(f"/export/{dataset}.{fmt}")
+                assert answer.status_code == 200, f"{dataset}.{fmt}"
+                assert answer.content, f"{dataset}.{fmt} came back empty"
+        assert client.get("/export.csv").status_code == 200
+        assert client.get("/export.parquet").status_code == 200
+
         actions = [row["action"] for row in client.get("/api/audit").json()["events"]]
         assert "stock.count" in actions and "model.key" in actions
+
+
+def test_downloads_land_somewhere(tmp_path, monkeypatch):
+    from inventory import desktop
+
+    monkeypatch.setenv("XDG_DOWNLOAD_DIR", str(tmp_path / "pick-ups"))
+    folder = desktop.downloads_dir()
+    assert folder.is_dir()
+
+    first = desktop.free_name(folder, "movements-week.csv")
+    first.write_text("one")
+    second = desktop.free_name(folder, "movements-week.csv")
+    second.write_text("two")
+    assert first.name == "movements-week.csv"
+    assert second.name == "movements-week-2.csv"
+    assert desktop.free_name(folder, "").name == "download"
+    assert desktop.free_name(folder, "../../escape.csv").parent == folder

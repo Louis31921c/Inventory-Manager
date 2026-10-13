@@ -1,5 +1,5 @@
-<meta charset="utf-8">
-<title>Predictions</title>
+ <meta charset="utf-8">
+<title>Planner</title>
 <style>
   @font-face {
     font-display: swap;
@@ -21,6 +21,7 @@
     --accent-soft: #08240a;
     --alarm: #ffb000;
     --ral9003: #f4f4f4;
+    --ral9016: #fbfdfd;
     --mono: "Cascadia Mono Web", "Cascadia Mono", "Cascadia Code", "DejaVu Sans Mono",
             ui-monospace, Menlo, Consolas, monospace;
     color-scheme: dark;
@@ -38,7 +39,7 @@
   }
   h1, h2 { font-weight: 700; margin: 0; }
   h1 { font-size: 19px; text-transform: uppercase; }
-  h2 { color: var(--bright); font-size: 15px; }
+  h2 { color: var(--ral9016); font-size: 15px; }
   h2::before { color: var(--ink); content: "> "; }
   p { margin: 0; }
 
@@ -93,9 +94,9 @@
   table { border-collapse: collapse; font-size: 13px; width: 100%; }
   .scroll-x { overflow-x: auto; }
   th {
-    border-bottom: 1px solid var(--line-strong); font-size: 11px; font-weight: 700;
-    letter-spacing: .1em; padding: 5px 12px 5px 0; text-align: left; text-transform: uppercase;
-    white-space: nowrap;
+    border-bottom: 1px solid var(--line-strong); color: var(--ral9003); font-size: 11px;
+    font-weight: 700; letter-spacing: .1em; padding: 5px 12px 5px 0; text-align: left;
+    text-transform: uppercase; white-space: nowrap;
   }
   td { padding: 4px 12px 4px 0; vertical-align: top; }
   td.num {
@@ -104,7 +105,10 @@
   }
   tbody tr:hover { background: var(--green-soft); }
   tbody strong { color: var(--bright); font-weight: 700; }
-  tfoot th { border-bottom: 0; border-top: 1px solid var(--line-strong); padding-top: 6px; }
+  tfoot th {
+    border-bottom: 0; border-top: 1px solid var(--line-strong); color: var(--ink);
+    padding-top: 6px;
+  }
   .desig { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
 
   input.cell {
@@ -130,14 +134,25 @@
   svg rect.bar { fill: var(--ink); }
   svg rect.track { fill: var(--surface-2); stroke: var(--line); }
 
+  .fkeys {
+    border-top: 1px solid var(--line-strong); display: flex; flex-wrap: wrap; gap: 2px 18px;
+    margin-top: 14px; padding-top: 6px;
+  }
+  .fkey {
+    background: none; border: 0; color: var(--ink); cursor: pointer; font-family: var(--mono);
+    font-size: 13px; padding: 1px 0; white-space: nowrap;
+  }
+  .fkey b { background: var(--ink); color: #000; font-weight: 400; padding: 0 3px; }
+  .fkey span { color: var(--ral9003); }
+  .fkey:hover span, .fkey:focus-visible span { text-decoration: underline; }
+
   .spin { animation: spin 1s steps(8) infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 </style>
 
 <header class="page">
-  <h1>Predictions</h1>
-  <span class="count" id="window-line">...</span>
+  <h1>Planner</h1>
   <span class="grow"></span>
   <button class="mini" id="reload">refresh</button>
 </header>
@@ -147,19 +162,17 @@
 <div class="cards">
   <div class="side-by-side">
     <div class="card">
-      <h2>What left the stores</h2>
+      <h2>OUTPUTS</h2>
       <div id="weeks-chart"></div>
-      <p class="legend" id="weeks-legend"></p>
     </div>
     <div class="card">
-      <h2>Where it went</h2>
+      <h2>SITE</h2>
       <div id="sites-chart"></div>
-      <p class="legend">Lines booked per site over the same window.</p>
     </div>
   </div>
 
   <div class="card">
-    <h2>In and out</h2>
+    <h2>FLOW</h2>
     <div class="row tight">
       <button class="mini period" id="period-week" aria-pressed="true">per week</button>
       <button class="mini period" id="period-month" aria-pressed="false">per month</button>
@@ -170,26 +183,18 @@
       <a class="mini" id="safety-xlsx" href="/export/safety-stock.xlsx">safety stock xlsx</a>
     </div>
     <div class="scroll-x"><table id="table-movements"></table></div>
-    <p class="legend">
-      In is what the delivery notes brought into the stores. Out is what the purchase orders
-      asked for over the same stretch. Net is what the shelves kept.
-      The safety stock sheet opens in Excel: a row per article with its weekly rate, the swing
-      around it, the safety stock and the reorder point, worked out over a 7 day lead time at
-      95% service.
-    </p>
   </div>
 
   <div class="card">
-    <h2>Dots orders for you</h2>
-    <p class="muted" id="dots-state">...</p>
+    <h2>Dots orders</h2>
     <div class="row">
       <label class="field grow">
         <span>site</span>
-        <input id="order-site" placeholder="where it goes">
+        <input id="order-site">
       </label>
       <label class="field grow">
         <span>work item</span>
-        <input id="order-work" placeholder="what it is for">
+        <input id="order-work">
       </label>
     </div>
     <div class="row">
@@ -204,13 +209,10 @@
         <button class="action" id="save-draft">save as purchase order</button>
       </div>
     </div>
-    <p class="legend">
-      Dots drafts, you sign. Nothing is sent to a supplier from here: saving writes a
-      purchase order into the app, where you can tick the lines off as they arrive.
-      The "why" of each line is kept with it as the line description.
-    </p>
   </div>
 </div>
+
+<nav class="fkeys" id="fkeys" aria-label="Function keys"></nav>
 
 <script>
 "use strict";
@@ -334,10 +336,6 @@ function renderCharts() {
   $("weeks-chart").replaceChildren(weeks.length
     ? columnChart(weeks, (week) => week.week.slice(5), (week) => week.quantity)
     : el("p", { className: "muted", textContent: "No delivery note yet." }));
-  const lines = weeks.reduce((sum, week) => sum + week.lines, 0);
-  $("weeks-legend").textContent = weeks.length
-    ? `${showNum(lines)} line(s) over ${weeks.length} week(s), by quantity booked in.`
-    : "";
 
   const sites = plan.sites ?? [];
   $("sites-chart").replaceChildren(sites.length
@@ -416,16 +414,9 @@ async function renderDots() {
   try {
     const data = await api("/api/models");
     const dots = (data.providers ?? []).find((provider) => provider.id === "openai");
-    $("dots-state").textContent = dots
-      ? `Dots: ${dots.detail}`
-      : "Dots is not listed on this build.";
     $("ask-dots").disabled = !dots || dots.state === "missing";
-    if (dots && dots.state === "missing") {
-      notice($("dots-note"), "warn",
-        "Paste an OpenAI key in the Settings tab of the main window, then come back.");
-    }
-  } catch (e) {
-    $("dots-state").textContent = `Dots: ${e.message}`;
+  } catch {
+    $("ask-dots").disabled = true;
   }
 }
 
@@ -448,15 +439,6 @@ async function loadPlan(options = {}) {
   }
   if (!options.keepDraft) draft = null;
 
-  const window_ = plan.window;
-  $("window-line").textContent =
-    `${window_.first} to ${window_.last} · ${window_.weeks} week(s) of history`;
-  notice($("top-notice"), plan.thin ? "warn" : "",
-    plan.thin
-      ? `Only ${window_.weeks} week(s) of deliveries so far, so read these numbers as a `
-        + "direction, not a promise. They sharpen as the notes pile up."
-      : "");
-
   renderCharts();
   renderDraft();
 }
@@ -468,11 +450,13 @@ function load(options) {
 $("reload").addEventListener("click", () => load());
 $("drop-draft").addEventListener("click", () => { draft = null; renderDraft(); });
 
+function showPeriod(name) {
+  period = name;
+  return loadMovements();
+}
+
 for (const name of ["week", "month", "half"]) {
-  $(`period-${name}`).addEventListener("click", () => {
-    period = name;
-    loadMovements();
-  });
+  $(`period-${name}`).addEventListener("click", () => showPeriod(name));
 }
 
 $("ask-dots").addEventListener("click", async () => {
@@ -531,6 +515,46 @@ $("save-draft").addEventListener("click", async () => {
   } finally {
     button.disabled = false;
   }
+});
+
+function download(href) {
+  window.location.href = href;
+}
+
+function backToMain() {
+  window.close();
+  window.setTimeout(() => {
+    if (!window.closed) window.location.href = "/";
+  }, 150);
+}
+
+const FKEYS = [
+  ["F1", "Refresh", () => load()],
+  ["F2", "Week", () => showPeriod("week")],
+  ["F3", "Month", () => showPeriod("month")],
+  ["F4", "6 months", () => showPeriod("half")],
+  ["F5", "Export CSV", () => download($("movements-csv").href)],
+  ["F6", "Export XLSX", () => download($("movements-xlsx").href)],
+  ["F7", "Safety stock", () => download($("safety-xlsx").href)],
+  ["F8", "Ask Dots", () => $("ask-dots").click()],
+  ["F9", "Main menu", backToMain],
+];
+
+$("fkeys").replaceChildren(...FKEYS.map(([key, label, action]) => {
+  const button = el("button", { className: "fkey", type: "button", title: `${key} = ${label}` }, [
+    el("b", { textContent: key }),
+    el("span", { textContent: `=${label}` }),
+  ]);
+  button.addEventListener("click", action);
+  return button;
+}));
+
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey || event.altKey || event.metaKey) return;
+  const entry = FKEYS.find(([key]) => key === event.key);
+  if (!entry) return;
+  event.preventDefault();
+  entry[2]();
 });
 
 renderDots();

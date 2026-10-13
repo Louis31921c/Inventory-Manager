@@ -23,6 +23,7 @@
     --tab-blue: #5f5fff;
     --tab-blue-bright: #8f8fff;
     --ral9003: #f4f4f4;
+    --ral9016: #fbfdfd;
     --mono: "Cascadia Mono Web", "Cascadia Mono", "Cascadia Code", "DejaVu Sans Mono",
             ui-monospace, Menlo, Consolas, monospace;
     color-scheme: dark;
@@ -41,7 +42,7 @@
   ::selection { background: var(--ink); color: #000; }
   h1, h2 { font-weight: 700; margin: 0; }
   h1 { font-size: 19px; text-transform: uppercase; }
-  h2 { color: var(--bright); font-size: 15px; }
+  h2 { color: var(--ral9016); font-size: 15px; }
   h2::before { color: var(--ink); content: "> "; }
   p { margin: 0; }
   .eyebrow {
@@ -75,9 +76,6 @@
   .tab[aria-selected="true"], .tab[aria-selected="true"]:hover {
     background: var(--tab-blue); color: #000;
   }
-  .tab.window { color: var(--ink); margin-left: auto; }
-  .tab.window::before { content: "[\2197 "; }
-  .tab.window:hover { color: var(--bright); }
 
   [hidden] { display: none !important; }
   section.panel { display: flex; flex-direction: column; gap: 14px; }
@@ -174,10 +172,12 @@
 
   table { border-collapse: collapse; font-size: 13px; width: 100%; }
   .scroll-x { overflow-x: auto; }
+  .short-box { max-height: 210px; overflow-y: auto; }
+  .short-box thead th { background: var(--ground); position: sticky; top: 0; }
   th {
-    border-bottom: 1px solid var(--line-strong); font-size: 11px; font-weight: 700;
-    letter-spacing: .1em; padding: 5px 14px 5px 0; text-align: left; text-transform: uppercase;
-    white-space: nowrap;
+    border-bottom: 1px solid var(--line-strong); color: var(--ral9003); font-size: 11px;
+    font-weight: 700; letter-spacing: .1em; padding: 5px 14px 5px 0; text-align: left;
+    text-transform: uppercase; white-space: nowrap;
   }
   td { padding: 5px 14px 5px 0; vertical-align: top; }
   td.num { font-variant-numeric: tabular-nums; padding-right: 18px; text-align: right; white-space: nowrap; }
@@ -290,8 +290,8 @@
   <button class="tab" id="tab-query" role="tab" aria-selected="false" aria-controls="panel-query">SQL</button>
   <button class="tab" id="tab-orders" role="tab" aria-selected="false" aria-controls="panel-orders">Purchase orders</button>
   <button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings">Settings</button>
-  <button class="tab window" id="open-predictions" type="button"
-          title="Demand planning in a window of its own">Predictions</button>
+  <button class="tab" id="open-predictions" type="button"
+          title="Demand planning in a window of its own">Planner</button>
 </nav>
 
 <div id="global-notice" hidden></div>
@@ -463,9 +463,9 @@
   <div class="card">
     <h2>Audit</h2>
     <p class="muted">Users</p>
-    <div class="scroll-x"><table id="table-users"></table></div>
+    <div class="scroll-x short-box"><table id="table-users"></table></div>
     <p class="muted">Lastest events</p>
-    <div class="scroll-x"><table id="table-audit"></table></div>
+    <div class="scroll-x short-box"><table id="table-audit"></table></div>
     <div id="audit-note"></div>
   </div>
 
@@ -1755,7 +1755,7 @@ const FKEYS = [
   ["F6", "Export Parquet", () => { window.location.href = "/export.parquet"; }],
   ["F7", "Exit", () => $("quit-form").submit()],
   ["F8", "Remember me", () => $("lock-form").submit()],
-  ["F9", "Predictions", openPredictions],
+  ["F9", "Planner", openPredictions],
 ];
 
 $("fkeys").replaceChildren(

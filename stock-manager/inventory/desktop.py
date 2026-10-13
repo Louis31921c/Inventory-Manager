@@ -4,12 +4,14 @@ Nothing listens outside this machine: the server binds to 127.0.0.1 on a free po
 the window closes.
 """
 
+import os
 import socket
 import sys
 import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 TITLE = "Stock Manager"
 
@@ -39,6 +41,49 @@ def start_server(port):
     thread = threading.Thread(target=server.serve, kwargs={"port": port}, daemon=True)
     thread.start()
     return thread
+
+
+def downloads_dir():
+    folder = os.environ.get("XDG_DOWNLOAD_DIR") or Path.home() / "Downloads"
+    folder = Path(folder).expanduser()
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        folder = Path.home()
+    return folder
+
+
+def free_name(folder, suggested):
+    name = Path(suggested or "download").name or "download"
+    target = folder / name
+    stem, dot, suffix = name.partition(".")
+    count = 2
+    while target.exists():
+        target = folder / f"{stem}-{count}{dot}{suffix}"
+        count += 1
+    return target
+
+
+def wire_downloads(context, tell):
+    """WebKit drops a download on the floor unless somebody says where it goes."""
+    def decide(download, suggested):
+        target = free_name(downloads_dir(), suggested)
+        download.set_destination(target.as_uri())
+        return True
+
+    def finished(download):
+        path = download.get_destination() or ""
+        tell(f"Saved to {path.removeprefix('file://')}")
+
+    def failed(download, error):
+        tell(f"The download failed: {error}")
+
+    def started(_context, download):
+        download.connect("decide-destination", decide)
+        download.connect("finished", finished)
+        download.connect("failed", failed)
+
+    context.connect("download-started", started)
 
 
 def _name_of(action):
@@ -104,6 +149,15 @@ def open_window(url, stop):
         child.connect("close", lambda *_: extra.destroy())
         return child
 
+    def tell(message):
+        print(message, flush=True)
+        bar = Gtk.MessageDialog(transient_for=window, modal=False,
+                                message_type=Gtk.MessageType.INFO,
+                                buttons=Gtk.ButtonsType.OK, text=message)
+        bar.connect("response", lambda dialog, _response: dialog.destroy())
+        bar.show()
+
+    wire_downloads(view.get_context(), tell)
     view.connect("create", second_window)
     window.connect("key-press-event", fullscreen_key(window))
     window.show_all()
