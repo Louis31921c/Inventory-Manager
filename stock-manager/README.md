@@ -97,17 +97,17 @@ Press `1` to `5` to navigate between tables.
 | What left the stores | quantity booked in, week by week |
 | Where it went | lines per site over the same window |
 | In and out | quantities in against quantities out, per week, per month or per 6 months, with the net, and the table out as csv or xlsx |
-| Safety stock | lead days and service % to tweak, the safety stock and reorder point they produce per article, and the table out as csv or xlsx |
 | Dots orders for you | an OpenAI drafted purchase order to check and save |
 
 In is what the delivery notes brought in. Out is what the purchase orders asked for over the
 same stretch. Net is what the shelves kept.
 
-Safety stock is the service factor times the week to week swing over the lead time; the reorder
-point is the lead time demand on top of it. Under it, the article is on watch; under the lead
-time demand alone, it is short. On hand is the one number no photo carries, so type it into the
-`on hand` cell: it is saved against the article, dated. Articles nobody counted are marked
-`not counted` rather than guessed at.
+`safety stock xlsx`, next to those exports, opens the safety stock sheet in Excel: a row per
+article with its weekly rate, the swing around it, what is on hand, the safety stock and the
+reorder point. Safety stock is the service factor times the week to week swing over the lead
+time, and the reorder point is the lead time demand on top of it; the sheet is worked out over
+a 7 day lead time at 95% service, or pass your own with
+`/export/safety-stock.xlsx?lead=14&service=99`.
 
 ### Dots orders for you
 

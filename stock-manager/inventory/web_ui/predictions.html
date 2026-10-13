@@ -89,7 +89,6 @@
     font-family: var(--mono); font-size: 14px; padding: 7px 9px; width: 100%;
   }
   input:focus, select:focus { border-color: var(--ink); outline: none; }
-  label.field.narrow { max-width: 150px; }
 
   table { border-collapse: collapse; font-size: 13px; width: 100%; }
   .scroll-x { overflow-x: auto; }
@@ -115,15 +114,6 @@
   input.cell:hover { border-color: var(--line); }
   input.cell:focus { background: var(--surface-2); border-color: var(--ink); outline: none; }
   input.cell.saved { border-color: var(--ink); }
-
-  .pill {
-    border: 1px solid currentColor; display: inline-block; font-size: 10.5px;
-    letter-spacing: .08em; padding: 0 5px; text-transform: uppercase;
-  }
-  .pill.short { color: var(--alarm); }
-  .pill.watch { color: var(--bright); }
-  .pill.ok { color: var(--muted); }
-  .pill.uncounted { color: var(--muted); }
 
   .notice { border-left: 2px solid var(--line-strong); font-size: 13px; padding: 6px 10px; }
   .notice::before { color: var(--ink); content: "> "; }
@@ -177,60 +167,16 @@
       <span class="grow"></span>
       <a class="mini" id="movements-csv" href="/export/movements.csv?period=week">export csv</a>
       <a class="mini" id="movements-xlsx" href="/export/movements.xlsx?period=week">export xlsx</a>
+      <a class="mini" id="safety-xlsx" href="/export/safety-stock.xlsx">safety stock xlsx</a>
     </div>
     <div class="scroll-x"><table id="table-movements"></table></div>
     <p class="legend">
       In is what the delivery notes brought into the stores. Out is what the purchase orders
       asked for over the same stretch. Net is what the shelves kept.
+      The safety stock sheet opens in Excel: a row per article with its weekly rate, the swing
+      around it, the safety stock and the reorder point, worked out over a 7 day lead time at
+      95% service.
     </p>
-  </div>
-
-  <div class="card">
-    <h2>Safety stock</h2>
-    <div class="row">
-      <label class="field narrow">
-        <span>lead days</span>
-        <input id="lead" type="number" min="1" max="120" step="1" value="7">
-      </label>
-      <label class="field narrow">
-        <span>service %</span>
-        <select id="service">
-          <option value="80">80</option>
-          <option value="85">85</option>
-          <option value="90">90</option>
-          <option value="95" selected>95</option>
-          <option value="98">98</option>
-          <option value="99">99</option>
-        </select>
-      </label>
-      <label class="field narrow" style="justify-content: flex-end">
-        <button class="action" id="apply">apply</button>
-      </label>
-      <span class="grow"></span>
-      <label class="field narrow" style="justify-content: flex-end">
-        <a class="mini" id="safety-csv" href="/export/safety-stock.csv">export csv</a>
-      </label>
-      <label class="field narrow" style="justify-content: flex-end">
-        <a class="mini" id="safety-xlsx" href="/export/safety-stock.xlsx">export xlsx</a>
-      </label>
-    </div>
-    <p class="legend">
-      Lead days is how long the supplier takes. Service % is how often you want to be covered
-      when a week runs hot. Safety stock is the service factor times the week to week swing
-      over the lead time; the reorder point is the lead time demand on top of it.
-    </p>
-    <div class="row tight">
-      <button class="mini" id="show-risky" aria-pressed="true">under the reorder point</button>
-      <button class="mini" id="show-all" aria-pressed="false">all articles</button>
-      <span class="grow"></span>
-      <span class="muted" id="count-line"></span>
-    </div>
-    <div class="scroll-x"><table id="table-safety"></table></div>
-    <p class="legend">
-      On hand is yours to fill in: type a count and it is saved against the article, dated.
-      Without it the shelf is a guess, and the article is marked not counted.
-    </p>
-    <div id="plan-note"></div>
   </div>
 
   <div class="card">
@@ -320,14 +266,6 @@ let plan = null;
 let moves = null;
 let draft = null;
 let period = "week";
-let onlyRisky = true;
-
-function rules() {
-  return {
-    lead: Number($("lead").value) || 7,
-    service: Number($("service").value) || 95,
-  };
-}
 
 function columnChart(points, label, value) {
   const width = 640;
@@ -440,79 +378,6 @@ function renderMovements() {
   $("movements-xlsx").href = `/export/movements.xlsx?period=${period}`;
 }
 
-function statePill(state) {
-  const words = { short: "short", watch: "watch", ok: "ok", uncounted: "not counted" };
-  return el("span", { className: `pill ${state}`, textContent: words[state] ?? state });
-}
-
-function countCell(row) {
-  const box = el("input", {
-    className: "cell", type: "number", step: "any", min: "0",
-    value: row.on_hand == null ? "" : row.on_hand,
-    title: row.counted_on ? `counted ${row.counted_on}` : "never counted",
-  });
-  box.addEventListener("change", async () => {
-    const quantity = box.value.trim() === "" ? null : Number(box.value);
-    if (quantity != null && (isNaN(quantity) || quantity < 0)) {
-      notice($("plan-note"), "warn", "A count is a number, zero or more.");
-      return;
-    }
-    box.disabled = true;
-    try {
-      await api("/api/stock-count", jsonBody("PUT", { article: row.article, quantity }));
-      notice($("plan-note"), "", "");
-      await loadPlan({ keepDraft: true });
-    } catch (e) {
-      notice($("plan-note"), "bad", e.message);
-    } finally {
-      box.disabled = false;
-    }
-  });
-  return box;
-}
-
-function renderSafety() {
-  const rows = onlyRisky
-    ? (plan.articles ?? []).filter((row) => row.state !== "ok" && row.per_week > 0)
-    : (plan.articles ?? []);
-  const head = ["Article", "Per week", "Swing", "On hand", "On order", "Safety stock",
-                "Reorder at", "State"];
-
-  $("table-safety").replaceChildren(
-    el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
-    el("tbody", {}, rows.length
-      ? rows.map((row) => el("tr", {}, [
-          el("td", {}, [
-            el("div", {}, [el("strong", { textContent: row.article })]),
-            el("div", {
-              className: "desig",
-              textContent: [row.supplier, row.designation].filter(Boolean).join(" · "),
-            }),
-          ]),
-          el("td", { className: "num", textContent: showNum(row.per_week) }),
-          el("td", { className: "num", textContent: showNum(row.spread_per_week) }),
-          el("td", { className: "num" }, [countCell(row)]),
-          el("td", { className: "num", textContent: row.on_order ? showNum(row.on_order) : "—" }),
-          el("td", { className: "num", textContent: showNum(row.safety_stock) }),
-          el("td", { className: "num", textContent: showNum(row.reorder_point) }),
-          el("td", {}, [statePill(row.state)]),
-        ]))
-      : [el("tr", {}, [el("td", { colSpan: head.length, className: "muted",
-                                  textContent: "Nothing under its reorder point." })])]),
-  );
-
-  const counts = plan.counts;
-  $("count-line").textContent =
-    `${counts.articles} article(s) · ${counts.counted} counted · ${counts.short} short · `
-    + `${counts.watch} on watch`;
-  $("show-risky").setAttribute("aria-pressed", String(onlyRisky));
-  $("show-all").setAttribute("aria-pressed", String(!onlyRisky));
-
-  const { lead, service } = rules();
-  $("safety-csv").href = `/export/safety-stock.csv?lead=${lead}&service=${service}`;
-  $("safety-xlsx").href = `/export/safety-stock.xlsx?lead=${lead}&service=${service}`;
-}
-
 function renderDraft() {
   $("draft").hidden = draft == null;
   $("drop-draft").hidden = draft == null;
@@ -575,9 +440,8 @@ async function loadMovements() {
 }
 
 async function loadPlan(options = {}) {
-  const { lead, service } = rules();
   try {
-    plan = await api(`/api/forecast?lead=${lead}&service=${service}`);
+    plan = await api("/api/forecast");
   } catch (e) {
     notice($("top-notice"), "bad", e.message);
     return;
@@ -594,7 +458,6 @@ async function loadPlan(options = {}) {
       : "");
 
   renderCharts();
-  renderSafety();
   renderDraft();
 }
 
@@ -602,10 +465,7 @@ function load(options) {
   return Promise.all([loadPlan(options), loadMovements()]);
 }
 
-$("apply").addEventListener("click", () => loadPlan());
 $("reload").addEventListener("click", () => load());
-$("show-all").addEventListener("click", () => { onlyRisky = false; renderSafety(); });
-$("show-risky").addEventListener("click", () => { onlyRisky = true; renderSafety(); });
 $("drop-draft").addEventListener("click", () => { draft = null; renderDraft(); });
 
 for (const name of ["week", "month", "half"]) {
@@ -621,7 +481,6 @@ $("ask-dots").addEventListener("click", async () => {
   notice($("dots-note"), "", "Dots is reading the numbers...");
   try {
     draft = await api("/api/forecast/draft", jsonBody("POST", {
-      ...rules(),
       site: $("order-site").value.trim() || null,
       work_item: $("order-work").value.trim() || null,
     }));

@@ -1244,7 +1244,8 @@ def test_planner_routes(tmp_path, monkeypatch):
         assert "Predictions" in client.get("/").text
         page = client.get("/predictions").text
         assert "Dots orders for you" in page
-        assert "In and out" in page and "Safety stock" in page
+        assert "In and out" in page
+        assert 'href="/export/safety-stock.xlsx"' in page
 
         moves = client.get("/api/movements?period=month").json()
         assert moves["period"] == "month"
