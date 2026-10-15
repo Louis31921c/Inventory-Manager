@@ -115,6 +115,9 @@
     background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--bright);
     font-family: var(--mono); font-size: 14px; padding: 7px 9px; width: 100%;
   }
+  input:not([type]), input[type="text"], input[type="search"], textarea {
+    text-transform: uppercase;
+  }
   input:focus, select:focus, textarea:focus { border-color: var(--ink); outline: none; }
   input::placeholder, textarea::placeholder { color: var(--muted); opacity: .7; }
   textarea { min-height: 70px; resize: vertical; }
@@ -534,6 +537,26 @@ const postJson = (body) => ({
 });
 
 const patchJson = (body) => ({ ...postJson(body), method: "PATCH" });
+
+const QUIET_TYPES = new Set(["number", "date", "password", "file", "checkbox", "radio",
+                             "range", "color", "hidden"]);
+
+function shout(event) {
+  const box = event.target;
+  if (box.tagName !== "INPUT" && box.tagName !== "TEXTAREA") return;
+  if (QUIET_TYPES.has(box.type)) return;
+  const loud = box.value.toUpperCase();
+  if (loud === box.value) return;
+  const start = box.selectionStart;
+  const end = box.selectionEnd;
+  box.value = loud;
+  try {
+    box.setSelectionRange(start, end);
+  } catch {
+  }
+}
+
+document.addEventListener("input", shout, true);
 
 let notes = [];
 let rows = [];

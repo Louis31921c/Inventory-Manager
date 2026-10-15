@@ -90,6 +90,7 @@
     background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--bright);
     font-family: var(--mono); font-size: 14px; padding: 7px 9px; width: 100%;
   }
+  input:not([type]), input[type="text"], input[type="search"] { text-transform: uppercase; }
   input:focus, select:focus { border-color: var(--ink); outline: none; }
 
   table { border-collapse: collapse; font-size: 13px; width: 100%; }
@@ -264,6 +265,26 @@ const jsonBody = (method, body) => ({
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
+
+const QUIET_TYPES = new Set(["number", "date", "password", "file", "checkbox", "radio",
+                             "range", "color", "hidden"]);
+
+function shout(event) {
+  const box = event.target;
+  if (box.tagName !== "INPUT" && box.tagName !== "TEXTAREA") return;
+  if (QUIET_TYPES.has(box.type)) return;
+  const loud = box.value.toUpperCase();
+  if (loud === box.value) return;
+  const start = box.selectionStart;
+  const end = box.selectionEnd;
+  box.value = loud;
+  try {
+    box.setSelectionRange(start, end);
+  } catch {
+  }
+}
+
+document.addEventListener("input", shout, true);
 
 let plan = null;
 let moves = null;
