@@ -61,3 +61,18 @@
   </form>
 
 </main>
+
+<script>
+  const boxes = [...document.querySelectorAll("main input")];
+
+  for (const box of boxes) {
+    box.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = boxes[(boxes.indexOf(box) + step + boxes.length) % boxes.length];
+      next.focus();
+      next.select();
+    });
+  }
+</script>

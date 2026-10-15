@@ -16,7 +16,7 @@ NAMES = {"claude": "Claude", "gemini": "Gemini", "openai": "Dots"}
 def _claude():
     binary = shutil.which("claude") or shutil.which("claude-code")
     if binary:
-        return "ready", f"found at {binary}"
+        return "ready", "command line found"
     return "missing", "install the Claude Code CLI, then run claude and /login"
 
 
@@ -40,7 +40,7 @@ def _openai():
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     if key:
         return "ready", "API key set, plans and drafts purchase orders"
-    return "missing", "needs OPENAI_API_KEY in the settings file"
+    return "missing", "needs OPENAI_API_KEY"
 
 
 CHECKS = {"claude": _claude, "gemini": _gemini, "openai": _openai}
