@@ -111,10 +111,10 @@ a 7 day lead time at 95% service, or pass your own with
 
 ### Dots orders for you
 
-With an OpenAI key in Settings, `ask dots` hands the planner's numbers to Dots, which writes a
-purchase order back: article, quantity rounded to how the trade buys, supplier, and one line
-saying why. Check it, change any quantity, then `save as purchase order` and it lands in the
-Purchase orders tab like any other sheet.
+With `OPENAI_API_KEY` in `~/.config/stock-manager/settings.env`, `ask dots` hands the planner's
+numbers to Dots, which writes a purchase order back: article, quantity rounded to how the trade
+buys, supplier, and one line saying why. Check it, change any quantity, then
+`save as purchase order` and it lands in the Purchase orders tab like any other sheet.
 
 Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
 

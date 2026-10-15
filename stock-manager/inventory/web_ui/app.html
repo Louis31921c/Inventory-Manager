@@ -249,14 +249,6 @@
     font-family: var(--mono); font-size: 12.5px; overflow-x: auto; padding: 9px 10px;
     white-space: pre-wrap;
   }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip {
-    background: none; border: 1px solid var(--line); color: var(--muted); cursor: pointer;
-    font-family: var(--mono); font-size: 12.5px; padding: 3px 9px; text-align: left;
-  }
-  .chip::before { color: var(--ink); content: "? "; }
-  .chip:hover { border-color: var(--ink); color: var(--ink); }
-
   .fkeys {
     border-top: 1px solid var(--line-strong); display: flex; flex-wrap: wrap; gap: 2px 18px;
     padding-top: 6px;
@@ -360,7 +352,6 @@
     <h2>Query</h2>
     <label class="field"><span>Question</span><textarea id="question"
       placeholder="SELECT * FROM inventory_lines"></textarea></label>
-    <div class="chips" id="examples"></div>
     <div class="row">
       <button class="action" id="ask-btn">Run</button>
       <button class="action ghost" id="cancel-ask" hidden>Stop</button>
@@ -409,6 +400,14 @@
 
   <div class="card">
     <h2>Stored purchase orders</h2>
+    <div class="row">
+      <label class="field grow"><span>Search</span><input id="o-search" placeholder="article, reference, work item..."></label>
+      <label class="field grow"><span>Project</span><select id="o-site"><option value="">All</option></select></label>
+    </div>
+    <div class="row">
+      <span class="muted" id="o-summary"></span>
+      <span class="grow"></span>
+    </div>
     <div id="lists"></div>
   </div>
 </section>
@@ -429,15 +428,6 @@
   <div class="card">
     <h2>Synchronize AI model</h2>
     <div id="models"></div>
-    <div class="row">
-      <label class="field grow">
-        <span>openai key for dots</span>
-        <input id="openai-key" type="password" placeholder="sk-..." autocomplete="off">
-      </label>
-      <label class="field" style="justify-content: flex-end">
-        <button class="action ghost" id="save-key">save key</button>
-      </label>
-    </div>
     <div id="model-note"></div>
   </div>
 
@@ -544,7 +534,6 @@ const postJson = (body) => ({
 });
 
 const patchJson = (body) => ({ ...postJson(body), method: "PATCH" });
-const putJson = (body) => ({ ...postJson(body), method: "PUT" });
 
 let notes = [];
 let rows = [];
@@ -605,22 +594,6 @@ function openPredictions() {
 }
 
 $("open-predictions").addEventListener("click", openPredictions);
-
-$("save-key").addEventListener("click", async () => {
-  const field = $("openai-key");
-  const button = $("save-key");
-  button.disabled = true;
-  try {
-    const answer = await api("/api/models/key", putJson({ key: field.value.trim() }));
-    field.value = "";
-    notice($("model-note"), "ok", answer.set ? "Dots has its key." : "The key is cleared.");
-    await renderModels();
-  } catch (e) {
-    notice($("model-note"), "bad", e.message);
-  } finally {
-    button.disabled = false;
-  }
-});
 
 try {
   const saved = localStorage.getItem("tab");
@@ -1013,7 +986,11 @@ for (const id of ["q-search", "q-site"]) {
   $(id).addEventListener("input", renderDeliveries);
 }
 
-const siteMenu = ((select) => {
+for (const id of ["o-search", "o-site"]) {
+  $(id).addEventListener("input", renderOrders);
+}
+
+function dropdown(select) {
   select.classList.add("replaced");
   const toggle = el("button", { className: "dd-toggle", type: "button", "aria-haspopup": "listbox" });
   toggle.setAttribute("aria-expanded", "false");
@@ -1082,24 +1059,12 @@ const siteMenu = ((select) => {
     if (!wrap.contains(event.target)) close();
   });
 
+  refreshList();
   return { refresh: refreshList };
-})($("q-site"));
+}
 
-const EXAMPLES = [
-  "how many units per supplier last month?",
-  "which articles are still on backorder?",
-  "average lead time between order and delivery, per supplier",
-  "what was ordered but never delivered?",
-];
-
-$("examples").replaceChildren(...EXAMPLES.map((text) => {
-  const chip = el("button", { className: "chip", textContent: text });
-  chip.addEventListener("click", () => {
-    $("question").value = text;
-    $("ask-btn").click();
-  });
-  return chip;
-}));
+const siteMenu = dropdown($("q-site"));
+const orderMenu = dropdown($("o-site"));
 
 let asking = null;
 $("cancel-ask").addEventListener("click", () => asking?.abort());
@@ -1359,13 +1324,50 @@ function alignLater(table, rail) {
   new ResizeObserver(() => alignRail(table, rail)).observe(table);
 }
 
+function refreshOrderSites() {
+  const select = $("o-site");
+  const current = select.value;
+  const sites = [...new Set(lists.map((sheet) => sheet.site).filter(Boolean))].sort();
+  select.replaceChildren(
+    el("option", { value: "", textContent: "All" }),
+    ...sites.map((site) => el("option", { value: site, textContent: site })),
+  );
+  select.value = sites.includes(current) ? current : "";
+  orderMenu.refresh();
+}
+
+function filteredOrders() {
+  const search = upper($("o-search").value);
+  const site = $("o-site").value;
+
+  return lists
+    .filter((sheet) => !site || (sheet.site ?? "") === site)
+    .map((sheet) => {
+      if (!search) return sheet;
+      const lines = (sheet.lines ?? []).filter((line) =>
+        upper(`${line.article} ${line.reference ?? ""} ${line.designation ?? ""} `
+              + `${sheet.work_item ?? ""} ${sheet.site ?? ""}`).includes(search));
+      return { ...sheet, lines };
+    })
+    .filter((sheet) => (sheet.lines ?? []).length);
+}
+
 function renderOrders() {
-  if (!lists.length) {
-    $("lists").replaceChildren(el("p", { className: "muted", textContent: "No purchase order stored." }));
+  refreshOrderSites();
+  const sheets = filteredOrders();
+  const lineCount = sheets.reduce((sum, sheet) => sum + (sheet.lines ?? []).length, 0);
+  $("o-summary").textContent =
+    `${sheets.length} purchase order(s) · ${lineCount} line(s)`;
+
+  if (!sheets.length) {
+    $("lists").replaceChildren(el("p", {
+      className: "muted",
+      textContent: lists.length ? "Nothing matches." : "No purchase order stored.",
+    }));
     return;
   }
 
-  $("lists").replaceChildren(...lists.map((sheet) => {
+  $("lists").replaceChildren(...sheets.map((sheet) => {
     const lines = sheet.lines ?? [];
     const title = el("div", { className: "sheet-title" }, [
       el("strong", { textContent: sheet.site ?? "no site" }),

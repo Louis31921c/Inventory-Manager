@@ -40,7 +40,7 @@ def _openai():
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     if key:
         return "ready", "API key set, plans and drafts purchase orders"
-    return "missing", "needs an OpenAI API key, paste one below"
+    return "missing", "needs OPENAI_API_KEY in the settings file"
 
 
 CHECKS = {"claude": _claude, "gemini": _gemini, "openai": _openai}

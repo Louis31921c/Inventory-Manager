@@ -25,7 +25,7 @@ from dataclasses import replace
 
 from . import (account, alerts, audit, backup, catalog, db, forecast, llm, models_info,
                vocabulary)
-from .config import load_config, set_setting
+from .config import load_config
 from .models import Note, parse_date
 
 log = logging.getLogger("inventory.web")
@@ -122,7 +122,7 @@ def unlock_page(error="", user=""):
     replacements = {
         "FIRST_LINE": "first run" if setting_up else "SIGN IN",
         "USER_VALUE": html.escape(user or lock.user or ""),
-        "USER_STATE": "autofocus" if setting_up else "readonly",
+        "USER_STATE": "required autofocus" if setting_up else "required",
         "PASSWORD_MODE": "new-password" if setting_up else "current-password",
         "CONFIRM_ROW": ('<div class="row"><label for="again">again    : </label>'
                         '<input type="password" id="again" name="again" '
@@ -154,6 +154,11 @@ def unlock(request: Request, password: str = Form(""), user: str = Form(""),
             return unlock_page(str(e), user)
         audit.record(config.db_path, name, "account.create", None, "sign up", caller)
         return _unlocked(name)
+
+    typed = (user or "").strip()
+    if typed and typed.upper() != (lock.user or "").upper():
+        audit.record(config.db_path, lock.user, "unlock.refused", None, "wrong user", caller)
+        return unlock_page("Wrong user or password.", user)
 
     try:
         ok = lock.unlock(password)
@@ -763,23 +768,6 @@ async def draft_order(request: Request, body: OrderDraft):
     return {"lines": lines, "note": str(answer.get("note") or ""), "model": dots.model,
             "drafted_from": len(planner["articles"]), "site": body.site,
             "work_item": body.work_item}
-
-
-class ModelKey(BaseModel):
-    key: str
-
-
-@app.put("/api/models/key")
-def put_model_key(request: Request, body: ModelKey):
-    """The OpenAI key, straight into the settings file. It is never read back out."""
-    global config
-    key = body.key.strip()
-    if key and not key.startswith("sk-"):
-        raise HTTPException(422, "An OpenAI key starts with sk-.")
-    set_setting("OPENAI_API_KEY", key)
-    config = replace(config, openai_api_key=key)
-    event(request, "model.key", "openai", "cleared" if not key else "set")
-    return {"set": bool(key), "providers": models_info.status(config.backend)}
 
 
 @app.get("/api/errors")

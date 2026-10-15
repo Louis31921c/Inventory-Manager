@@ -974,7 +974,21 @@ def test_server_locks_everything_until_the_password(tmp_path, monkeypatch):
 
         assert client.post("/lock", headers=mine, follow_redirects=False).status_code == 303
         assert client.get("/api/data").status_code == 401
-        assert ">ENTER</button>" in client.get("/unlock").text
+        page = client.get("/unlock").text
+        assert ">ENTER</button>" in page
+        assert "readonly" not in page
+
+        answer = client.post("/unlock", data={"user": "someone else",
+                                              "password": "correct horse"}, headers=mine,
+                             follow_redirects=False)
+        assert answer.status_code == 200
+        assert client.get("/api/data").status_code == 401
+
+        answer = client.post("/unlock", data={"user": "alex", "password": "correct horse"},
+                             headers=mine, follow_redirects=False)
+        assert answer.status_code == 303
+        assert client.get("/api/data").status_code == 200
+        assert client.post("/lock", headers=mine, follow_redirects=False).status_code == 303
 
         answer = client.post("/unlock", data={"password": "guess"}, headers=mine,
                              follow_redirects=False)
@@ -1274,14 +1288,6 @@ def test_planner_routes(tmp_path, monkeypatch):
         assert answer.status_code == 502
         assert "key" in answer.json()["detail"]
 
-        assert client.put("/api/models/key", json={"key": "not-a-key"},
-                          headers=mine).status_code == 422
-        assert client.put("/api/models/key", json={"key": "sk-test"},
-                          headers=mine).json()["set"] is True
-        settings = tmp_path / "config" / "stock-manager" / "settings.env"
-        assert "OPENAI_API_KEY=sk-test" in settings.read_text()
-        assert client.put("/api/models/key", json={"key": ""}, headers=mine).json()["set"] is False
-
         for dataset in db.EXPORTS:
             for fmt in ("csv", "xlsx", "parquet"):
                 answer = client.get(f"/export/{dataset}.{fmt}")
@@ -1290,8 +1296,11 @@ def test_planner_routes(tmp_path, monkeypatch):
         assert client.get("/export.csv").status_code == 200
         assert client.get("/export.parquet").status_code == 200
 
+        assert client.put("/api/models/key", json={"key": "sk-test"},
+                          headers=mine).status_code == 404
+
         actions = [row["action"] for row in client.get("/api/audit").json()["events"]]
-        assert "stock.count" in actions and "model.key" in actions
+        assert "stock.count" in actions
 
 
 def test_downloads_land_somewhere(tmp_path, monkeypatch):
