@@ -145,6 +145,8 @@ def open_window(url, stop):
         extra.add(child)
         extra.connect("key-press-event", fullscreen_key(extra))
         child.connect("create", second_window)
+        child.connect("notify::title",
+                      lambda view, _spec: extra.set_title(f"{TITLE} - {view.get_title()}"))
         child.connect("ready-to-show", lambda *_: extra.show_all())
         child.connect("close", lambda *_: extra.destroy())
         return child

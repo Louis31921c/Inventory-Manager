@@ -90,7 +90,7 @@ Press `1` to `5` to navigate between tables.
 
 ## Buffers
 
-The Settings tab sizes a buffer for every article, the demand driven way, out of what the
+The MDDRP window sizes a buffer for every article, the demand driven way, out of what the
 delivery notes already say.
 
 | Zone | What it covers | How it is worked out |
@@ -127,13 +127,14 @@ work than about next month.
 
 ## Predictions
 
-`Predictions`, at the right of the tabs (or `F9`), opens a window of its own.
+`MDDRP`, at the right of the tabs (or `F9`), opens a window of its own.
 
 | Cell | What it gives you |
 |---|---|
 | What left the stores | quantity booked in, week by week |
 | Where it went | lines per site over the same window |
 | In and out | quantities in against quantities out, per week, per month or per 6 months, with the net, and the table out as csv or xlsx |
+| Buffers | the demand driven zones above, and the chain behind them |
 | Dots orders for you | an OpenAI drafted purchase order to check and save |
 
 In is what the delivery notes brought in. Out is what the purchase orders asked for over the

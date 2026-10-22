@@ -1426,5 +1426,7 @@ def test_buffer_routes(tmp_path, monkeypatch):
         assert "top of green" in sheet.text and "BOLT M6" in sheet.text
         assert client.get("/export/ddmrp.xlsx").status_code == 200
 
-        page = client.get("/").text
+        page = client.get("/predictions").text
         assert 'id="table-buffers"' in page and 'id="table-chain"' in page
+        assert "MDDRP" in page
+        assert 'id="table-buffers"' not in client.get("/").text

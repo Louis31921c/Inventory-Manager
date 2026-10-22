@@ -1,5 +1,5 @@
  <meta charset="utf-8">
-<title>Planner</title>
+<title>MDDRP</title>
 <style>
   @font-face {
     font-display: swap;
@@ -95,6 +95,8 @@
 
   table { border-collapse: collapse; font-size: 13px; width: 100%; }
   .scroll-x { overflow-x: auto; }
+  .short-box { max-height: 260px; overflow-y: auto; }
+  .short-box thead th { background: var(--ground); position: sticky; top: 0; }
   th {
     background: var(--head-wash); border-bottom: 1px solid var(--line-strong);
     color: var(--ral9016); font-size: 11px; font-weight: 700; letter-spacing: .1em;
@@ -120,6 +122,15 @@
   input.cell:hover { border-color: var(--line); }
   input.cell:focus { background: var(--surface-2); border-color: var(--ink); outline: none; }
   input.cell.saved { border-color: var(--ink); }
+
+  .pill {
+    border: 1px solid currentColor; display: inline-block; font-size: 10.5px;
+    letter-spacing: .08em; padding: 0 5px; text-transform: uppercase;
+  }
+  .pill.red { color: #ff6b5e; }
+  .pill.yellow { color: #ffb000; }
+  .pill.green { color: var(--ink); }
+  .pill.over, .pill.uncounted { color: var(--muted); }
 
   .notice { border-left: 2px solid var(--line-strong); font-size: 13px; padding: 6px 10px; }
   .notice::before { color: var(--ink); content: "> "; }
@@ -154,7 +165,7 @@
 </style>
 
 <header class="page">
-  <h1>Planner</h1>
+  <h1>MDDRP</h1>
   <span class="grow"></span>
   <button class="mini" id="reload">refresh</button>
 </header>
@@ -185,6 +196,45 @@
       <a class="mini" id="safety-xlsx" href="/export/safety-stock.xlsx">safety stock xlsx</a>
     </div>
     <div class="scroll-x"><table id="table-movements"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Buffers</h2>
+    <p class="muted">
+      Demand driven buffers: a red zone to cover the lead time and its surprises, a yellow one
+      for the demand while the supplier works, a green one for how often you place an order.
+      Net flow is what is counted on the shelf minus what the open purchase orders ask for.
+    </p>
+    <div class="row">
+      <label class="field narrow">
+        <span>order cycle days</span>
+        <input id="buffer-cycle" type="number" min="1" max="90" step="1" value="7">
+      </label>
+      <label class="field narrow">
+        <span>horizon weeks</span>
+        <input id="buffer-horizon" type="number" min="1" max="26" step="1" value="4">
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="buffer-apply">apply</button>
+      </label>
+      <span class="grow"></span>
+      <label class="field narrow" style="justify-content: flex-end">
+        <a class="mini" id="buffer-csv" href="/export/ddmrp.csv">export csv</a>
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <a class="mini" id="buffer-xlsx" href="/export/ddmrp.xlsx">export xlsx</a>
+      </label>
+    </div>
+    <div class="row tight">
+      <button class="mini" id="buffer-risky" aria-pressed="true">red and yellow</button>
+      <button class="mini" id="buffer-all" aria-pressed="false">all articles</button>
+      <span class="grow"></span>
+      <span class="muted" id="buffer-counts"></span>
+    </div>
+    <div class="scroll-x short-box"><table id="table-buffers"></table></div>
+    <p class="muted">Week to week, where the demand goes next</p>
+    <div class="scroll-x"><table id="table-chain"></table></div>
+    <div id="buffer-note"></div>
   </div>
 
   <div class="card">
@@ -353,6 +403,24 @@ function barList(points, label, value) {
   return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
 }
 
+function renderTable(table, columns, data, empty) {
+  table.replaceChildren();
+  if (!data.length) {
+    table.append(el("tbody", {}, [el("tr", {}, [el("td", { className: "muted",
+                                                          textContent: empty })])]));
+    return;
+  }
+  table.append(el("thead", {}, [
+    el("tr", {}, columns.map((col) => el("th", { textContent: col.label }))),
+  ]));
+  table.append(el("tbody", {}, data.map((item) =>
+    el("tr", {}, columns.map((col) => {
+      const cell = el("td", { className: col.numeric ? "num" : "" });
+      cell.append(col.cell(item));
+      return cell;
+    })))));
+}
+
 function renderCharts() {
   const weeks = plan.weeks ?? [];
   $("weeks-chart").replaceChildren(weeks.length
@@ -397,6 +465,96 @@ function renderMovements() {
   $("movements-csv").href = `/export/movements.csv?period=${period}`;
   $("movements-xlsx").href = `/export/movements.xlsx?period=${period}`;
 }
+
+let buffers = null;
+let bufferAll = false;
+
+function bufferRules() {
+  return {
+    cycle: Number($("buffer-cycle").value) || 7,
+    horizon: Number($("buffer-horizon").value) || 4,
+  };
+}
+
+function zonePill(zone) {
+  const words = { red: "red", yellow: "yellow", green: "green", over: "over the top",
+                  uncounted: "not counted" };
+  return el("span", { className: `pill ${zone}`, textContent: words[zone] ?? zone });
+}
+
+function drawBuffers() {
+  if (!buffers) return;
+  const rows = bufferAll
+    ? buffers.articles
+    : buffers.articles.filter((row) => row.zone === "red" || row.zone === "yellow");
+
+  renderTable($("table-buffers"), [
+    {
+      label: "Article",
+      cell: (row) => {
+        const box = el("span", {}, [el("strong", { textContent: row.article })]);
+        const under = [row.supplier, `${row.lead_class} lead ${showNum(row.lead_days)} d`,
+                       row.variability].filter(Boolean).join(" · ");
+        box.append(el("div", { className: "desig muted", textContent: under }));
+        return box;
+      },
+    },
+    { label: "Per week", numeric: true, cell: (row) => showNum(row.per_week) },
+    { label: "Red", numeric: true, cell: (row) => showNum(row.red) },
+    { label: "Yellow", numeric: true, cell: (row) => showNum(row.yellow) },
+    { label: "Green", numeric: true, cell: (row) => showNum(row.green) },
+    { label: "Top", numeric: true, cell: (row) => showNum(row.top_of_green) },
+    { label: "Net flow", numeric: true, cell: (row) => showNum(row.net_flow) },
+    { label: "Buffer", numeric: true, cell: (row) => `${showNum(row.buffer_share)}%` },
+    { label: "Zone", cell: (row) => zonePill(row.zone) },
+    { label: "To order", numeric: true, cell: (row) => (row.to_order ? showNum(row.to_order) : "—") },
+    { label: "Spike", numeric: true, cell: (row) => `${showNum(row.spike_risk)}%` },
+  ], rows, bufferAll ? "Nothing stored yet." : "No article in the red or the yellow.");
+
+  const counts = buffers.counts;
+  $("buffer-counts").textContent =
+    `${counts.articles} article(s) · ${counts.red} red · ${counts.yellow} yellow · `
+    + `${counts.green} green · ${counts.uncounted} not counted`;
+  $("buffer-risky").setAttribute("aria-pressed", String(!bufferAll));
+  $("buffer-all").setAttribute("aria-pressed", String(bufferAll));
+
+  const chain = buffers.chain;
+  const states = chain.states;
+  renderTable($("table-chain"), [
+    { label: "This week", cell: (state) => el("strong", { textContent: state }) },
+    ...states.map((next) => ({
+      label: `→ ${next}`,
+      numeric: true,
+      cell: (state) => `${Math.round(100 * (chain.matrix[state]?.[next] ?? 0))}%`,
+    })),
+  ], states, "");
+
+  const share = states
+    .map((state) => `${state} ${Math.round(100 * (chain.steady[state] ?? 0))}%`)
+    .join(" · ");
+  notice($("buffer-note"), buffers.thin ? "warn" : "",
+    `${chain.transitions} week to week move(s) counted. Over the long run: ${share}.`
+    + (buffers.thin ? " Thin history, so read the chain as a hint." : ""));
+
+  const { cycle, horizon } = bufferRules();
+  $("buffer-csv").href = `/export/ddmrp.csv?cycle=${cycle}&horizon=${horizon}`;
+  $("buffer-xlsx").href = `/export/ddmrp.xlsx?cycle=${cycle}&horizon=${horizon}`;
+}
+
+async function renderBuffers() {
+  const { cycle, horizon } = bufferRules();
+  try {
+    buffers = await api(`/api/ddmrp?cycle=${cycle}&horizon=${horizon}`);
+  } catch (e) {
+    notice($("buffer-note"), "bad", e.message);
+    return;
+  }
+  drawBuffers();
+}
+
+$("buffer-apply").addEventListener("click", renderBuffers);
+$("buffer-all").addEventListener("click", () => { bufferAll = true; drawBuffers(); });
+$("buffer-risky").addEventListener("click", () => { bufferAll = false; drawBuffers(); });
 
 function renderDraft() {
   $("draft").hidden = draft == null;
@@ -463,6 +621,7 @@ async function loadPlan(options = {}) {
 
   renderCharts();
   renderDraft();
+  renderBuffers();
 }
 
 function load(options) {
