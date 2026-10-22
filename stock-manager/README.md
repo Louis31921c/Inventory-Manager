@@ -88,6 +88,43 @@ Press `1` to `5` to navigate between tables.
 
 
 
+## Buffers
+
+The Settings tab sizes a buffer for every article, the demand driven way, out of what the
+delivery notes already say.
+
+| Zone | What it covers | How it is worked out |
+|---|---|---|
+| Red | the lead time and its surprises | `per day x lead days x lead factor`, plus that again times a variability factor |
+| Yellow | the demand while the supplier works | `per day x lead days` |
+| Green | how often you want to place an order | the larger of `per day x lead days x lead factor` and `per day x order cycle` |
+
+Lead days are measured, not guessed: the median of `delivery date - order date` for that
+article, falling back to the supplier's median, then to everybody's. A short lead gets a bigger
+factor than a long one, and an erratic article a bigger safety than a steady one, which is why
+two articles moving at the same rate can end up with very different red zones.
+
+Net flow is what was counted on the shelf minus what the open purchase orders still ask for.
+Against the top of each zone it lands in the red, the yellow, the green, or over the top, and
+the table is sorted so the red comes first. Articles nobody counted are marked `not counted`
+rather than assumed empty.
+
+### Where the demand goes next
+
+Every week of every article is labelled `quiet`, `light`, `usual` or `spike` against a week when
+that article actually moved. Those labels make a Markov chain: one pooled transition matrix for
+the whole workshop, since no single article moves often enough to fill one of its own. The table
+under the buffers reads row by row: given this week, the chance of each kind of week next.
+
+From it come two numbers. `spike` in the article's row is the chance of at least one
+bigger-than-usual week inside the horizon, which is what a buffer has to survive. The long run
+share under the table is where the weeks settle if nothing changes. Both are smoothed, so a
+pair of states never seen together still gets a small chance rather than zero, and both are
+honest about thin history: with a few weeks of notes the chain says more about the shape of the
+work than about next month.
+
+`export csv` and `export xlsx` take the whole table out, zones, factors and all.
+
 ## Predictions
 
 `Predictions`, at the right of the tabs (or `F9`), opens a window of its own.
@@ -167,6 +204,7 @@ device` to the Admin. Repeats are muted.
 | `inventory/db.py` | DuckDB storage and exports |
 | `inventory/llm.py` | the model backends, Dots among them |
 | `inventory/forecast.py` | rates, safety stock, reorder points, shortage risk |
+| `inventory/ddmrp.py` | buffer zones, lead times, the demand chain |
 | `inventory/vocabulary.py` | shared article names, aliases, merges |
 | `inventory/audit.py`, `alerts.py` | who did what, and what broke |
 

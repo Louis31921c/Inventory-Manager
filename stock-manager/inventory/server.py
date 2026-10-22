@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, alerts, audit, backup, catalog, db, forecast, llm, models_info,
+from . import (account, alerts, audit, backup, catalog, db, ddmrp, forecast, llm, models_info,
                vocabulary)
 from .config import load_config
 from .models import Note, parse_date
@@ -682,6 +682,35 @@ def export_safety(request: Request, fmt: str, lead: int = forecast.DEFAULT_LEAD,
     lead, service, horizon = _planner_settings(lead, service, forecast.DEFAULT_HORIZON)
     rows, _ = forecast.articles(config.db_path, lead, service, horizon)
     return _sheet(request, SAFETY_COLUMNS, rows, f"safety-stock-{lead}d-{service}pc", fmt)
+
+
+def _buffer_settings(cycle, horizon):
+    return min(max(int(cycle), 1), 90), min(max(int(horizon), 1), 26)
+
+
+@app.get("/api/ddmrp")
+def read_ddmrp(cycle: int = ddmrp.DEFAULT_CYCLE, horizon: int = ddmrp.DEFAULT_HORIZON):
+    cycle, horizon = _buffer_settings(cycle, horizon)
+    return ddmrp.summary(config.db_path, cycle, horizon)
+
+
+BUFFER_COLUMNS = (("article", "article"), ("supplier", "supplier"), ("per_week", "per week"),
+                  ("adu", "per day"), ("lead_days", "lead days"), ("lead_class", "lead"),
+                  ("cv", "swing"), ("variability", "variability"), ("red", "red zone"),
+                  ("yellow", "yellow zone"), ("green", "green zone"),
+                  ("top_of_red", "top of red"), ("top_of_yellow", "top of yellow"),
+                  ("top_of_green", "top of green"), ("on_hand", "on hand"),
+                  ("open_demand", "open demand"), ("net_flow", "net flow"),
+                  ("buffer_share", "buffer %"), ("zone", "zone"), ("to_order", "to order"),
+                  ("state", "this week"), ("spike_risk", "spike risk %"))
+
+
+@app.get("/export/ddmrp.{fmt}")
+def export_ddmrp(request: Request, fmt: str, cycle: int = ddmrp.DEFAULT_CYCLE,
+                 horizon: int = ddmrp.DEFAULT_HORIZON):
+    cycle, horizon = _buffer_settings(cycle, horizon)
+    rows, _, _ = ddmrp.buffers(config.db_path, cycle, horizon)
+    return _sheet(request, BUFFER_COLUMNS, rows, f"ddmrp-{cycle}d-{horizon}w", fmt)
 
 
 @app.get("/api/forecast")

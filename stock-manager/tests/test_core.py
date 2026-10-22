@@ -1318,3 +1318,113 @@ def test_downloads_land_somewhere(tmp_path, monkeypatch):
     assert second.name == "movements-week-2.csv"
     assert desktop.free_name(folder, "").name == "download"
     assert desktop.free_name(folder, "../../escape.csv").parent == folder
+
+
+def buffer_database(path):
+    from inventory.models import Line, Note
+
+    db.init(path)
+    weeks = [(300, 2), (0, 0), (900, 3), (300, 1)]
+    for index, (bolts, sheets) in enumerate(weeks):
+        day = date(2026, 9, 7) + timedelta(days=7 * index)
+        lines = [Line(article="BOLT M6", quantity=bolts)] if bolts else []
+        if sheets:
+            lines.append(Line(article="SHEET ALU", quantity=sheets))
+        if not lines:
+            continue
+        note = Note(supplier="NORTHGATE", delivery_date=day.isoformat(),
+                    order_date=(day - timedelta(days=10)).isoformat(),
+                    site="PARAPET", lines=lines)
+        db.save_note(path, note, f"buf-{index}", "", "ALEX")
+    return path
+
+
+def test_buffers_size_the_zones_from_the_data(tmp_path):
+    from inventory import ddmrp
+
+    path = buffer_database(tmp_path / "buffers.duckdb")
+    rows, chain, (first, last, days) = ddmrp.buffers(path, cycle=7, horizon=4)
+    bolts = {row["article"]: row for row in rows}["BOLT M6"]
+
+    assert (first, last) == (date(2026, 9, 7), date(2026, 9, 28))
+    assert bolts["lead_days"] == 10.0 and bolts["lead_class"] == "medium"
+    assert bolts["adu"] == round(1500 / days, 3)
+    assert bolts["red"] == round(bolts["red_base"] + bolts["red_safety"], 1)
+    assert bolts["yellow"] == round(bolts["adu"] * 10, 1)
+    assert bolts["top_of_green"] == round(bolts["red"] + bolts["yellow"] + bolts["green"], 1)
+    assert bolts["zone"] == "uncounted" and bolts["on_hand"] is None
+
+    db.save_stock_count(path, "BOLT M6", 10, "ALEX")
+    rows, _, _ = ddmrp.buffers(path, cycle=7, horizon=4)
+    bolts = {row["article"]: row for row in rows}["BOLT M6"]
+    assert bolts["zone"] == "red" and bolts["net_flow"] == 10
+    assert bolts["to_order"] >= bolts["top_of_green"] - 10
+
+    db.save_stock_count(path, "BOLT M6", 100000, "ALEX")
+    rows, _, _ = ddmrp.buffers(path, cycle=7, horizon=4)
+    bolts = {row["article"]: row for row in rows}["BOLT M6"]
+    assert bolts["zone"] == "over" and bolts["to_order"] == 0
+
+
+def test_the_chain_walks_between_quiet_and_busy_weeks():
+    from inventory import ddmrp
+
+    assert ddmrp.state_of(0, 100) == "quiet"
+    assert ddmrp.state_of(20, 100) == "light"
+    assert ddmrp.state_of(100, 100) == "usual"
+    assert ddmrp.state_of(300, 100) == "spike"
+    assert ddmrp.typical_week([0, 100, 0, 200]) == 150
+
+    walk = [["quiet", "usual", "quiet", "usual"]] * 20
+    matrix, moves = ddmrp.transition_matrix(walk)
+    assert moves == 60
+    assert matrix["quiet"]["usual"] > 0.9
+    assert all(abs(sum(row.values()) - 1) < 1e-9 for row in matrix.values())
+
+    steady = ddmrp.steady_state(matrix)
+    assert abs(sum(steady.values()) - 1) < 1e-6
+    assert abs(steady["quiet"] - steady["usual"]) < 0.05
+
+    spiky = ddmrp.transition_matrix([["usual", "spike"] * 10])[0]
+    assert ddmrp.risk_of_spike(spiky, "usual", 0) == 0
+    assert ddmrp.risk_of_spike(spiky, "usual", 1) > 0.8
+    assert ddmrp.risk_of_spike(spiky, "usual", 4) >= ddmrp.risk_of_spike(spiky, "usual", 1)
+
+
+def test_buffer_routes(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+    buffer_database(server.config.db_path)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        answer = client.get("/api/ddmrp?cycle=14&horizon=6").json()
+        assert answer["settings"] == {"cycle_days": 14, "horizon_weeks": 6}
+        assert answer["counts"]["articles"] == 2
+        assert set(answer["chain"]["states"]) == {"quiet", "light", "usual", "spike"}
+        assert answer["thin"] is True
+
+        clamped = client.get("/api/ddmrp?cycle=0&horizon=99").json()
+        assert clamped["settings"] == {"cycle_days": 1, "horizon_weeks": 26}
+
+        sheet = client.get("/export/ddmrp.csv?cycle=14&horizon=6")
+        assert sheet.status_code == 200
+        assert sheet.headers["content-disposition"].endswith('"ddmrp-14d-6w.csv"')
+        assert "top of green" in sheet.text and "BOLT M6" in sheet.text
+        assert client.get("/export/ddmrp.xlsx").status_code == 200
+
+        page = client.get("/").text
+        assert 'id="table-buffers"' in page and 'id="table-chain"' in page
