@@ -1,5 +1,5 @@
  <meta charset="utf-8">
-<title>MDDRP</title>
+<title>DDMRP</title>
 <style>
   @font-face {
     font-display: swap;
@@ -165,7 +165,7 @@
 </style>
 
 <header class="page">
-  <h1>MDDRP</h1>
+  <h1>DDMRP</h1>
   <span class="grow"></span>
   <button class="mini" id="reload">refresh</button>
 </header>
@@ -199,12 +199,7 @@
   </div>
 
   <div class="card">
-    <h2>Buffers</h2>
-    <p class="muted">
-      Demand driven buffers: a red zone to cover the lead time and its surprises, a yellow one
-      for the demand while the supplier works, a green one for how often you place an order.
-      Net flow is what is counted on the shelf minus what the open purchase orders ask for.
-    </p>
+    <h2>Safety sock watch</h2>
     <div class="row">
       <label class="field narrow">
         <span>order cycle days</span>
@@ -215,7 +210,7 @@
         <input id="buffer-horizon" type="number" min="1" max="26" step="1" value="4">
       </label>
       <label class="field narrow" style="justify-content: flex-end">
-        <button class="action" id="buffer-apply">apply</button>
+        <button class="action" id="buffer-apply">RUN</button>
       </label>
       <span class="grow"></span>
       <label class="field narrow" style="justify-content: flex-end">
@@ -226,13 +221,12 @@
       </label>
     </div>
     <div class="row tight">
-      <button class="mini" id="buffer-risky" aria-pressed="true">red and yellow</button>
+      <button class="mini" id="buffer-risky" aria-pressed="true">redzone</button>
       <button class="mini" id="buffer-all" aria-pressed="false">all articles</button>
       <span class="grow"></span>
       <span class="muted" id="buffer-counts"></span>
     </div>
     <div class="scroll-x short-box"><table id="table-buffers"></table></div>
-    <p class="muted">Week to week, where the demand goes next</p>
     <div class="scroll-x"><table id="table-chain"></table></div>
     <div id="buffer-note"></div>
   </div>
@@ -499,7 +493,7 @@ function drawBuffers() {
         return box;
       },
     },
-    { label: "Per week", numeric: true, cell: (row) => showNum(row.per_week) },
+    { label: "weekly avg cons", numeric: true, cell: (row) => showNum(row.per_week) },
     { label: "Red", numeric: true, cell: (row) => showNum(row.red) },
     { label: "Yellow", numeric: true, cell: (row) => showNum(row.yellow) },
     { label: "Green", numeric: true, cell: (row) => showNum(row.green) },
@@ -508,7 +502,7 @@ function drawBuffers() {
     { label: "Buffer", numeric: true, cell: (row) => `${showNum(row.buffer_share)}%` },
     { label: "Zone", cell: (row) => zonePill(row.zone) },
     { label: "To order", numeric: true, cell: (row) => (row.to_order ? showNum(row.to_order) : "—") },
-    { label: "Spike", numeric: true, cell: (row) => `${showNum(row.spike_risk)}%` },
+    { label: "Spike risk", numeric: true, cell: (row) => `${showNum(row.spike_risk)}%` },
   ], rows, bufferAll ? "Nothing stored yet." : "No article in the red or the yellow.");
 
   const counts = buffers.counts;
@@ -533,8 +527,7 @@ function drawBuffers() {
     .map((state) => `${state} ${Math.round(100 * (chain.steady[state] ?? 0))}%`)
     .join(" · ");
   notice($("buffer-note"), buffers.thin ? "warn" : "",
-    `${chain.transitions} week to week move(s) counted. Over the long run: ${share}.`
-    + (buffers.thin ? " Thin history, so read the chain as a hint." : ""));
+    `${chain.transitions} week to week move(s) counted.`);
 
   const { cycle, horizon } = bufferRules();
   $("buffer-csv").href = `/export/ddmrp.csv?cycle=${cycle}&horizon=${horizon}`;

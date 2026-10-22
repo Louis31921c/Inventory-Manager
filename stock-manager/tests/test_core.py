@@ -1428,5 +1428,5 @@ def test_buffer_routes(tmp_path, monkeypatch):
 
         page = client.get("/predictions").text
         assert 'id="table-buffers"' in page and 'id="table-chain"' in page
-        assert "MDDRP" in page
+        assert "DDMRP" in page
         assert 'id="table-buffers"' not in client.get("/").text

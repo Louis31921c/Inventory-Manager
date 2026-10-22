@@ -294,7 +294,7 @@
   <button class="tab" id="tab-orders" role="tab" aria-selected="false" aria-controls="panel-orders">Purchase orders</button>
   <button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings">Settings</button>
   <button class="tab" id="open-predictions" type="button"
-          title="Demand driven buffers in a window of its own">MDDRP</button>
+          title="Demand driven buffers in a window of its own">DDMRP</button>
 </nav>
 
 <div id="global-notice" hidden></div>
@@ -1819,7 +1819,7 @@ const FKEYS = [
   ["F6", "Export Parquet", () => { window.location.href = "/export.parquet"; }],
   ["F7", "Exit", () => $("quit-form").submit()],
   ["F8", "Remember me", () => $("lock-form").submit()],
-  ["F9", "Planner", openPredictions],
+  ["F9", "DDMRP", openPredictions],
 ];
 
 $("fkeys").replaceChildren(

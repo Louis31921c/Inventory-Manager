@@ -90,7 +90,7 @@ Press `1` to `5` to navigate between tables.
 
 ## Buffers
 
-The MDDRP window sizes a buffer for every article, the demand driven way, out of what the
+The DDMRP window sizes a buffer for every article, the demand driven way, out of what the
 delivery notes already say.
 
 | Zone | What it covers | How it is worked out |
@@ -127,7 +127,7 @@ work than about next month.
 
 ## Predictions
 
-`MDDRP`, at the right of the tabs (or `F9`), opens a window of its own.
+`DDMRP`, at the right of the tabs (or `F9`), opens a window of its own.
 
 | Cell | What it gives you |
 |---|---|
