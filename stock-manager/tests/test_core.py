@@ -83,9 +83,9 @@ def test_save_query_delete(db_path, tmp_path):
 
     csv_path, parquet_path = db.export(db_path, tmp_path / "out")
     csv_lines = csv_path.read_text().splitlines()
-    assert csv_lines[0] == ("article;quantity;supplier;delivery_date;weekday;order_date;site;"
-                            "work_item;backorder;designation;note_id")
-    assert csv_lines[1].startswith("CEMENT 35KG;40.0;ACME SUPPLIES;2026-09-21;Monday;")
+    assert csv_lines[0] == ("note_id;line_no;article;quantity;supplier;delivery_date;weekday;"
+                            "order_date;site;work_item;backorder;designation")
+    assert ";CEMENT 35KG;40.0;ACME SUPPLIES;2026-09-21;Monday;" in csv_lines[1]
     assert "CIM35 - Cement" in csv_lines[1]
     assert parquet_path.stat().st_size > 0
 
@@ -546,6 +546,7 @@ def test_exports_cover_every_dataset(db_path, tmp_path):
     db.save_purchase_order(db_path, {"site": "C", "lines": [{"article": "BOLT M6X30", "quantity": 10}]},
                           "l1", "l.jpg", "ALEX")
     audit.record(db_path, "ALEX", "note.save", "note #1")
+    assert set(db.EXPORTS) == {"inventory", "purchase_orders"}
     for dataset in db.EXPORTS:
         columns, rows = db.export_query(db_path, dataset)
         assert columns, dataset
@@ -553,9 +554,9 @@ def test_exports_cover_every_dataset(db_path, tmp_path):
             out = tmp_path / (dataset + suffix)
             db.export_to_file(db_path, dataset, out)
             assert out.stat().st_size > 0, (dataset, suffix)
-    assert "article" in db.export_query(db_path, "inventory")[0]
-    assert "aliases" in db.export_query(db_path, "vocabulary")[0]
-    assert "user_name" in db.export_query(db_path, "audit")[0]
+    inventory_columns = db.export_query(db_path, "inventory")[0]
+    assert inventory_columns[:3] == ["note_id", "line_no", "article"]
+    assert db.export_query(db_path, "purchase_orders")[0][:3] == ["list_id", "line_no", "article"]
 
 
 def test_storage_reports_sizes(db_path, tmp_path):
@@ -1258,7 +1259,7 @@ def test_planner_routes(tmp_path, monkeypatch):
         assert "Predictions" in client.get("/").text
         page = client.get("/predictions").text
         assert 'id="ask-dots"' in page and 'id="table-movements"' in page
-        assert 'href="/export/safety-stock.xlsx"' in page
+        assert "/export/safety-stock.sql" in page
 
         moves = client.get("/api/movements?period=month").json()
         assert moves["period"] == "month"
@@ -1272,29 +1273,18 @@ def test_planner_routes(tmp_path, monkeypatch):
         half = client.get("/api/movements?period=half").json()
         assert [row["label"] for row in half["rows"]] == ["2026 H2"]
 
-        sheet = client.get("/export/movements.csv?period=month")
-        assert sheet.headers["content-disposition"].endswith('"movements-month.csv"')
-        assert "quantity in" in sheet.text and "2026-09" in sheet.text
-        assert client.get("/export/movements.xlsx?period=week").status_code == 200
-        assert client.get("/export/movements.json").status_code == 404
-        assert client.get("/export/movements.csv?period=decade").status_code == 422
-
-        safety = client.get("/export/safety-stock.csv?lead=10&service=98")
-        assert safety.headers["content-disposition"].endswith('"safety-stock-10d-98pc.csv"')
-        assert "safety stock" in safety.text and "BOLT M6" in safety.text
-        assert client.get("/export/safety-stock.xlsx").status_code == 200
-
         answer = client.post("/api/forecast/draft", json={}, headers=mine)
         assert answer.status_code == 502
         assert "key" in answer.json()["detail"]
 
-        for dataset in db.EXPORTS:
-            for fmt in ("csv", "xlsx", "parquet"):
+        for dataset in ("inventory", "purchase_orders", "safety-stock"):
+            for fmt in ("csv", "xlsx", "sql"):
                 answer = client.get(f"/export/{dataset}.{fmt}")
                 assert answer.status_code == 200, f"{dataset}.{fmt}"
                 assert answer.content, f"{dataset}.{fmt} came back empty"
-        assert client.get("/export.csv").status_code == 200
-        assert client.get("/export.parquet").status_code == 200
+        for gone in ("/export.csv", "/export.parquet", "/export/movements.csv",
+                     "/export/ddmrp.csv", "/export/audit.csv", "/export/inventory.parquet"):
+            assert client.get(gone).status_code == 404, gone
 
         assert client.put("/api/models/key", json={"key": "sk-test"},
                           headers=mine).status_code == 404
@@ -1420,13 +1410,46 @@ def test_buffer_routes(tmp_path, monkeypatch):
         clamped = client.get("/api/ddmrp?cycle=0&horizon=99").json()
         assert clamped["settings"] == {"cycle_days": 1, "horizon_weeks": 26}
 
-        sheet = client.get("/export/ddmrp.csv?cycle=14&horizon=6")
+        sheet = client.get("/export/safety-stock.csv?cycle=14&horizon=6")
         assert sheet.status_code == 200
-        assert sheet.headers["content-disposition"].endswith('"ddmrp-14d-6w.csv"')
+        assert sheet.headers["content-disposition"].endswith('"safety_stock.csv"')
         assert "top of green" in sheet.text and "BOLT M6" in sheet.text
-        assert client.get("/export/ddmrp.xlsx").status_code == 200
+        assert client.get("/export/safety-stock.xlsx").status_code == 200
+
+        dump = client.get("/export/safety-stock.sql").text
+        assert "CREATE SCHEMA IF NOT EXISTS stock;" in dump
+        assert "CREATE TABLE IF NOT EXISTS stock.safety_stock" in dump
+        assert "REFERENCES stock.articles(article)" in dump
+        assert "BEGIN;" in dump and dump.rstrip().endswith("COMMIT;")
 
         page = client.get("/predictions").text
         assert 'id="table-buffers"' in page and 'id="table-chain"' in page
         assert "DDMRP" in page
         assert 'id="table-buffers"' not in client.get("/").text
+
+
+def test_the_sql_dump_loads_into_postgres(tmp_path):
+    from inventory import pg
+
+    rows = [(1, 2, "BOLT M6", 10.5, date(2026, 9, 7), True, None),
+            (2, 3, "O'HARA PLATE", None, None, False, "back\\slash")]
+    columns = (("id", "integer"), ("note_id", "integer"), ("article", "text"),
+               ("quantity", "double precision"), ("delivery_date", "date"),
+               ("backorder", "boolean"), ("designation", "text"))
+    dump = pg.script("inventory_lines", columns, rows, ("id",), "Inventory lines")
+
+    assert dump.startswith("-- Inventory lines")
+    assert "CREATE SCHEMA IF NOT EXISTS stock;" in dump
+    assert "PRIMARY KEY (id)" in dump
+    assert "article text REFERENCES stock.articles(article)" in dump
+    assert "DELETE FROM stock.inventory_lines;" in dump
+    assert "'O''HARA PLATE'" in dump
+    assert "E'back\\\\slash'" in dump
+    assert "'2026-09-07'" in dump and "TRUE" in dump and "NULL" in dump
+    assert dump.count("COMMIT;") == 1
+
+    assert pg.literal(None) == "NULL"
+    assert pg.literal(True) == "TRUE"
+    assert pg.literal(12) == "12"
+    assert pg.literal(date(2026, 1, 2)) == "'2026-01-02'"
+    assert pg.literal("plain") == "'plain'"

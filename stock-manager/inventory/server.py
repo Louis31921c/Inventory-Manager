@@ -13,6 +13,7 @@ import secrets
 import socket
 import subprocess
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -24,7 +25,7 @@ from pydantic import BaseModel
 from dataclasses import replace
 
 from . import (account, alerts, audit, backup, catalog, db, ddmrp, forecast, llm, models_info,
-               vocabulary)
+               pg, vocabulary)
 from .config import load_config
 from .models import Note, parse_date
 
@@ -618,16 +619,6 @@ def read_movements(period: str = "week"):
             }}
 
 
-MOVEMENT_COLUMNS = (("label", "period"), ("in_quantity", "quantity in"), ("in_lines", "lines in"),
-                    ("out_quantity", "quantity out"), ("out_lines", "lines out"), ("net", "net"))
-
-SAFETY_COLUMNS = (("article", "article"), ("supplier", "supplier"), ("per_week", "per week"),
-                  ("spread_per_week", "swing per week"), ("on_hand", "on hand"),
-                  ("on_order", "on order"), ("lead_demand", "lead time demand"),
-                  ("safety_stock", "safety stock"), ("reorder_point", "reorder point"),
-                  ("suggested", "suggested order"), ("state", "state"))
-
-
 def _sheet(request, columns, rows, stem, fmt):
     """One table, out as a file, the same way the other exports go."""
     if fmt not in ("csv", "xlsx"):
@@ -668,22 +659,6 @@ def _sheet(request, columns, rows, stem, fmt):
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
-@app.get("/export/movements.{fmt}")
-def export_movements(request: Request, fmt: str, period: str = "week"):
-    if period not in forecast.PERIODS:
-        raise HTTPException(422, f"Unknown period: {period}.")
-    rows = forecast.movements(config.db_path, period)
-    return _sheet(request, MOVEMENT_COLUMNS, rows, f"movements-{period}", fmt)
-
-
-@app.get("/export/safety-stock.{fmt}")
-def export_safety(request: Request, fmt: str, lead: int = forecast.DEFAULT_LEAD,
-                  service: int = forecast.DEFAULT_SERVICE):
-    lead, service, horizon = _planner_settings(lead, service, forecast.DEFAULT_HORIZON)
-    rows, _ = forecast.articles(config.db_path, lead, service, horizon)
-    return _sheet(request, SAFETY_COLUMNS, rows, f"safety-stock-{lead}d-{service}pc", fmt)
-
-
 def _buffer_settings(cycle, horizon):
     return min(max(int(cycle), 1), 90), min(max(int(horizon), 1), 26)
 
@@ -692,25 +667,6 @@ def _buffer_settings(cycle, horizon):
 def read_ddmrp(cycle: int = ddmrp.DEFAULT_CYCLE, horizon: int = ddmrp.DEFAULT_HORIZON):
     cycle, horizon = _buffer_settings(cycle, horizon)
     return ddmrp.summary(config.db_path, cycle, horizon)
-
-
-BUFFER_COLUMNS = (("article", "article"), ("supplier", "supplier"), ("per_week", "per week"),
-                  ("adu", "per day"), ("lead_days", "lead days"), ("lead_class", "lead"),
-                  ("cv", "swing"), ("variability", "variability"), ("red", "red zone"),
-                  ("yellow", "yellow zone"), ("green", "green zone"),
-                  ("top_of_red", "top of red"), ("top_of_yellow", "top of yellow"),
-                  ("top_of_green", "top of green"), ("on_hand", "on hand"),
-                  ("open_demand", "open demand"), ("net_flow", "net flow"),
-                  ("buffer_share", "buffer %"), ("zone", "zone"), ("to_order", "to order"),
-                  ("state", "this week"), ("spike_risk", "spike risk %"))
-
-
-@app.get("/export/ddmrp.{fmt}")
-def export_ddmrp(request: Request, fmt: str, cycle: int = ddmrp.DEFAULT_CYCLE,
-                 horizon: int = ddmrp.DEFAULT_HORIZON):
-    cycle, horizon = _buffer_settings(cycle, horizon)
-    rows, _, _ = ddmrp.buffers(config.db_path, cycle, horizon)
-    return _sheet(request, BUFFER_COLUMNS, rows, f"ddmrp-{cycle}d-{horizon}w", fmt)
 
 
 @app.get("/api/forecast")
@@ -919,59 +875,67 @@ def _to_xlsx(dataset, name):
         return out.read_bytes()
 
 
+PG_TABLES = {
+    "inventory": ("inventory_lines", "Inventory lines", ("id",), (
+        ("id", "integer"), ("note_id", "integer"), ("line_no", "integer"), ("article", "text"),
+        ("quantity", "double precision"), ("supplier", "text"), ("delivery_date", "date"),
+        ("weekday", "text"), ("order_date", "date"), ("site", "text"), ("work_item", "text"),
+        ("backorder", "boolean"), ("designation", "text"))),
+    "purchase_orders": ("purchase_order_lines", "Purchase order lines", ("id",), (
+        ("id", "integer"), ("list_id", "integer"), ("line_no", "integer"), ("article", "text"),
+        ("list_date", "date"), ("site", "text"), ("work_item", "text"), ("drafter", "text"),
+        ("designation", "text"), ("reference", "text"), ("quantity", "double precision"),
+        ("stock", "double precision"), ("in_stock", "boolean"))),
+    "safety-stock": ("safety_stock", "Safety stock watch", ("article",), (
+        ("article", "text"), ("supplier", "text"), ("per_week", "double precision"),
+        ("adu", "double precision"), ("lead_days", "double precision"), ("lead_class", "text"),
+        ("cv", "double precision"), ("variability", "text"), ("red", "double precision"),
+        ("yellow", "double precision"), ("green", "double precision"),
+        ("top_of_red", "double precision"), ("top_of_yellow", "double precision"),
+        ("top_of_green", "double precision"), ("on_hand", "double precision"),
+        ("open_demand", "double precision"), ("net_flow", "double precision"),
+        ("buffer_share", "double precision"), ("zone", "text"), ("to_order", "integer"),
+        ("state", "text"), ("spike_risk", "double precision"))),
+}
+
+FORMATS = ("csv", "xlsx", "sql")
+
+
+def _rows_for(dataset, cycle, horizon):
+    """The three downloads, every one of them keyed so they can be joined again."""
+    table, title, key, columns = PG_TABLES[dataset]
+    if dataset == "safety-stock":
+        rows, _, _ = ddmrp.buffers(config.db_path, cycle, horizon)
+        data = [[row.get(name) for name, _ in columns] for row in rows]
+    else:
+        names, fetched = db.export_query(config.db_path, dataset)
+        order = [names.index(name) for name, _ in columns if name != "id"]
+        data = [[number] + [row[at] for at in order]
+                for number, row in enumerate(fetched, 1)]
+    return table, title, key, columns, data
+
+
 @app.get("/export/{dataset}.{fmt}")
-def export_dataset(request: Request, dataset: str, fmt: str):
-    if dataset not in db.EXPORTS:
+def export_dataset(request: Request, dataset: str, fmt: str,
+                   cycle: int = ddmrp.DEFAULT_CYCLE, horizon: int = ddmrp.DEFAULT_HORIZON):
+    if dataset not in PG_TABLES:
         raise HTTPException(404, f"Unknown dataset: {dataset}.")
-    if fmt not in ("csv", "xlsx", "parquet"):
+    if fmt not in FORMATS:
         raise HTTPException(404, f"Unknown format: {fmt}.")
 
-    name = f"{dataset}.{fmt}"
-    if fmt == "xlsx":
-        body = _to_xlsx(dataset, name)
-        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    else:
-        with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / name
-            db.export_to_file(config.db_path, dataset, out)
-            body = out.read_bytes()
-        media = "text/csv; charset=utf-8" if fmt == "csv" else "application/vnd.apache.parquet"
-        if fmt == "csv":
-            body = "﻿".encode() + body 
+    cycle, horizon = _buffer_settings(cycle, horizon)
+    table, title, key, columns, rows = _rows_for(dataset, cycle, horizon)
+    name = f"{table}.{fmt}"
 
-    event(request, "export", name)
-    return Response(body, media_type=media,
-                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+    if fmt == "sql":
+        body = pg.script(table, columns, rows, key, f"{title}, {date.today().isoformat()}")
+        event(request, "export", name)
+        return Response(body.encode(), media_type="application/sql",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
-
-@app.get("/export.csv")
-def export_csv(request: Request):
-    columns, rows = db.export_query(config.db_path, "inventory")
-    lines = [";".join(columns)]
-    for row in rows:
-        cells = []
-        for value in row:
-            if value is None:
-                cells.append("")
-            elif isinstance(value, bool):
-                cells.append("1" if value else "0")
-            else:
-                cells.append(str(_json(value)).replace(";", ","))
-        lines.append(";".join(cells))
-    event(request, "export", "inventory_lines.csv")
-    return Response("﻿" + "\n".join(lines), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": 'attachment; filename="inventory_lines.csv"'})
-
-
-@app.get("/export.parquet")
-def export_parquet(request: Request):
-    with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "inventory_lines.parquet"
-        db.export_to_file(config.db_path, "inventory", out)
-        body = out.read_bytes()
-    event(request, "export", "inventory_lines.parquet")
-    return Response(body, media_type="application/vnd.apache.parquet",
-                    headers={"Content-Disposition": 'attachment; filename="inventory_lines.parquet"'})
+    names = [name for name, _ in columns]
+    headers = tuple((name, name.replace("_", " ")) for name in names)
+    return _sheet(request, headers, [dict(zip(names, row)) for row in rows], table, fmt)
 
 
 class Question(BaseModel):

@@ -191,9 +191,6 @@
       <button class="mini period" id="period-month" aria-pressed="false">per month</button>
       <button class="mini period" id="period-half" aria-pressed="false">per 6 months</button>
       <span class="grow"></span>
-      <a class="mini" id="movements-csv" href="/export/movements.csv?period=week">export csv</a>
-      <a class="mini" id="movements-xlsx" href="/export/movements.xlsx?period=week">export xlsx</a>
-      <a class="mini" id="safety-xlsx" href="/export/safety-stock.xlsx">safety stock xlsx</a>
     </div>
     <div class="scroll-x"><table id="table-movements"></table></div>
   </div>
@@ -214,10 +211,13 @@
       </label>
       <span class="grow"></span>
       <label class="field narrow" style="justify-content: flex-end">
-        <a class="mini" id="buffer-csv" href="/export/ddmrp.csv">export csv</a>
+        <a class="mini" id="buffer-csv" href="/export/safety-stock.csv">export csv</a>
       </label>
       <label class="field narrow" style="justify-content: flex-end">
-        <a class="mini" id="buffer-xlsx" href="/export/ddmrp.xlsx">export xlsx</a>
+        <a class="mini" id="buffer-xlsx" href="/export/safety-stock.xlsx">export xlsx</a>
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <a class="mini" id="buffer-sql" href="/export/safety-stock.sql">export sql</a>
       </label>
     </div>
     <div class="row tight">
@@ -456,8 +456,6 @@ function renderMovements() {
   for (const name of ["week", "month", "half"]) {
     $(`period-${name}`).setAttribute("aria-pressed", String(name === period));
   }
-  $("movements-csv").href = `/export/movements.csv?period=${period}`;
-  $("movements-xlsx").href = `/export/movements.xlsx?period=${period}`;
 }
 
 let buffers = null;
@@ -530,8 +528,9 @@ function drawBuffers() {
     `${chain.transitions} week to week move(s) counted.`);
 
   const { cycle, horizon } = bufferRules();
-  $("buffer-csv").href = `/export/ddmrp.csv?cycle=${cycle}&horizon=${horizon}`;
-  $("buffer-xlsx").href = `/export/ddmrp.xlsx?cycle=${cycle}&horizon=${horizon}`;
+  for (const [id, fmt] of [["buffer-csv", "csv"], ["buffer-xlsx", "xlsx"], ["buffer-sql", "sql"]]) {
+    $(id).href = `/export/safety-stock.${fmt}?cycle=${cycle}&horizon=${horizon}`;
+  }
 }
 
 async function renderBuffers() {
@@ -707,9 +706,9 @@ const FKEYS = [
   ["F2", "Week", () => showPeriod("week")],
   ["F3", "Month", () => showPeriod("month")],
   ["F4", "6 months", () => showPeriod("half")],
-  ["F5", "Export CSV", () => download($("movements-csv").href)],
-  ["F6", "Export XLSX", () => download($("movements-xlsx").href)],
-  ["F7", "Safety stock", () => download($("safety-xlsx").href)],
+  ["F5", "Export CSV", () => download($("buffer-csv").href)],
+  ["F6", "Export XLSX", () => download($("buffer-xlsx").href)],
+  ["F7", "Export SQL", () => download($("buffer-sql").href)],
   ["F8", "Ask Dots", () => $("ask-dots").click()],
   ["F9", "Main menu", backToMain],
 ];

@@ -90,6 +90,49 @@ Press `1` to `5` to navigate between tables.
 
 
 
+## Downloads
+
+Three tables come out of the app, and they are the same three everywhere: the Settings tab,
+and the buffers card in the DDMRP window.
+
+| Download | What is in it | Key |
+|---|---|---|
+| Inventory lines | every line of every delivery note | `id`, with `note_id` and `line_no` as they were read |
+| Purchase order lines | every line of every stored purchase order, with its sheet | `id`, with `list_id` and `line_no` |
+| Safety stock watch | one row per article: rate, lead time, zones, net flow, what to order | `article` |
+
+Each one comes as `csv`, `xlsx` or `sql`.
+
+### Querying them in psql
+
+The `sql` files are plain PostgreSQL. Every one of them creates the `stock` schema if it is
+missing, creates its own table if it is missing, empties that table and fills it again, so a
+file can be loaded as often as you like without piling rows up.
+
+```
+createdb workshop
+psql -d workshop -f inventory_lines.sql
+psql -d workshop -f purchase_order_lines.sql
+psql -d workshop -f safety_stock.sql
+```
+
+The three relate through `stock.articles`, a one column table every file tops up and every line
+points at, so the tables can be loaded in any order and joined straight away:
+
+```sql
+SELECT a.article,
+       sum(i.quantity)     AS received,
+       sum(p.quantity)     AS asked_for,
+       max(s.top_of_green) AS buffer_top,
+       max(s.zone)         AS zone
+FROM stock.articles a
+LEFT JOIN stock.inventory_lines i      ON i.article = a.article
+LEFT JOIN stock.purchase_order_lines p ON p.article = a.article
+LEFT JOIN stock.safety_stock s         ON s.article = a.article
+GROUP BY a.article
+ORDER BY received DESC NULLS LAST;
+```
+
 ## Buffers
 
 The DDMRP window sizes a buffer for every article, the demand driven way, out of what the
@@ -125,7 +168,7 @@ pair of states never seen together still gets a small chance rather than zero, a
 honest about thin history: with a few weeks of notes the chain says more about the shape of the
 work than about next month.
 
-`export csv` and `export xlsx` take the whole table out, zones, factors and all.
+`export csv`, `export xlsx` and `export sql` take the whole table out, zones, factors and all.
 
 ## Predictions
 
@@ -205,6 +248,7 @@ device` to the Admin. Repeats are muted.
 | `inventory/cli.py` | the commands |
 | `inventory/screen.py` | the character grid both the terminal and the screenshots draw into |
 | `inventory/db.py` | DuckDB storage and exports |
+| `inventory/pg.py` | the PostgreSQL dumps |
 | `inventory/llm.py` | the model backends, Dots among them |
 | `inventory/forecast.py` | rates, safety stock, reorder points, shortage risk |
 | `inventory/ddmrp.py` | buffer zones, lead times, the demand chain |

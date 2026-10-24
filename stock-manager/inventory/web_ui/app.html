@@ -1441,12 +1441,9 @@ function renderOrders() {
 }
 
 const DATASETS = [
-  ["stock", "Stock per article"],
-  ["inventory", "Inventory (lines)"],
-  ["purchase_orders", "Purchase orders"],
-  ["catalog", "Supplier lines"],
-  ["vocabulary", "Article vocabulary"],
-  ["audit", "Audit trail"],
+  ["inventory", "Inventory lines"],
+  ["purchase_orders", "Purchase order lines"],
+  ["safety-stock", "Safety stock watch"],
 ];
 
 function renderExport() {
@@ -1457,7 +1454,7 @@ function renderExport() {
     { label: "Data", cell: ([, label]) => el("strong", { textContent: label }) },
     { label: "CSV", cell: ([dataset]) => link(dataset, "csv") },
     { label: "XLSX", cell: ([dataset]) => link(dataset, "xlsx") },
-    { label: "Parquet", cell: ([dataset]) => link(dataset, "parquet") },
+    { label: "PostgreSQL", cell: ([dataset]) => link(dataset, "sql") },
   ], DATASETS, "");
 }
 
@@ -1815,8 +1812,8 @@ const FKEYS = [
   }],
   ["F3", "Inventory", () => openTab("inventory")],
   ["F4", "Orders", () => openTab("orders")],
-  ["F5", "Export CSV", () => { window.location.href = "/export.csv"; }],
-  ["F6", "Export Parquet", () => { window.location.href = "/export.parquet"; }],
+  ["F5", "Export CSV", () => { window.location.href = "/export/inventory.csv"; }],
+  ["F6", "Export SQL", () => { window.location.href = "/export/inventory.sql"; }],
   ["F7", "Exit", () => $("quit-form").submit()],
   ["F8", "Remember me", () => $("lock-form").submit()],
   ["F9", "DDMRP", openPredictions],

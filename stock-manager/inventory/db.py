@@ -9,8 +9,8 @@ from .models import normalize_name
 
 ROW_COLUMNS = ("article", "quantity", "supplier", "delivery_date", "order_date", "site",
                "work_item", "backorder", "designation")
-EXPORT_COLUMNS = ("article", "quantity", "supplier", "delivery_date", "weekday", "order_date",
-                  "site", "work_item", "backorder", "designation", "note_id")
+EXPORT_COLUMNS = ("note_id", "line_no", "article", "quantity", "supplier", "delivery_date",
+                  "weekday", "order_date", "site", "work_item", "backorder", "designation")
 LIST_COLUMNS = ("list_date", "site", "work_item", "drafter", "image_sha256", "image_path",
                 "created_by")
 LIST_LINE_COLUMNS = ("list_id", "line_no", "article", "designation", "reference", "quantity",
@@ -169,26 +169,12 @@ def save_stock_count(db_path, article, quantity, user=None):
 
 EXPORTS = {
     "inventory": "SELECT " + ", ".join(EXPORT_COLUMNS)
-                  + " FROM inventory_lines ORDER BY delivery_date, note_id",
-    "stock": """SELECT article, sum(quantity) AS quantity, max(delivery_date) AS last_delivery,
-                           arg_max(supplier, delivery_date) AS supplier,
-                           arg_max(site, delivery_date) AS site,
-                           arg_max(work_item, delivery_date) AS work_item,
-                           count(*) AS lines, count(*) FILTER (backorder) AS backorders
-                    FROM inventory_lines GROUP BY article ORDER BY article""",
-    "purchase_orders": """SELECT h.list_id, h.list_date, h.site, h.work_item, h.drafter,
-                          l.line_no, l.article, l.designation, l.quantity, l.stock, l.in_stock
+                  + " FROM inventory_lines ORDER BY note_id, line_no",
+    "purchase_orders": """SELECT h.list_id, l.line_no, l.article, h.list_date, h.site,
+                                 h.work_item, h.drafter, l.designation, l.reference, l.quantity,
+                                 l.stock, l.in_stock
                    FROM purchase_orders h JOIN purchase_order_lines l USING (list_id)
-                   ORDER BY h.list_date DESC NULLS LAST, h.list_id, l.line_no""",
-    "catalog": "SELECT article, supplier, reference, designation, seen FROM catalog "
-               "ORDER BY article",
-    "vocabulary": """SELECT n.article, n.seen, n.source, n.first_seen, n.last_seen,
-                            coalesce(string_agg(a.alias, ', ' ORDER BY a.alias), '') AS aliases
-                     FROM article_names n LEFT JOIN article_aliases a ON a.article = n.article
-                     GROUP BY n.article, n.seen, n.source, n.first_seen, n.last_seen
-                     ORDER BY n.seen DESC, n.article""",
-    "audit": """SELECT event_id, happened_at, user_name, action, target, detail, address
-                FROM audit ORDER BY event_id""",
+                   ORDER BY h.list_id, l.line_no""",
 }
 
 
