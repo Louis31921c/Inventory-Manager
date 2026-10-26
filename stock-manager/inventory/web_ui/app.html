@@ -1,292 +1,56 @@
 <meta charset="utf-8">
-<title>Inventory management</title>
-<style>
-  @font-face {
-    font-display: swap;
-    font-family: "Cascadia Mono Web";
-    font-weight: 200 700;
-    src: url("/fonts/CascadiaMono.woff2") format("woff2-variations"),
-         url("/fonts/CascadiaMono.woff2") format("woff2");
-  }
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Manager</title>
+<link rel="stylesheet" href="/sap.css">
 
-  :root {
-    --ground: #000000;
-    --surface-2: #030a05;
-    --ink: #39ff14;
-    --bright: #7dff5c;
-    --muted: #1c9c10;
-    --line: #10600a;
-    --line-strong: #1c9c10;
-    --green-soft: #08240a;
-    --accent-soft: #08240a;
-    --backorder: #7dff5c;
-    --tab-blue: #5f5fff;
-    --tab-blue-bright: #8f8fff;
-    --ral9003: #f4f4f4;
-    --ral9016: #fbfdfd;
-    --head-wash: rgba(251, 253, 253, .10);
-    --mono: "Cascadia Mono Web", "Cascadia Mono", "Cascadia Code", "DejaVu Sans Mono",
-            ui-monospace, Menlo, Consolas, monospace;
-    color-scheme: dark;
-  }
+<div class="titlebar">
+  <span class="mark">SM</span>
+  <span>Stock Manager &mdash; Inventory &amp; Procurement (Production)</span>
+  <span class="spacer"></span>
+  <span class="who" id="who"></span>
+</div>
 
-  body {
-    background: var(--ground);
-    color: var(--ink);
-    font-family: var(--mono);
-    font-size: 14px;
-    line-height: 1.55;
-    margin: 0 auto;
-    max-width: 960px;
-    padding: 0 16px 48px;
-  }
-  ::selection { background: var(--ink); color: #000; }
-  h1, h2 { font-weight: 700; margin: 0; }
-  h1 { font-size: 19px; text-transform: uppercase; }
-  h2 { color: var(--bright); font-size: 15px; }
-  h2::before { color: var(--ink); content: "> "; }
-  p { margin: 0; }
-  .eyebrow {
-    color: var(--muted); font-size: 11px; font-weight: 500;
-    letter-spacing: .18em; text-transform: uppercase;
-  }
-  .eyebrow::before { color: var(--line-strong); content: "-- "; }
+<nav class="menubar" aria-label="Menu">
+  <button type="button" id="menu-note">Note</button>
+  <button type="button" id="menu-inventory">Inventory</button>
+  <button type="button" id="menu-orders">Purchase orders</button>
+  <button type="button" id="menu-goto">Goto</button>
+  <button type="button" id="menu-system">System</button>
+  <button type="button" id="menu-help">Help</button>
+</nav>
 
-  header.page {
-    align-items: baseline; border-bottom: 1px solid var(--line); display: flex;
-    flex-wrap: wrap; gap: 4px 12px; margin-bottom: 4px; padding-block: 16px 9px;
-  }
-  header.page .count { color: var(--muted); font-size: 12px; }
-  header.page form { display: inline; }
-  header.page .count::after {
-    animation: blink 1.1s steps(1) infinite; color: var(--ink); content: " \2588";
-  }
-  @keyframes blink { 50% { opacity: 0; } }
-
-  nav.tabs {
-    background: var(--ground); display: flex; overflow-x: auto; padding-block: 8px;
-    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
-  }
-  .tab {
-    background: none; border: 1px solid transparent; color: var(--tab-blue); cursor: pointer;
-    font-family: var(--mono); font-size: 14px; padding: 4px 14px; white-space: nowrap;
-  }
-  .tab::before { content: "["; }
-  .tab::after { content: "]"; }
-  .tab:hover { color: var(--tab-blue-bright); }
-  .tab[aria-selected="true"], .tab[aria-selected="true"]:hover {
-    background: var(--tab-blue); color: #000;
-  }
-
-  [hidden] { display: none !important; }
-  section.panel { display: flex; flex-direction: column; gap: 14px; }
-  .card { border: 1px solid var(--line-strong); padding: 14px 16px; }
-  .card > * + * { margin-top: 10px; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; }
-  .row.tight { gap: 6px; }
-  .grow { flex: 1 1 180px; min-width: 0; }
-
-  button.action {
-    background: var(--accent-soft); border: 1px solid var(--ink); color: var(--ink);
-    cursor: pointer; font-family: var(--mono); font-size: 14px; font-weight: 500;
-    padding: 7px 14px; text-transform: uppercase;
-  }
-  button.action::before { content: "> "; }
-  button.action:hover { background: var(--ink); color: #000; }
-  button.action.ghost { background: none; border-color: var(--line-strong); color: var(--muted); }
-  button.action.ghost:hover { background: none; border-color: var(--ink); color: var(--ink); }
-  button.action[disabled] { cursor: not-allowed; opacity: .4; }
-  button.action[disabled]:hover { background: var(--accent-soft); color: var(--ink); }
-
-  .mini {
-    background: none; border: 1px solid var(--line-strong); color: var(--muted); cursor: pointer;
-    font-family: var(--mono); font-size: 12px; padding: 2px 8px;
-  }
-  .mini:hover { background: var(--ink); border-color: var(--ink); color: #000; }
-  a.mini { display: inline-block; text-decoration: none; }
-  :focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
-
-  label.field { display: flex; flex-direction: column; gap: 2px; }
-  label.field > span {
-    color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
-  }
-  label.field > span::before { color: var(--ink); content: "$ "; }
-  label.field.narrow { max-width: 160px; }
-  input, select, textarea {
-    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--bright);
-    font-family: var(--mono); font-size: 14px; padding: 7px 9px; width: 100%;
-  }
-  input:not([type]), input[type="text"], input[type="search"], textarea {
-    text-transform: uppercase;
-  }
-  input:focus, select:focus, textarea:focus { border-color: var(--ink); outline: none; }
-  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .7; }
-  textarea { min-height: 70px; resize: vertical; }
-  input[type="checkbox"] { accent-color: var(--ink); width: auto; }
-  input[type="date"] { color-scheme: dark; }
-
-  select.replaced { display: none; }
-  .dropdown { position: relative; }
-  .dd-toggle {
-    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--ink);
-    cursor: pointer; font-family: var(--mono); font-size: 14px; padding: 7px 28px 7px 9px;
-    text-align: left; width: 100%;
-  }
-  .dd-toggle::after { content: "\25BC"; font-size: 10px; position: absolute; right: 9px; top: 9px; }
-  .dd-toggle[aria-expanded="true"], .dd-toggle:focus { border-color: var(--ink); outline: none; }
-  .dd-list {
-    background: #000; border: 1px solid var(--ink); left: 0; list-style: none; margin: 0;
-    max-height: 260px; overflow-y: auto; padding: 0; position: absolute; right: 0; top: 100%;
-    z-index: 20;
-  }
-  .dd-list li {
-    cursor: pointer; overflow: hidden; padding: 5px 9px; text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .dd-list li[aria-selected="true"]::before { content: "> "; }
-  .dd-list li:hover, .dd-list li.active { background: var(--ink); color: #000; }
-
-  .file-drop {
-    align-items: center; background: var(--surface-2); border: 1px dashed var(--line-strong);
-    cursor: pointer; display: flex; gap: 12px; padding: 12px;
-  }
-  .file-drop:hover { border-color: var(--ink); }
-  .file-drop input[type="file"] { display: none; }
-  .thumb { border: 1px solid var(--line-strong); max-height: 76px; }
-
-  .lines { display: flex; flex-direction: column; gap: 6px; }
-  .line {
-    align-items: center; background: var(--surface-2); border: 1px solid var(--line);
-    display: grid; gap: 4px 10px; grid-template-columns: 26px minmax(0, 1fr) 92px auto auto;
-    padding: 8px 10px;
-  }
-  .line .num { font-size: 12px; }
-  .line .num::before { content: "["; }
-  .line .num::after { content: "]"; }
-  .line .desig { color: var(--muted); font-size: 12px; grid-column: 2 / -1; overflow-wrap: anywhere; }
-  .rel {
-    align-items: center; color: var(--muted); display: flex; font-size: 12px; gap: 5px;
-    white-space: nowrap;
-  }
-  .rel:hover { color: var(--ink); }
-  @media (max-width: 560px) {
-    .line { grid-template-columns: 26px minmax(0, 1fr) auto; }
-    .line .qty-wrap { grid-column: 2; }
-    .line .rel { grid-column: 3; }
-  }
-
-  table { border-collapse: collapse; font-size: 13px; width: 100%; }
-  .scroll-x { overflow-x: auto; }
-  .short-box { max-height: 210px; overflow-y: auto; }
-  .short-box thead th { background: var(--ground); position: sticky; top: 0; }
-  th {
-    background: var(--head-wash); border-bottom: 1px solid var(--line-strong);
-    color: var(--ral9016); font-size: 11px; font-weight: 700; letter-spacing: .1em;
-    padding: 5px 14px 5px 8px; text-align: left; text-transform: uppercase; white-space: nowrap;
-  }
-  td { padding: 5px 14px 5px 0; vertical-align: top; }
-  td.num { font-variant-numeric: tabular-nums; padding-right: 18px; text-align: right; white-space: nowrap; }
-  tbody tr:hover { background: var(--green-soft); }
-  tbody strong { color: var(--bright); font-weight: 700; }
-
-  .sheet { border-top: 1px solid var(--line); padding-top: 10px; }
-  .sheet + .sheet { margin-top: 14px; }
-  .sheet-title { align-items: baseline; display: flex; flex-wrap: wrap; gap: 4px 12px; }
-  .sheet-line {
-    align-items: center; display: grid; gap: 4px 10px;
-    grid-template-columns: 26px minmax(0, 1fr) 70px auto; padding: 4px 0;
-  }
-  .sheet-body { align-items: flex-start; display: flex; gap: 12px; }
-  .sheet-body .scroll-x { flex: 1 1 auto; min-width: 0; }
-  .stock-rail { display: flex; flex: 0 0 auto; flex-direction: column; }
-  .stock-rail .rail-head, .stock-rail .rail-row { align-items: center; display: flex; }
-  .order-table td { vertical-align: middle; }
-
-  .stock-choice { display: flex; gap: 4px; }
-  .stock-choice button {
-    background: none; border: 1px solid var(--line); color: var(--muted); cursor: pointer;
-    font-family: var(--mono); font-size: 12px; padding: 1px 8px; white-space: nowrap;
-  }
-  .stock-choice button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #000; }
-  .stock-choice button:hover { border-color: var(--ink); }
-
-  input.cell {
-    background: none; border: 1px solid transparent; color: var(--ink); font: inherit;
-    padding: 1px 4px; width: 100%;
-  }
-  input.cell:hover { border-color: var(--line); }
-  input.cell:focus { background: var(--surface-2); border-color: var(--ink); outline: none; }
-  input.cell.saved { border-color: var(--ink); }
-
-  .graph { align-items: flex-end; display: flex; gap: 3px; height: 54px; margin: 4px 0 2px; }
-  .graph .bar { background: var(--ink); flex: 1 1 auto; max-width: 18px; min-height: 1px; }
-  .graph .bar.bad { background: var(--backorder); }
-  .graph-legend { color: var(--muted); font-size: 11.5px; }
-
-  .pill {
-    border: 1px solid currentColor; display: inline-block; font-size: 10.5px; letter-spacing: .08em;
-    padding: 0 5px; text-transform: uppercase;
-  }
-  .pill.backorder { color: var(--backorder); }
-  .dot {
-    border-radius: 50%; display: inline-block; height: 9px; margin-right: 9px; width: 9px;
-  }
-  .dot.ready { background: var(--ink); box-shadow: 0 0 6px var(--ink); }
-  .dot.configured { background: var(--muted); }
-  .dot.missing, .dot.unsupported { background: none; border: 1px solid var(--line-strong); }
-  .model { align-items: baseline; display: flex; gap: 10px; padding: 3px 0; }
-  .model .detail { color: var(--muted); font-size: 12.5px; }
-  .model .spacer { flex: 1 1 auto; }
-  .model.current strong { color: var(--bright); }
-  .pill.shared { color: var(--ink); }
-
-  .notice { border-left: 2px solid var(--line-strong); font-size: 13px; padding: 6px 10px; }
-  .notice::before { color: var(--ink); content: "> "; }
-  .notice.warn { border-color: var(--backorder); color: var(--backorder); }
-  .notice.bad { border-color: var(--ink); color: var(--ink); }
-  .notice.bad::before { content: "[x] "; }
-  .notice.ok { border-color: var(--ink); }
-  .muted { color: var(--muted); }
-
-  .sql {
-    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
-    font-family: var(--mono); font-size: 12.5px; overflow-x: auto; padding: 9px 10px;
-    white-space: pre-wrap;
-  }
-  .fkeys {
-    border-top: 1px solid var(--line-strong); display: flex; flex-wrap: wrap; gap: 2px 18px;
-    padding-top: 6px;
-  }
-  .fkey {
-    background: none; border: 0; color: var(--ink); cursor: pointer; font-family: var(--mono);
-    font-size: 13px; padding: 1px 0; white-space: nowrap;
-  }
-  .fkey b { background: var(--ink); color: #000; font-weight: 400; padding: 0 3px; }
-  .fkey span { color: var(--ral9003); }
-  .fkey:hover span, .fkey:focus-visible span { text-decoration: underline; }
-  .fkeys .license { color: var(--muted); margin-left: auto; text-decoration: none; }
-  .fkeys .license:hover { color: var(--ink); text-decoration: underline; }
-
-  .spin { animation: spin 1s steps(8) infinite; display: inline-block; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) {
-    .spin, header.page .count::after { animation: none; }
-  }
-</style>
-
-<header class="page">
-  <h1>Inventory manager</h1>
-  <span class="count" id="headline-count">...</span>
-  <span class="grow"></span>
-  <span class="muted" id="who"></span>
+<div class="toolbar">
+  <input class="command" id="command" placeholder="/n transaction" autocomplete="off"
+         aria-label="Command field">
+  <button class="tool go" type="button" id="command-run" title="Enter (F2)"></button>
+  <span class="sep"></span>
+  <button class="tool" type="button" id="tool-refresh" title="Refresh (F1)">Refresh</button>
+  <button class="tool" type="button" id="tool-find" title="Find (F3)">Find</button>
+  <button class="tool" type="button" id="tool-export" title="Export CSV (F5)">Export</button>
+  <button class="tool" type="button" id="tool-planner" title="DDMRP buffers (F9)">DDMRP</button>
+  <span class="sep"></span>
   <form method="post" action="/lock" id="lock-form">
-    <button class="mini" type="submit">Remember me</button>
+    <button class="tool" type="submit" title="Lock the session (F8)">Lock</button>
   </form>
   <form method="post" action="/exit" id="quit-form">
-    <button class="mini" type="submit">Exit</button>
+    <button class="tool stop" type="submit" title="Exit (F7)">Exit</button>
   </form>
-</header>
+</div>
 
+<div class="screen-title">Delivery notes, inventory lines and purchase orders</div>
+
+<div class="workspace">
+<aside class="tree" aria-label="Navigation">
+  <div class="tree-head">Stock Manager</div>
+  <button type="button" data-goes="capture" aria-current="true">New note</button>
+  <button type="button" data-goes="inventory">Inventory <span class="count" id="tree-lines"></span></button>
+  <button type="button" data-goes="query">SQL</button>
+  <button type="button" data-goes="orders">Purchase orders <span class="count" id="tree-orders"></span></button>
+  <button type="button" data-goes="settings">Settings</button>
+  <button type="button" id="tree-planner">DDMRP buffers</button>
+</aside>
+
+<div class="work">
 <nav class="tabs" role="tablist">
   <button class="tab" id="tab-capture" role="tab" aria-selected="true" aria-controls="panel-capture">New note</button>
   <button class="tab" id="tab-inventory" role="tab" aria-selected="false" aria-controls="panel-inventory">Inventory</button>
@@ -481,6 +245,16 @@
   </div>
 </section>
 
+</div>
+</div>
+
+<div class="statusbar">
+  <span class="field lamp" id="status-text">Ready</span>
+  <span class="field grow" id="headline-count"></span>
+  <span class="field">STOCK MANAGER</span>
+  <span class="field" id="status-user"></span>
+</div>
+
 <nav class="fkeys" id="fkeys" aria-label="Function keys"></nav>
 
 <script>
@@ -596,7 +370,9 @@ function openTab(name) {
     const on = other === name;
     $(`tab-${other}`).setAttribute("aria-selected", String(on));
     $(`panel-${other}`).hidden = !on;
-    if (on) $(`panel-${other}`).append($("fkeys"));
+  }
+  for (const node of document.querySelectorAll(".tree button[data-goes]")) {
+    node.setAttribute("aria-current", String(node.dataset.goes === name));
   }
   try {
     localStorage.setItem("tab", name);
@@ -605,6 +381,60 @@ function openTab(name) {
 }
 
 for (const name of TABS) $(`tab-${name}`).addEventListener("click", () => openTab(name));
+
+for (const node of document.querySelectorAll(".tree button[data-goes]")) {
+  node.addEventListener("click", () => openTab(node.dataset.goes));
+}
+
+function say(message, kind = "") {
+  const field = $("status-text");
+  field.textContent = message;
+  field.style.color = kind === "bad" ? "#b00020" : "";
+}
+
+const COMMANDS = {
+  "/n": "capture", note: "capture", capture: "capture", inventory: "inventory",
+  stock: "inventory", sql: "query", query: "query", orders: "orders", po: "orders",
+  settings: "settings", ddmrp: "ddmrp", buffers: "ddmrp", planner: "ddmrp",
+};
+
+function runCommand() {
+  const typed = $("command").value.trim().toLowerCase().replace(/^\/n\s*/, "");
+  if (!typed) return;
+  const where = COMMANDS[typed];
+  if (!where) {
+    say(`Transaction ${typed.toUpperCase()} does not exist`, "bad");
+    return;
+  }
+  $("command").value = "";
+  if (where === "ddmrp") {
+    openPredictions();
+    say("DDMRP buffers opened");
+    return;
+  }
+  openTab(where);
+  say(`Screen ${where.toUpperCase()}`);
+}
+
+$("command-run").addEventListener("click", runCommand);
+$("command").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    runCommand();
+  }
+});
+
+$("tool-refresh").addEventListener("click", () => { say("Refreshing..."); refresh(); });
+$("tool-find").addEventListener("click", () => { openTab("inventory"); $("q-search").focus(); });
+$("tool-export").addEventListener("click", () => { window.location.href = "/export/inventory.csv"; });
+$("tool-planner").addEventListener("click", () => openPredictions());
+$("tree-planner").addEventListener("click", () => openPredictions());
+$("menu-note").addEventListener("click", () => openTab("capture"));
+$("menu-inventory").addEventListener("click", () => openTab("inventory"));
+$("menu-orders").addEventListener("click", () => openTab("orders"));
+$("menu-goto").addEventListener("click", () => openTab("query"));
+$("menu-system").addEventListener("click", () => openTab("settings"));
+$("menu-help").addEventListener("click", () => { window.location.href = "/license"; });
 
 let planner = null;
 
@@ -1849,8 +1679,14 @@ async function refresh() {
     lists = data.lists ?? [];
     flatten();
 
-    $("who").textContent = data.user ? `user ${data.user}` : "";
-    $("headline-count").textContent = `${notes.length} notes · ${rows.length} lines`;
+    const user = data.user ? String(data.user) : "";
+    $("who").textContent = user ? `User ${user}` : "";
+    $("status-user").textContent = user;
+    $("headline-count").textContent =
+      `${notes.length} note(s) · ${rows.length} line(s) · ${lists.length} purchase order(s)`;
+    $("tree-lines").textContent = `(${rows.length})`;
+    $("tree-orders").textContent = `(${lists.length})`;
+    say("Ready");
 
     renderDeliveries();
     renderOrders();
@@ -1862,6 +1698,7 @@ async function refresh() {
     notice($("global-notice"), "", "");
   } catch (e) {
     notice($("global-notice"), "bad", `Server unreachable: ${e.message}`);
+    say(`Server unreachable: ${e.message}`, "bad");
   }
 }
 

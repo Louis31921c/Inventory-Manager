@@ -43,7 +43,7 @@ app = FastAPI(title="Stock manager")
 lock = account.Lock(config.data_dir)
 backend = None
 stopper = None
-OPEN_PATHS = ("/unlock", "/robots.txt")
+OPEN_PATHS = ("/unlock", "/robots.txt", "/sap.css")
 OPEN_PREFIXES = ("/fonts/",)
 WRITING = ("POST", "PUT", "PATCH", "DELETE")
 MAX_UPLOAD = 30 * 1024 * 1024
@@ -272,6 +272,13 @@ def license_page():
     text = (WEB / "LICENSE.txt").read_text(encoding="utf-8")
     page = LICENCE.read_text(encoding="utf-8").replace("LICENCE_JSON", json.dumps(text))
     return HTMLResponse(page)
+
+
+@app.get("/sap.css")
+def stylesheet():
+    return Response((WEB / "sap.css").read_text(encoding="utf-8"),
+                    media_type="text/css; charset=utf-8",
+                    headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/fonts/{name}")

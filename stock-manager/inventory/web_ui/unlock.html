@@ -1,58 +1,64 @@
 <meta charset="utf-8">
-<title>Inventory Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAP Logon - Stock Manager</title>
 <style>
-  @font-face {
-    font-display: swap;
-    font-family: "Cascadia Mono Web";
-    src: url("/fonts/CascadiaMono.woff2") format("woff2");
-  }
-  :root { color-scheme: dark; }
+  @import url("/sap.css");
+
   body {
     align-items: center;
-    background: #000;
-    color: #39ff14;
+    background: linear-gradient(160deg, #e8eaec 0%, #cfd8e3 60%, #b9c8da 100%);
     display: flex;
-    font-family: "Cascadia Mono Web", "DejaVu Sans Mono", ui-monospace, Menlo, Consolas, monospace;
-    font-size: 15px;
     justify-content: center;
-    margin: 0;
     min-height: 100vh;
     padding: 24px;
   }
-  main { width: min(52ch, 100%); }
-  h1 { font-size: 19px; letter-spacing: .04em; margin: 0 0 4px; text-transform: uppercase; }
-  .eyebrow { color: #1c9c10; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
-  .eyebrow::before { color: #10600a; content: "-- "; }
-  form { border: 1px solid #1c9c10; display: flex; flex-direction: column; gap: 10px;
-         margin-top: 14px; padding: 18px 20px; }
-  .row { align-items: baseline; display: flex; }
-  label { color: #1c9c10; white-space: pre; }
-  input {
-    background: none; border: 0; caret-color: #39ff14; color: #7dff5c; flex: 1 1 auto;
-    font: inherit; outline: none; padding: 0;
+  main {
+    background: #fff;
+    border: 1px solid #a6a6a6;
+    box-shadow: 2px 3px 10px rgba(0, 0, 0, .25);
+    width: min(420px, 100%);
   }
+  h1 {
+    background: linear-gradient(180deg, #5b8cc4, #2c5d99);
+    color: #fff;
+    font-size: 13px;
+    margin: 0;
+    padding: 6px 10px;
+  }
+  form { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; }
+  .row { align-items: center; display: flex; gap: 10px; }
+  label { color: #1f3b5c; flex: 0 0 90px; font-size: 12px; }
+  input { flex: 1 1 auto; width: auto; }
   button {
-    align-self: flex-start; background: #08240a; border: 1px solid #39ff14; color: #39ff14;
-    cursor: pointer; font: inherit; margin-top: 4px; padding: 6px 14px; text-transform: uppercase;
+    align-self: flex-start;
+    background: linear-gradient(180deg, #fdfdfd, #dfe2e5);
+    border: 1px solid #8d9196;
+    border-radius: 2px;
+    color: #000;
+    cursor: pointer;
+    font-family: Arial, "Liberation Sans", sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 4px;
+    padding: 4px 16px;
   }
-  button::before { content: "> "; }
-  button:hover { background: #39ff14; color: #000; }
-  .error { border-left: 2px solid #ff6b5e; color: #ff6b5e; margin-top: 12px; padding: 4px 10px; }
-  .hint { color: #1c9c10; margin-top: 14px; }
-  .cursor { animation: blink 1.1s steps(1) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
+  button::before { color: #0a7a2f; content: "\2713 "; }
+  button:hover { background: linear-gradient(180deg, #fff, #cfe0f2); border-color: #1a5fa8; }
+  .error { border-left: 3px solid #b00020; color: #b00020; font-size: 12px; padding: 4px 10px; }
+  .hint { color: #4a4a4a; font-size: 11px; padding: 0 20px 16px; }
+  .cursor { display: none; }
 </style>
 
 <main>
-  <h1>INVENTORY MANAGER</h1>
+  <h1>Stock Manager &mdash; Logon</h1>
   <form method="post" action="/unlock">
     <div class="row">
-      <label for="user">user     : </label>
+      <label for="user">User</label>
       <input id="user" name="user" autocomplete="username"
              autocapitalize="characters" USER_STATE>
     </div>
     <div class="row">
-      <label for="password">password : </label>
+      <label for="password">Password</label>
       <input type="password" id="password" name="password" autocomplete="PASSWORD_MODE"
              required autofocus>
     </div>

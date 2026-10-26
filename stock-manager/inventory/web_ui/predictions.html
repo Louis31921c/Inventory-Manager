@@ -1,178 +1,37 @@
- <meta charset="utf-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DDMRP</title>
-<style>
-  @font-face {
-    font-display: swap;
-    font-family: "Cascadia Mono Web";
-    font-weight: 200 700;
-    src: url("/fonts/CascadiaMono.woff2") format("woff2-variations"),
-         url("/fonts/CascadiaMono.woff2") format("woff2");
-  }
+<link rel="stylesheet" href="/sap.css">
 
-  :root {
-    --ground: #000000;
-    --surface-2: #030a05;
-    --ink: #39ff14;
-    --bright: #7dff5c;
-    --muted: #1c9c10;
-    --line: #10600a;
-    --line-strong: #1c9c10;
-    --green-soft: #08240a;
-    --accent-soft: #08240a;
-    --alarm: #ffb000;
-    --ral9003: #f4f4f4;
-    --ral9016: #fbfdfd;
-    --head-wash: rgba(251, 253, 253, .30);
-    --mono: "Cascadia Mono Web", "Cascadia Mono", "Cascadia Code", "DejaVu Sans Mono",
-            ui-monospace, Menlo, Consolas, monospace;
-    color-scheme: dark;
-  }
+<div class="titlebar">
+  <span class="mark">SM</span>
+  <span>Stock Manager &mdash; DDMRP buffers</span>
+  <span class="spacer"></span>
+  <span class="who">Demand driven planning</span>
+</div>
 
-  body {
-    background: var(--ground);
-    color: var(--ink);
-    font-family: var(--mono);
-    font-size: 14px;
-    line-height: 1.55;
-    margin: 0 auto;
-    max-width: 1100px;
-    padding: 0 16px 40px;
-  }
-  h1, h2 { font-weight: 700; margin: 0; }
-  h1 { font-size: 19px; text-transform: uppercase; }
-  h2 { color: var(--bright); font-size: 15px; }
-  h2::before { color: var(--ink); content: "> "; }
-  p { margin: 0; }
+<nav class="menubar" aria-label="Menu">
+  <button type="button" id="menu-buffers">Buffers</button>
+  <button type="button" id="menu-flow">Flow</button>
+  <button type="button" id="menu-order">Order</button>
+  <button type="button" id="menu-back">Back to main</button>
+</nav>
 
-  header.page {
-    align-items: baseline; border-bottom: 1px solid var(--line); display: flex;
-    flex-wrap: wrap; gap: 4px 12px; margin-bottom: 14px; padding-block: 16px 9px;
-  }
-  header.page .count { color: var(--muted); font-size: 12px; }
-  .grow { flex: 1 1 auto; }
+<div class="toolbar">
+  <button class="tool go" type="button" id="reload" title="Refresh (F1)">Refresh</button>
+  <span class="sep"></span>
+  <button class="tool" type="button" id="tool-week" title="Per week (F2)">Week</button>
+  <button class="tool" type="button" id="tool-month" title="Per month (F3)">Month</button>
+  <button class="tool" type="button" id="tool-half" title="Per 6 months (F4)">6 months</button>
+  <span class="sep"></span>
+  <button class="tool stop" type="button" id="tool-back" title="Back to the main window (F9)">Back</button>
+</div>
 
-  [hidden] { display: none !important; }
-  .cards { display: flex; flex-direction: column; gap: 14px; }
-  .card { border: 1px solid var(--line-strong); padding: 14px 16px; }
-  .card > * + * { margin-top: 10px; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; }
-  .row.tight { gap: 6px; }
-  .side-by-side { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
-  @media (max-width: 820px) { .side-by-side { grid-template-columns: 1fr; } }
-
-  button.action {
-    background: var(--accent-soft); border: 1px solid var(--ink); color: var(--ink);
-    cursor: pointer; font-family: var(--mono); font-size: 14px; font-weight: 500;
-    padding: 7px 14px; text-transform: uppercase;
-  }
-  button.action::before { content: "> "; }
-  button.action:hover { background: var(--ink); color: #000; }
-  button.action.ghost { background: none; border-color: var(--line-strong); color: var(--muted); }
-  button.action.ghost:hover { border-color: var(--ink); color: var(--ink); }
-  button.action[disabled] { cursor: not-allowed; opacity: .4; }
-
-  .mini {
-    background: none; border: 1px solid var(--line-strong); color: var(--muted); cursor: pointer;
-    font-family: var(--mono); font-size: 12px; padding: 2px 8px;
-  }
-  .mini:hover { background: var(--ink); border-color: var(--ink); color: #000; }
-  .mini[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
-  .mini[aria-pressed="true"]::before { content: "> "; }
-  a.mini { display: inline-block; text-decoration: none; }
-  :focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
-
-  label.field { display: flex; flex-direction: column; gap: 2px; }
-  label.field > span {
-    color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
-  }
-  label.field > span::before { color: var(--ink); content: "$ "; }
-  input, select {
-    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--bright);
-    font-family: var(--mono); font-size: 14px; padding: 7px 9px; width: 100%;
-  }
-  input:not([type]), input[type="text"], input[type="search"] { text-transform: uppercase; }
-  input:focus, select:focus { border-color: var(--ink); outline: none; }
-
-  table { border-collapse: collapse; font-size: 13px; width: 100%; }
-  .scroll-x { overflow-x: auto; }
-  .short-box { max-height: 260px; overflow-y: auto; }
-  .short-box thead th { background: var(--ground); position: sticky; top: 0; }
-  th {
-    background: var(--head-wash); border-bottom: 1px solid var(--line-strong);
-    color: var(--ral9016); font-size: 11px; font-weight: 700; letter-spacing: .1em;
-    padding: 5px 12px 5px 8px; text-align: left; text-transform: uppercase; white-space: nowrap;
-  }
-  td { padding: 4px 12px 4px 0; vertical-align: top; }
-  td.num {
-    font-variant-numeric: tabular-nums; padding-right: 16px; text-align: right;
-    white-space: nowrap;
-  }
-  tbody tr:hover { background: var(--green-soft); }
-  tbody strong { color: var(--bright); font-weight: 700; }
-  tfoot th {
-    border-bottom: 0; border-top: 1px solid var(--line-strong); color: var(--ink);
-    padding-top: 6px;
-  }
-  .desig { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
-
-  input.cell {
-    background: none; border: 1px solid transparent; color: var(--ink); font: inherit;
-    padding: 1px 4px; text-align: right; width: 84px;
-  }
-  input.cell:hover { border-color: var(--line); }
-  input.cell:focus { background: var(--surface-2); border-color: var(--ink); outline: none; }
-  input.cell.saved { border-color: var(--ink); }
-
-  .pill {
-    border: 1px solid currentColor; display: inline-block; font-size: 10.5px;
-    letter-spacing: .08em; padding: 0 5px; text-transform: uppercase;
-  }
-  .pill.red { color: #ff6b5e; }
-  .pill.yellow { color: #ffb000; }
-  .pill.green { color: var(--ink); }
-  .pill.over, .pill.uncounted { color: var(--muted); }
-
-  .notice { border-left: 2px solid var(--line-strong); font-size: 13px; padding: 6px 10px; }
-  .notice::before { color: var(--ink); content: "> "; }
-  .notice.warn { border-color: var(--alarm); color: var(--alarm); }
-  .notice.bad { border-color: var(--ink); color: var(--ink); }
-  .notice.bad::before { content: "[x] "; }
-  .muted { color: var(--muted); }
-  .legend { color: var(--muted); font-size: 11.5px; }
-
-  svg { display: block; width: 100%; }
-  svg text { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
-  svg text.value { fill: var(--bright); }
-  svg .axis { stroke: var(--line); stroke-width: 1; }
-  svg rect.bar { fill: var(--ink); }
-  svg rect.track { fill: var(--surface-2); stroke: var(--line); }
-
-  .fkeys {
-    border-top: 1px solid var(--line-strong); display: flex; flex-wrap: wrap; gap: 2px 18px;
-    margin-top: 14px; padding-top: 6px;
-  }
-  .fkey {
-    background: none; border: 0; color: var(--ink); cursor: pointer; font-family: var(--mono);
-    font-size: 13px; padding: 1px 0; white-space: nowrap;
-  }
-  .fkey b { background: var(--ink); color: #000; font-weight: 400; padding: 0 3px; }
-  .fkey span { color: var(--ral9003); }
-  .fkey:hover span, .fkey:focus-visible span { text-decoration: underline; }
-
-  .spin { animation: spin 1s steps(8) infinite; display: inline-block; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
-</style>
-
-<header class="page">
-  <h1>DDMRP</h1>
-  <span class="grow"></span>
-  <button class="mini" id="reload">refresh</button>
-</header>
+<div class="screen-title">Buffer zones, material flow and the demand chain</div>
 
 <div id="top-notice"></div>
 
-<div class="cards">
+<div class="work">
   <div class="side-by-side">
     <div class="card">
       <h2>OUTPUTS</h2>
@@ -256,6 +115,12 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="statusbar">
+  <span class="field lamp" id="status-text">Ready</span>
+  <span class="field grow" id="window-line"></span>
+  <span class="field">DDMRP</span>
 </div>
 
 <nav class="fkeys" id="fkeys" aria-label="Function keys"></nav>
@@ -621,6 +486,17 @@ function load(options) {
 }
 
 $("reload").addEventListener("click", () => load());
+$("tool-back").addEventListener("click", backToMain);
+$("menu-back").addEventListener("click", backToMain);
+$("menu-buffers").addEventListener("click",
+  () => $("table-buffers").scrollIntoView({ block: "start" }));
+$("menu-flow").addEventListener("click",
+  () => $("table-movements").scrollIntoView({ block: "start" }));
+$("menu-order").addEventListener("click",
+  () => $("ask-dots").scrollIntoView({ block: "center" }));
+for (const [id, name] of [["tool-week", "week"], ["tool-month", "month"], ["tool-half", "half"]]) {
+  $(id).addEventListener("click", () => showPeriod(name));
+}
 $("drop-draft").addEventListener("click", () => { draft = null; renderDraft(); });
 
 function showPeriod(name) {
