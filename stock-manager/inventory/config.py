@@ -45,6 +45,23 @@ class SmsConfig:
 
 
 @dataclass(frozen=True)
+class MailConfig:
+    host: str
+    port: int
+    user: str
+    password: str
+    folder: str
+    security: str
+    insecure: bool
+    mark_read: bool
+    every_minutes: int
+
+    @property
+    def enabled(self):
+        return bool(self.host and self.user and self.password)
+
+
+@dataclass(frozen=True)
 class Config:
     backend: str
     gemini_api_key: str
@@ -54,6 +71,7 @@ class Config:
     model: str
     user: str
     sms: SmsConfig
+    mail: MailConfig
 
     @property
     def db_path(self):
@@ -74,6 +92,24 @@ def _sms():
         webhook_url=os.environ.get("SMS_WEBHOOK_URL", "").strip(),
         webhook_token=os.environ.get("SMS_WEBHOOK_TOKEN", "").strip(),
         max_per_hour=int(os.environ.get("SMS_MAX_PER_HOUR", "6")),
+    )
+
+
+def _mail():
+    host = os.environ.get("IMAP_HOST", "").strip()
+    security = os.environ.get("IMAP_SECURITY", "").strip().lower()
+    if security not in ("ssl", "starttls"):
+        security = "starttls" if host in ("127.0.0.1", "localhost") else "ssl"
+    return MailConfig(
+        host=host,
+        port=int(os.environ.get("IMAP_PORT", "1143" if security == "starttls" else "993")),
+        user=os.environ.get("IMAP_USER", "").strip(),
+        password=os.environ.get("IMAP_PASSWORD", ""),
+        folder=os.environ.get("IMAP_FOLDER", "INBOX").strip() or "INBOX",
+        security=security,
+        insecure=os.environ.get("IMAP_INSECURE", "").strip().lower() in ("1", "true", "yes"),
+        mark_read=os.environ.get("IMAP_MARK_READ", "1").strip().lower() not in ("0", "false", "no"),
+        every_minutes=int(os.environ.get("MAIL_EVERY_MINUTES", "15")),
     )
 
 
@@ -115,4 +151,5 @@ def load_config(data_dir=None, user=None):
         model=os.environ.get("LLM_MODEL", ""),
         user=user or _who(),
         sms=_sms(),
+        mail=_mail(),
     )

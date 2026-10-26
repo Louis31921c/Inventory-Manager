@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from inventory import audit, db, llm, vocabulary
-from inventory.config import Config, SmsConfig
+from inventory.config import Config, MailConfig, SmsConfig
 from inventory.models import Line, Note, parse_date
 
 
@@ -29,8 +29,10 @@ def make_config(tmp_path, **kw):
     sms = kw.pop("sms", None) or SmsConfig(provider="none", to="", sender="", account_sid="",
                                            auth_token="", webhook_url="", webhook_token="",
                                            max_per_hour=6)
+    mail = kw.pop("mail", None) or MailConfig(host="", port=993, user="", password="", folder="INBOX",
+                      security="ssl", insecure=False, mark_read=True, every_minutes=15)
     base = dict(backend="claude", gemini_api_key="", openai_api_key="", photo_retention_days=42,
-                data_dir=tmp_path, model="", user="ALEX", sms=sms)
+                data_dir=tmp_path, model="", user="ALEX", sms=sms, mail=mail)
     base.update(kw)
     return Config(**base)
 
@@ -697,12 +699,14 @@ def test_accuracy_is_empty_before_any_reading(db_path):
 
 
 def temp_config(tmp_path):
-    from inventory.config import Config, SmsConfig
+    from inventory.config import Config, MailConfig, SmsConfig
 
     sms = SmsConfig(provider="none", to="", sender="", account_sid="", auth_token="",
                     webhook_url="", webhook_token="", max_per_hour=6)
-    return Config(backend="claude", gemini_api_key="", openai_api_key="", photo_retention_days=42,
-                  data_dir=tmp_path, model="", user="ALEX", sms=sms)
+    return Config(backend="claude", gemini_api_key="", openai_api_key="",
+                  photo_retention_days=42, data_dir=tmp_path, model="", user="ALEX",
+                  sms=sms, mail=MailConfig(host="", port=993, user="", password="", folder="INBOX",
+                      security="ssl", insecure=False, mark_read=True, every_minutes=15))
 
 
 def filled(tmp_path):
@@ -1453,3 +1457,235 @@ def test_the_sql_dump_loads_into_postgres(tmp_path):
     assert pg.literal(12) == "12"
     assert pg.literal(date(2026, 1, 2)) == "'2026-01-02'"
     assert pg.literal("plain") == "'plain'"
+
+
+def test_the_queue_keeps_one_copy_of_each_file(tmp_path):
+    from inventory import intake
+
+    config = make_config(tmp_path)
+    db.init(config.db_path)
+
+    first = intake.add(config, b"%PDF-1.4 note", "Bon de livraison.pdf", "application/pdf")
+    again = intake.add(config, b"%PDF-1.4 note", "copy of the same.pdf", "application/pdf")
+    sheet = intake.add(config, b"article;qty\nBOLT M6;10\n", "lines.csv", "text/csv")
+
+    assert first["duplicate"] is False and again["duplicate"] is True
+    assert again["intake_id"] == first["intake_id"]
+    assert len(intake.waiting(config)) == 2
+    assert intake.counts(config) == {"waiting": 2}
+
+    kinds = {row["name"]: row["kind"] for row in intake.waiting(config)}
+    assert kinds["Bon de livraison.pdf"] == "scan"
+    assert kinds["lines.csv"] == "sheet"
+
+    raw, media_type, item = intake.bytes_of(config, sheet["intake_id"])
+    assert raw.startswith(b"article;") and media_type == "text/csv"
+    assert item["path"].stat().st_mode & 0o777 == 0o600
+
+    with pytest.raises(ValueError):
+        intake.add(config, b"zip", "catalogue.zip", "application/zip")
+
+    intake.mark(config, first["intake_id"], intake.DONE, "note #4")
+    assert len(intake.waiting(config)) == 1
+
+    path = intake.one(config, sheet["intake_id"])["path"]
+    assert intake.drop(config, sheet["intake_id"]) is True
+    assert not path.exists()
+    assert intake.drop(config, 9999) is False
+
+
+def test_a_spreadsheet_becomes_lines(tmp_path):
+    from inventory import sheets
+
+    raw = ("Article;Quantite;Fournisseur;Date livraison;Chantier\n"
+           "bolt m6;500;foussier;2026-09-21;ariane\n"
+           "washer m6;1 200;foussier;21/09/2026;ariane\n"
+           ";80;foussier;2026-09-21;ariane\n"
+           "sheet alu;;metaleco;2026-09-21;ariane\n"
+           "insert m6;12;metaleco;;ariane\n").encode()
+
+    header, body = sheets.read_table(raw, "text/csv")
+    assert header[0] == "Article" and len(body) == 5
+
+    mapping = sheets.guess_mapping(header, "inventory")
+    assert mapping["article"] == 0 and mapping["quantity"] == 1
+    assert mapping["supplier"] == 2 and mapping["site"] == 4
+
+    kept, dropped = sheets.shape(header, body, mapping, "inventory")
+    assert [row["article"] for row in kept] == ["BOLT M6", "WASHER M6"]
+    assert kept[0]["quantity"] == 500 and kept[1]["quantity"] == 1200
+    assert kept[1]["delivery_date"] == date(2026, 9, 21)
+    assert [row["why"] for row in dropped] == ["no article", "no quantity", "no delivery date"]
+
+    config = make_config(tmp_path)
+    db.init(config.db_path)
+    answer = sheets.store_inventory(config.db_path, kept, "ALEX")
+    assert answer["lines"] == 2
+    stored = db.run_readonly(config.db_path,
+                             "SELECT article, quantity, weekday, site FROM inventory_lines "
+                             "ORDER BY article")
+    assert stored.rows == [("BOLT M6", 500.0, "Monday", "ARIANE"),
+                           ("WASHER M6", 1200.0, "Monday", "ARIANE")]
+
+    with pytest.raises(ValueError):
+        sheets.shape(header, body, {"quantity": 1}, "inventory")
+
+
+def test_a_catalogue_file_fills_the_catalog(tmp_path):
+    from inventory import sheets
+
+    raw = ("article,supplier,reference,description\n"
+           "bolt m6,foussier,306260,VIS MX TH 8.8\n"
+           "orphan,,,no supplier here\n").encode()
+    header, body = sheets.read_table(raw, "text/csv")
+    mapping = sheets.guess_mapping(header, "catalog")
+    kept, dropped = sheets.shape(header, body, mapping, "catalog")
+
+    assert kept == [{"article": "BOLT M6", "supplier": "FOUSSIER",
+                     "designation": "VIS MX TH 8.8", "reference": "306260"}]
+    assert dropped[0]["why"] == "no supplier"
+
+    config = make_config(tmp_path)
+    db.init(config.db_path)
+    assert sheets.store_catalog(config.db_path, kept)["lines"] == 1
+    assert db.run_readonly(config.db_path, "SELECT article, reference FROM catalog").rows == [
+        ("BOLT M6", "306260")]
+
+
+def test_mail_queues_the_attachments(tmp_path, monkeypatch):
+    import email.message
+
+    from inventory import mailbox
+
+    config = make_config(tmp_path)
+    db.init(config.db_path)
+
+    message = email.message.EmailMessage()
+    message["From"] = "ventes@foussier.example"
+    message["Subject"] = "Bon de livraison 306260"
+    message.set_content("Bonjour, ci-joint le bon.")
+    message.add_attachment(b"%PDF-1.4 bon", maintype="application", subtype="pdf",
+                           filename="BL-306260.pdf")
+    message.add_attachment(b"MZ not a note", maintype="application", subtype="octet-stream",
+                           filename="installer.exe")
+    raw = message.as_bytes()
+
+    flags = []
+
+    class FakeBox:
+        def select(self, folder, readonly=False):
+            return "OK", [b"1"]
+
+        def search(self, charset, what):
+            assert what == "UNSEEN"
+            return "OK", [b"1"]
+
+        def fetch(self, number, parts):
+            return "OK", [(b"1 (RFC822)", raw)]
+
+        def store(self, number, what, flag):
+            flags.append((number, flag))
+            return "OK", [b""]
+
+        def close(self):
+            pass
+
+        def logout(self):
+            pass
+
+    monkeypatch.setattr(mailbox, "connect", lambda settings: FakeBox())
+    answer = mailbox.fetch(config, config.mail)
+
+    assert answer == {"messages": 1, "queued": 1, "duplicates": 0, "names": ["BL-306260.pdf"]}
+    assert flags == [(b"1", "\\Seen")]
+
+    from inventory import intake
+
+    row = intake.waiting(config)[0]
+    assert row["source"] == "mail" and row["sender"] == "ventes@foussier.example"
+    assert row["subject"] == "Bon de livraison 306260" and row["kind"] == "scan"
+
+    assert mailbox.fetch(config, config.mail)["duplicates"] == 1
+
+
+def test_mail_without_settings_says_so(tmp_path):
+    from inventory import mailbox
+
+    config = make_config(tmp_path)
+    with pytest.raises(mailbox.MailError):
+        mailbox.connect(config.mail)
+    ok, detail = mailbox.check(config.mail)
+    assert ok is False and "No mailbox" in detail
+
+
+def test_intake_routes(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("IMAP_HOST", raising=False)
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        answer = client.post("/api/intake", headers=mine, files=[
+            ("files", ("lines.csv", b"article;qty;fournisseur;date livraison\n"
+                                    b"bolt m6;10;foussier;2026-09-21\n", "text/csv")),
+            ("files", ("note.pdf", b"%PDF-1.4 note", "application/pdf")),
+            ("files", ("virus.exe", b"MZ", "application/octet-stream")),
+        ]).json()
+        assert len(answer["added"]) == 2
+        assert answer["refused"][0]["name"] == "virus.exe"
+
+        queue = client.get("/api/intake").json()
+        assert len(queue["waiting"]) == 2
+        assert queue["mail"]["configured"] is False
+        sheet = next(row for row in queue["waiting"] if row["kind"] == "sheet")
+        scan = next(row for row in queue["waiting"] if row["kind"] == "scan")
+
+        preview = client.get(f"/api/import/{sheet['intake_id']}").json()
+        assert preview["header"][0] == "article" and preview["rows"] == 1
+        assert preview["mapping"]["article"] == 0
+
+        dry = client.post(f"/api/import/{sheet['intake_id']}", headers=mine,
+                          json={"mapping": preview["mapping"], "dry_run": True}).json()
+        assert dry["kept"] == 1
+
+        done = client.post(f"/api/import/{sheet['intake_id']}", headers=mine,
+                           json={"mapping": preview["mapping"]}).json()
+        assert done["lines"] == 1 and done["note_id"]
+        notes = client.get("/api/data").json()["notes"]
+        assert sum(len(note["lines"]) for note in notes) == 1
+
+        class NoModel:
+            model = "none"
+
+            async def extract(self, *args, **kwargs):
+                raise llm.ExtractionError("no model on this machine")
+
+        server.backend = NoModel()
+        refused = client.post(f"/api/intake/{scan['intake_id']}/read", headers=mine)
+        assert refused.status_code == 502 and "no model" in refused.json()["detail"]
+        assert client.get("/api/import/9999").status_code == 404
+
+        assert client.post("/api/mail/fetch", headers=mine).status_code == 422
+        assert client.post("/api/mail/check", headers=mine).json()["ok"] is False
+
+        left = client.get("/api/intake").json()["waiting"]
+        assert len(left) == 1
+        assert client.delete(f"/api/intake/{left[0]['intake_id']}",
+                             headers=mine).status_code == 200
+        assert client.get("/api/intake").json()["waiting"] == []
+
+        page = client.get("/").text
+        assert 'id="table-intake"' in page and 'id="mapping-target"' in page

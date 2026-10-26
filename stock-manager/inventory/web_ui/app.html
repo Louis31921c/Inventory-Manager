@@ -78,6 +78,68 @@
     <div id="read-status" hidden></div>
   </div>
 
+  <div class="card">
+    <h2>Import files</h2>
+    <p class="muted">
+      Delivery notes and purchase orders as PDF or picture go to the model.
+      A spreadsheet of lines or a supplier catalogue is mapped column by column.
+    </p>
+    <label class="file-drop" for="intake-files">
+      <input type="file" id="intake-files" multiple
+             accept=".pdf,.csv,.xlsx,image/jpeg,image/png,image/webp">
+      <span><strong id="intake-name">Choose files</strong></span>
+    </label>
+    <div class="row">
+      <button class="action" id="intake-send" disabled>Add to the queue</button>
+      <span class="grow"></span>
+      <button class="action ghost" id="intake-refresh">Refresh queue</button>
+    </div>
+    <div id="intake-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mailbox</h2>
+    <p class="muted" id="mail-state">...</p>
+    <div class="row">
+      <button class="action" id="mail-fetch">Fetch now</button>
+      <button class="action ghost" id="mail-check">Test the connection</button>
+    </div>
+    <div id="mail-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Waiting to be read</h2>
+    <div class="scroll-x short-box"><table id="table-intake"></table></div>
+    <div id="queue-note"></div>
+  </div>
+
+  <div class="card" id="mapping" hidden>
+    <h2>Column mapping</h2>
+    <p class="muted" id="mapping-file"></p>
+    <div class="row">
+      <label class="field narrow">
+        <span>import into</span>
+        <select id="mapping-target">
+          <option value="inventory">Inventory lines</option>
+          <option value="catalog">Supplier catalogue</option>
+        </select>
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action ghost" id="mapping-guess">Guess again</button>
+      </label>
+      <span class="grow"></span>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action ghost" id="mapping-dry">Check</button>
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="mapping-run">Import</button>
+      </label>
+    </div>
+    <div class="scroll-x"><table id="table-mapping"></table></div>
+    <p class="legend" id="mapping-sample"></p>
+    <div id="mapping-note"></div>
+  </div>
+
   <div class="card" id="review" hidden>
     <p class="eyebrow">Step 2 of 2</p>
     <h2>Correct, then save</h2>
@@ -508,6 +570,220 @@ $("read-btn").addEventListener("click", async () => {
     $("read-btn").disabled = !draftFile;
   }
 });
+
+let queue = [];
+let mapping = null;
+let intakeFiles = [];
+
+$("intake-files").addEventListener("change", (event) => {
+  intakeFiles = [...(event.target.files ?? [])];
+  $("intake-name").textContent = intakeFiles.length
+    ? `${intakeFiles.length} file(s) chosen`
+    : "Choose files";
+  $("intake-send").disabled = !intakeFiles.length;
+});
+
+$("intake-send").addEventListener("click", async () => {
+  if (!intakeFiles.length) return;
+  const button = $("intake-send");
+  button.disabled = true;
+  spinner($("intake-note"), "Adding to the queue...");
+  const form = new FormData();
+  for (const file of intakeFiles) form.append("files", file);
+  try {
+    const answer = await api("/api/intake", { method: "POST", body: form });
+    const added = answer.added.filter((item) => !item.duplicate).length;
+    const again = answer.added.length - added;
+    const refused = (answer.refused ?? []).map((item) => `${item.name}: ${item.why}`);
+    notice($("intake-note"), refused.length ? "warn" : "ok",
+      `${added} file(s) queued`
+      + (again ? `, ${again} already there` : "")
+      + (refused.length ? ` — ${refused.join("; ")}` : ""));
+    intakeFiles = [];
+    $("intake-files").value = "";
+    $("intake-name").textContent = "Choose files";
+    await loadQueue();
+  } catch (e) {
+    notice($("intake-note"), "bad", e.message);
+  } finally {
+    button.disabled = !intakeFiles.length;
+  }
+});
+
+$("intake-refresh").addEventListener("click", () => loadQueue());
+
+$("mail-fetch").addEventListener("click", async () => {
+  const button = $("mail-fetch");
+  button.disabled = true;
+  spinner($("mail-note"), "Asking the mailbox...");
+  try {
+    const answer = await api("/api/mail/fetch", postJson({}));
+    notice($("mail-note"), "ok",
+      `${answer.messages} message(s) read, ${answer.queued} attachment(s) queued`
+      + (answer.duplicates ? `, ${answer.duplicates} already there` : ""));
+    await loadQueue();
+  } catch (e) {
+    notice($("mail-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("mail-check").addEventListener("click", async () => {
+  spinner($("mail-note"), "Knocking...");
+  try {
+    const answer = await api("/api/mail/check", postJson({}));
+    notice($("mail-note"), answer.ok ? "ok" : "warn", answer.detail);
+  } catch (e) {
+    notice($("mail-note"), "bad", e.message);
+  }
+});
+
+async function loadQueue() {
+  let data;
+  try {
+    data = await api("/api/intake");
+  } catch (e) {
+    notice($("queue-note"), "bad", e.message);
+    return;
+  }
+  queue = data.waiting ?? [];
+  const mail = data.mail ?? {};
+  $("mail-state").textContent = mail.configured
+    ? `${mail.folder} every ${mail.every_minutes} min · last run ${mail.at ?? "never"} · ${mail.detail}`
+    : "No mailbox yet: set IMAP_HOST, IMAP_USER and IMAP_PASSWORD in the settings file "
+      + "(Proton needs its Bridge on 127.0.0.1).";
+  $("mail-fetch").disabled = !mail.configured;
+
+  renderTable($("table-intake"), [
+    { label: "File", cell: (item) => {
+        const box = el("span", {}, [el("strong", { textContent: item.name })]);
+        const under = [item.source === "mail" ? item.sender : item.source,
+                       item.subject].filter(Boolean).join(" · ");
+        if (under) box.append(el("div", { className: "desig", textContent: under }));
+        return box;
+      } },
+    { label: "Kind", cell: (item) => (item.kind === "sheet" ? "spreadsheet" : "scan") },
+    { label: "Size", numeric: true, cell: (item) => `${Math.round((item.bytes ?? 0) / 1024)} kB` },
+    { label: "Arrived", cell: (item) => item.arrived_at ?? "" },
+    { label: "", cell: (item) => {
+        const row = el("span", { className: "row tight" });
+        const open = el("button", {
+          className: "mini",
+          textContent: item.kind === "sheet" ? "map columns" : "read",
+        });
+        open.addEventListener("click", () =>
+          (item.kind === "sheet" ? openMapping(item) : readQueued(item)));
+        const gone = el("button", { className: "mini", textContent: "remove" });
+        gone.addEventListener("click", async () => {
+          try {
+            await api(`/api/intake/${item.intake_id}`, { method: "DELETE" });
+            await loadQueue();
+          } catch (e) {
+            notice($("queue-note"), "bad", e.message);
+          }
+        });
+        row.append(open, gone);
+        return row;
+      } },
+  ], queue, "Nothing waiting.");
+}
+
+async function readQueued(item) {
+  spinner($("queue-note"), `Reading ${item.name}...`);
+  try {
+    const answer = await api(`/api/intake/${item.intake_id}/read`, postJson({}));
+    draftSha = answer.sha256;
+    draftFile = null;
+    $("queue-note").hidden = true;
+    openReview(answer.note);
+    $("review").scrollIntoView({ block: "start" });
+  } catch (e) {
+    notice($("queue-note"), "bad", e.message);
+  }
+}
+
+async function openMapping(item) {
+  const target = $("mapping-target").value;
+  try {
+    mapping = await api(`/api/import/${item.intake_id}?target=${target}`);
+  } catch (e) {
+    notice($("queue-note"), "bad", e.message);
+    return;
+  }
+  $("mapping").hidden = false;
+  $("mapping-file").textContent = `${mapping.name} · ${mapping.rows} row(s)`;
+  drawMapping();
+  $("mapping").scrollIntoView({ block: "start" });
+}
+
+function drawMapping() {
+  if (!mapping) return;
+  renderTable($("table-mapping"), [
+    { label: "Field", cell: (field) => el("strong", { textContent: field.replace("_", " ") }) },
+    { label: "Column in the file", cell: (field) => {
+        const pick = el("select", {});
+        pick.append(el("option", { value: "", textContent: "— not in the file —" }));
+        mapping.header.forEach((name, index) => {
+          pick.append(el("option", { value: String(index), textContent: `${index + 1}. ${name}` }));
+        });
+        pick.value = mapping.mapping[field] == null ? "" : String(mapping.mapping[field]);
+        pick.addEventListener("change", () => {
+          if (pick.value === "") delete mapping.mapping[field];
+          else mapping.mapping[field] = Number(pick.value);
+        });
+        return pick;
+      } },
+  ], mapping.fields, "");
+  $("mapping-sample").textContent = (mapping.sample ?? [])
+    .slice(0, 3)
+    .map((row) => row.join(" | "))
+    .join("\n");
+}
+
+$("mapping-target").addEventListener("change", async () => {
+  if (!mapping) return;
+  const item = queue.find((row) => row.intake_id === mapping.intake_id);
+  if (item) await openMapping(item);
+});
+
+$("mapping-guess").addEventListener("click", async () => {
+  if (!mapping) return;
+  const item = queue.find((row) => row.intake_id === mapping.intake_id);
+  if (item) await openMapping(item);
+});
+
+async function runImport(dry) {
+  if (!mapping) return;
+  spinner($("mapping-note"), dry ? "Checking..." : "Importing...");
+  try {
+    const answer = await api(`/api/import/${mapping.intake_id}`, postJson({
+      target: $("mapping-target").value,
+      mapping: mapping.mapping,
+      dry_run: dry,
+    }));
+    const dropped = (answer.dropped ?? []).length;
+    if (dry) {
+      notice($("mapping-note"), "ok",
+        `${answer.kept} line(s) would be imported`
+        + (dropped ? `, ${dropped} skipped (${answer.dropped[0].why}, row ${answer.dropped[0].row})` : ""));
+      return;
+    }
+    notice($("mapping-note"), "ok",
+      `${answer.lines} line(s) imported`
+      + (answer.note_id ? ` as note #${answer.note_id}` : "")
+      + (dropped ? `, ${dropped} skipped` : ""));
+    mapping = null;
+    $("mapping").hidden = true;
+    await loadQueue();
+    await refresh();
+  } catch (e) {
+    notice($("mapping-note"), "bad", e.message);
+  }
+}
+
+$("mapping-dry").addEventListener("click", () => runImport(true));
+$("mapping-run").addEventListener("click", () => runImport(false));
 
 function openReview(note) {
   proposed = structuredClone(note);
@@ -1693,7 +1969,7 @@ async function refresh() {
     renderExport();
     await Promise.all([
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
-      renderAccuracy(), renderVocabulary(), renderAudit(),
+      renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {

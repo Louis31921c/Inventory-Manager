@@ -184,6 +184,27 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        9,
+        "the intake queue: files and mail waiting to be read",
+        """
+        CREATE SEQUENCE IF NOT EXISTS intake_seq START 1;
+        CREATE TABLE IF NOT EXISTS intake (
+            intake_id   INTEGER PRIMARY KEY DEFAULT nextval('intake_seq'),
+            source      VARCHAR NOT NULL,
+            name        VARCHAR NOT NULL,
+            media_type  VARCHAR,
+            sha256      VARCHAR,
+            path        VARCHAR NOT NULL,
+            bytes       BIGINT,
+            sender      VARCHAR,
+            subject     VARCHAR,
+            arrived_at  TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            state       VARCHAR NOT NULL DEFAULT 'waiting',
+            note        VARCHAR
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

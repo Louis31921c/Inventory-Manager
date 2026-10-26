@@ -24,8 +24,8 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, alerts, audit, backup, catalog, db, ddmrp, forecast, llm, models_info,
-               pg, vocabulary)
+from . import (account, alerts, audit, backup, catalog, db, ddmrp, forecast, intake, llm,
+               mailbox, models_info, pg, sheets, vocabulary)
 from .config import load_config
 from .models import Note, parse_date
 
@@ -81,6 +81,7 @@ async def startup():
     log.info("database: %s", config.db_path)
     log.info("error reports: %s", alerts.destination(config.sms))
     asyncio.create_task(_purge_loop())
+    asyncio.create_task(_mail_loop())
 
 
 async def _purge_loop():
@@ -95,6 +96,27 @@ async def _purge_loop():
             log.exception("photo purge failed")
             await asyncio.to_thread(report, None, "purge", f"photo purge failed: {e}", "purge loop")
         await asyncio.sleep(24 * 3600)
+
+
+last_mail = {"at": None, "queued": 0, "detail": "not run yet"}
+
+
+async def _mail_loop():
+    """Every so often, whatever the suppliers sent lands in the queue by itself."""
+    while True:
+        wait = max(config.mail.every_minutes, 1) * 60
+        await asyncio.sleep(wait)
+        if not config.mail.enabled:
+            continue
+        try:
+            answer = await asyncio.to_thread(mailbox.fetch, config, config.mail)
+            last_mail.update(at=time.strftime("%Y-%m-%d %H:%M"), queued=answer["queued"],
+                             detail=f"{answer['messages']} message(s), {answer['queued']} queued")
+            if answer["queued"]:
+                log.info("mail: %d attachment(s) queued", answer["queued"])
+        except Exception as e:
+            last_mail.update(at=time.strftime("%Y-%m-%d %H:%M"), queued=0, detail=str(e)[:200])
+            log.warning("mail fetch failed: %s", e)
 
 
 @app.middleware("http")
@@ -358,6 +380,156 @@ async def extract(request: Request, photo: UploadFile):
     note = catalog.apply(config.db_path, note)
     (config.images_dir / f"{sha}{SUPPORTED[media_type]}").write_bytes(raw)
     return JSONResponse({"sha256": sha, "note": note.model_dump()})
+
+
+@app.get("/api/intake")
+def read_intake():
+    return {"waiting": intake.waiting(config), "counts": intake.counts(config),
+            "mail": {"configured": config.mail.enabled, "folder": config.mail.folder,
+                     "every_minutes": config.mail.every_minutes, **last_mail}}
+
+
+@app.post("/api/intake")
+async def add_to_intake(request: Request, files: list[UploadFile]):
+    added, refused = [], []
+    for item in files:
+        raw = await item.read()
+        if len(raw) > MAX_UPLOAD:
+            refused.append({"name": item.filename, "why": "larger than 30 MB"})
+            continue
+        try:
+            added.append(intake.add(config, raw, item.filename or "file", item.content_type))
+        except ValueError as e:
+            refused.append({"name": item.filename, "why": str(e)})
+    event(request, "intake.add", f"{len(added)} file(s)")
+    return {"added": added, "refused": refused, "waiting": intake.waiting(config)}
+
+
+@app.post("/api/intake/{intake_id}/read")
+async def read_queued(request: Request, intake_id: int):
+    """Hand a queued scan to the model, exactly as a photo taken on the spot."""
+    try:
+        raw, media_type, item = intake.bytes_of(config, intake_id)
+    except KeyError as e:
+        raise HTTPException(404, "That file is no longer in the queue.") from e
+    if media_type not in SUPPORTED:
+        raise HTTPException(422, "A spreadsheet is imported, not read as a note.")
+
+    already = db.find_by_image(config.db_path, item["sha256"])
+    if already is not None:
+        intake.mark(config, intake_id, intake.DONE, f"already note #{already}")
+        raise HTTPException(409, f"This note is already stored (note #{already}).")
+
+    known = vocabulary.known_articles(config.db_path)
+    try:
+        note = await get_backend().extract(raw, media_type, known)
+    except llm.ExtractionError as e:
+        raise HTTPException(502, str(e)) from e
+
+    note = catalog.apply(config.db_path, note)
+    (config.images_dir / f"{item['sha256']}{SUPPORTED[media_type]}").write_bytes(raw)
+    event(request, "intake.read", item["name"])
+    return JSONResponse({"sha256": item["sha256"], "note": note.model_dump(),
+                         "intake_id": intake_id})
+
+
+@app.delete("/api/intake/{intake_id}")
+def drop_queued(request: Request, intake_id: int):
+    if not intake.drop(config, intake_id):
+        raise HTTPException(404, "That file is no longer in the queue.")
+    event(request, "intake.drop", str(intake_id))
+    return {"dropped": intake_id}
+
+
+class Mark(BaseModel):
+    state: str = intake.DONE
+    note: str | None = None
+
+
+@app.patch("/api/intake/{intake_id}")
+def mark_queued(request: Request, intake_id: int, body: Mark):
+    if intake.one(config, intake_id) is None:
+        raise HTTPException(404, "That file is no longer in the queue.")
+    if body.state not in (intake.WAITING, intake.DONE, intake.DROPPED):
+        raise HTTPException(422, f"Unknown state: {body.state}.")
+    intake.mark(config, intake_id, body.state, body.note)
+    return {"intake_id": intake_id, "state": body.state}
+
+
+@app.post("/api/mail/fetch")
+async def fetch_mail(request: Request):
+    if not config.mail.enabled:
+        raise HTTPException(422, "No mailbox configured: set IMAP_HOST, IMAP_USER and "
+                                 "IMAP_PASSWORD in the settings file.")
+    try:
+        answer = await asyncio.to_thread(mailbox.fetch, config, config.mail)
+    except mailbox.MailError as e:
+        raise HTTPException(502, str(e)) from e
+    last_mail.update(at=time.strftime("%Y-%m-%d %H:%M"), queued=answer["queued"],
+                     detail=f"{answer['messages']} message(s), {answer['queued']} queued")
+    event(request, "mail.fetch", config.mail.folder, last_mail["detail"])
+    return {**answer, "waiting": intake.waiting(config)}
+
+
+@app.post("/api/mail/check")
+async def check_mail(request: Request):
+    if not config.mail.enabled:
+        return {"ok": False, "detail": "No mailbox configured."}
+    ok, detail = await asyncio.to_thread(mailbox.check, config.mail)
+    event(request, "mail.check", config.mail.host, detail[:200])
+    return {"ok": ok, "detail": detail}
+
+
+@app.get("/api/import/{intake_id}")
+def preview_sheet(intake_id: int, target: str = "inventory"):
+    if target not in ("inventory", "catalog"):
+        raise HTTPException(422, f"Unknown target: {target}.")
+    try:
+        raw, media_type, item = intake.bytes_of(config, intake_id)
+    except KeyError as e:
+        raise HTTPException(404, "That file is no longer in the queue.") from e
+    try:
+        header, body = sheets.read_table(raw, media_type)
+    except Exception as e:
+        raise HTTPException(422, f"Unreadable spreadsheet: {e}") from e
+    return {"intake_id": intake_id, "name": item["name"], "header": header,
+            "rows": len(body), "sample": body[:sheets.PREVIEW_ROWS],
+            "mapping": sheets.guess_mapping(header, target),
+            "fields": sheets.INVENTORY_FIELDS if target == "inventory" else sheets.CATALOG_FIELDS}
+
+
+class SheetImport(BaseModel):
+    target: str = "inventory"
+    mapping: dict[str, int] = {}
+    dry_run: bool = False
+
+
+@app.post("/api/import/{intake_id}")
+def import_sheet(request: Request, intake_id: int, body: SheetImport):
+    if body.target not in ("inventory", "catalog"):
+        raise HTTPException(422, f"Unknown target: {body.target}.")
+    try:
+        raw, media_type, item = intake.bytes_of(config, intake_id)
+    except KeyError as e:
+        raise HTTPException(404, "That file is no longer in the queue.") from e
+    try:
+        header, rows = sheets.read_table(raw, media_type)
+        kept, dropped = sheets.shape(header, rows, body.mapping, body.target)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+
+    if body.dry_run:
+        return {"kept": len(kept), "dropped": dropped[:20], "sample": kept[:5]}
+    if not kept:
+        raise HTTPException(422, "Nothing in that file could be read as a line.")
+
+    if body.target == "inventory":
+        answer = sheets.store_inventory(config.db_path, kept, who(request)[0])
+    else:
+        answer = sheets.store_catalog(config.db_path, kept)
+    intake.mark(config, intake_id, intake.DONE, f"{len(kept)} line(s) into {body.target}")
+    event(request, "import", item["name"], f"{len(kept)} line(s) into {body.target}")
+    return {**answer, "dropped": dropped[:20], "target": body.target}
 
 
 class Measurement(BaseModel):

@@ -88,6 +88,57 @@ Press `1` to `5` to navigate between tables.
 
 
 
+## Data in
+
+Four ways in, all landing in the same queue on the first screen.
+
+| Way in | What it takes |
+|---|---|
+| Take a picture | a delivery note or a purchase order, read on the spot |
+| Import files | PDF, JPG, PNG, WEBP read like a photo; CSV and XLSX mapped column by column |
+| Mailbox | attachments on unread mail, fetched on a timer or by hand |
+| Terminal | `stock read`, as before |
+
+The queue keeps one copy of each file: the same bytes twice, from a mail and from a folder,
+stay one row. A scan waits for `read`, a spreadsheet for `map columns`.
+
+### Spreadsheets
+
+The column mapping is guessed from the header, in English or French (`article`, `quantite`,
+`fournisseur`, `date livraison`, `chantier`), and you correct it before anything is written.
+`Check` says what would be imported and what would be skipped, with the reason and the row
+number; `Import` writes the lines as one note of their own, so an import can be found again
+later. Pick `Supplier catalogue` as the target and the same file fills the catalog instead.
+
+### Mailbox
+
+Plain IMAP, set in `~/.config/stock-manager/settings.env`:
+
+```
+IMAP_HOST=127.0.0.1
+IMAP_PORT=1143
+IMAP_USER=you@proton.me
+IMAP_PASSWORD=the-bridge-password
+IMAP_FOLDER=INBOX
+IMAP_SECURITY=starttls
+IMAP_INSECURE=1
+MAIL_EVERY_MINUTES=15
+```
+
+Those values are for **Proton Mail Bridge**, which runs on your machine and offers Proton over
+IMAP on `127.0.0.1:1143` with a certificate of its own, hence `IMAP_INSECURE=1` for that host
+only. It needs a paid Proton plan.
+
+**Outlook.com and Microsoft 365 no longer accept IMAP passwords**: Microsoft retired Basic
+authentication there and app passwords are not a way around it. Either use a corporate account
+whose tenant still allows IMAP, or set an Outlook rule that forwards supplier mail to an
+address this can read.
+
+Only attachments are taken, and only the kinds this app can read. The message is marked read so
+it is not picked up twice (`IMAP_MARK_READ=0` to leave it alone), and the poll runs every
+`MAIL_EVERY_MINUTES` while the app is open. `Fetch now` and `Test the connection` are on the
+first screen.
+
 ## Downloads
 
 Three tables come out of the app, and they are the same three everywhere: the Settings tab,
@@ -246,6 +297,9 @@ device` to the Admin. Repeats are muted.
 | `inventory/cli.py` | the commands |
 | `inventory/screen.py` | the character grid both the terminal and the screenshots draw into |
 | `inventory/db.py` | DuckDB storage and exports |
+| `inventory/intake.py` | the queue of files waiting to be read |
+| `inventory/mailbox.py` | IMAP: attachments out of unread mail |
+| `inventory/sheets.py` | CSV and XLSX into lines or the catalogue |
 | `inventory/pg.py` | the PostgreSQL dumps |
 | `inventory/llm.py` | the model backends, Dots among them |
 | `inventory/forecast.py` | rates, safety stock, reorder points, shortage risk |
