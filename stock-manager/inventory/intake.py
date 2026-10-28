@@ -83,14 +83,15 @@ def counts(config):
 
 def one(config, intake_id):
     rows = db.read(config.db_path, """
-            SELECT intake_id, name, media_type, path, sha256, state FROM intake
+            SELECT intake_id, name, media_type, path, sha256, state, sender, subject FROM intake
             WHERE intake_id = ?
             """, (intake_id,))
     if not rows:
         return None
-    intake_id, name, media_type, path, sha, state = rows[0]
+    intake_id, name, media_type, path, sha, state, sender, subject = rows[0]
     return {"intake_id": intake_id, "name": name, "media_type": media_type,
-            "path": Path(path), "sha256": sha, "state": state}
+            "path": Path(path), "sha256": sha, "state": state, "sender": sender,
+            "subject": subject}
 
 
 def bytes_of(config, intake_id):

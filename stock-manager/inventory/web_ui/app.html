@@ -11,11 +11,18 @@
 </div>
 
 <nav class="menubar" aria-label="Menu">
-  <button type="button" id="menu-note">Note</button>
+  <span class="menu" id="input-menu">
+    <button type="button" id="menu-note" aria-haspopup="true" aria-expanded="false">Input</button>
+    <div class="menu-drop" id="input-drop" role="menu"></div>
+  </span>
   <button type="button" id="menu-inventory">Inventory</button>
   <button type="button" id="menu-orders">Purchase orders</button>
-  <button type="button" id="menu-goto">Goto</button>
-  <button type="button" id="menu-system">System</button>
+  <button type="button" id="menu-bills">Bills</button>
+  <button type="button" id="menu-goto">SQL</button>
+  <span class="menu" id="system-menu">
+    <button type="button" id="menu-system" aria-haspopup="true" aria-expanded="false">System</button>
+    <div class="menu-drop" id="system-drop" role="menu"></div>
+  </span>
   <button type="button" id="menu-help">Help</button>
 </nav>
 
@@ -28,9 +35,9 @@
   <button class="tool" type="button" id="tool-find" title="Find (F3)">Find</button>
   <button class="tool" type="button" id="tool-export" title="Export CSV (F5)">Export</button>
   <button class="tool" type="button" id="tool-planner" title="DDMRP buffers (F9)">DDMRP</button>
-  <span class="sep"></span>
+  <span class="toolbar-gap"></span>
   <form method="post" action="/lock" id="lock-form">
-    <button class="tool" type="submit" title="Lock the session (F8)">Lock</button>
+    <button class="tool" type="submit" title="Lock the session (F8)">Remember me</button>
   </form>
   <form method="post" action="/exit" id="quit-form">
     <button class="tool stop" type="submit" title="Exit (F7)">Exit</button>
@@ -42,24 +49,19 @@
 <div class="workspace">
 <aside class="tree" aria-label="Navigation">
   <div class="tree-head">Stock Manager</div>
-  <button type="button" data-goes="capture" aria-current="true">New note</button>
+  <button type="button" data-goes="capture" aria-current="true">Import data</button>
   <button type="button" data-goes="inventory">Inventory <span class="count" id="tree-lines"></span></button>
   <button type="button" data-goes="query">SQL</button>
   <button type="button" data-goes="orders">Purchase orders <span class="count" id="tree-orders"></span></button>
+  <button type="button" data-goes="bills">Bills <span class="count" id="tree-bills"></span></button>
   <button type="button" data-goes="settings">Settings</button>
-  <button type="button" id="tree-planner">DDMRP buffers</button>
+  <button type="button" data-goes="ddmrp">DDMRP buffers</button>
+  <div class="tree-head">Sites</div>
+  <div id="tree-sites"></div>
 </aside>
 
 <div class="work">
-<nav class="tabs" role="tablist">
-  <button class="tab" id="tab-capture" role="tab" aria-selected="true" aria-controls="panel-capture">New note</button>
-  <button class="tab" id="tab-inventory" role="tab" aria-selected="false" aria-controls="panel-inventory">Inventory</button>
-  <button class="tab" id="tab-query" role="tab" aria-selected="false" aria-controls="panel-query">SQL</button>
-  <button class="tab" id="tab-orders" role="tab" aria-selected="false" aria-controls="panel-orders">Purchase orders</button>
-  <button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings">Settings</button>
-  <button class="tab" id="open-predictions" type="button"
-          title="Demand driven buffers in a window of its own">DDMRP</button>
-</nav>
+
 
 <div id="global-notice" hidden></div>
 
@@ -69,7 +71,7 @@
     <label class="file-drop" for="photo">
       <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" capture="environment">
       <img class="thumb" id="thumb" alt="" hidden>
-      <span><strong id="photo-name">Take a picture</strong></span>
+      <span><strong id="photo-name">Snap a picture</strong></span>
     </label>
     <div class="row">
       <button class="action" id="read-btn" disabled>ENTER</button>
@@ -80,10 +82,6 @@
 
   <div class="card">
     <h2>Import files</h2>
-    <p class="muted">
-      Delivery notes and purchase orders as PDF or picture go to the model.
-      A spreadsheet of lines or a supplier catalogue is mapped column by column.
-    </p>
     <label class="file-drop" for="intake-files">
       <input type="file" id="intake-files" multiple
              accept=".pdf,.csv,.xlsx,image/jpeg,image/png,image/webp">
@@ -108,7 +106,7 @@
   </div>
 
   <div class="card">
-    <h2>Waiting to be read</h2>
+    <h2>Reading queue</h2>
     <div class="scroll-x short-box"><table id="table-intake"></table></div>
     <div id="queue-note"></div>
   </div>
@@ -194,7 +192,7 @@
 </section>
 
 <section class="panel" id="panel-orders" role="tabpanel" aria-labelledby="tab-orders" hidden>
-  <div class="card">
+  <div class="card" id="order-scan">
     <h2>Scan a purchase order</h2>
     <label class="file-drop" for="photo-list">
       <input type="file" id="photo-list" accept="image/jpeg,image/png,image/webp" capture="environment">
@@ -228,6 +226,13 @@
     </div>
   </div>
 
+  <div class="card" id="basket-card" hidden>
+    <h2>Asked for in the chat</h2>
+    <p class="muted" id="basket-state"></p>
+    <div id="baskets"></div>
+    <div id="basket-note"></div>
+  </div>
+
   <div class="card">
     <h2>Stored purchase orders</h2>
     <div class="row">
@@ -242,6 +247,180 @@
   </div>
 </section>
 
+<section class="panel" id="panel-bills" role="tabpanel" hidden>
+  <div class="card">
+    <h2>What the bills come to</h2>
+    <div class="row" id="bill-totals"></div>
+    <div class="scroll-x short-box"><table id="table-bill-months"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Cost per supplier</h2>
+    <div class="row">
+      <label class="field narrow"><span>month</span>
+        <select id="bill-month"><option value="">Every month</option></select>
+      </label>
+      <span class="grow"></span>
+    </div>
+    <div class="scroll-x" id="bill-suppliers"></div>
+  </div>
+
+  <div class="card">
+    <h2>Stored bills</h2>
+    <div class="row">
+      <label class="field grow"><span>Search</span>
+        <input id="bill-search" placeholder="supplier, number, site..."></label>
+      <label class="field narrow"><span>State</span>
+        <select id="bill-state">
+          <option value="">All</option>
+          <option value="to pay">to pay</option>
+          <option value="paid">paid</option>
+          <option value="disputed">disputed</option>
+        </select>
+      </label>
+    </div>
+    <div class="row"><span class="muted" id="bill-summary"></span><span class="grow"></span></div>
+    <div class="scroll-x"><table id="table-bills"></table></div>
+    <div id="bills-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Read a bill</h2>
+    <label class="file-drop" for="bill-photo">
+      <input type="file" id="bill-photo" accept="image/jpeg,image/png,image/webp,application/pdf">
+      <img class="thumb" id="thumb-bill" alt="" hidden>
+      <span><strong id="bill-name">Choose a bill</strong></span>
+    </label>
+    <div class="row">
+      <button class="action" id="bill-read" disabled>ENTER</button>
+    </div>
+    <div id="bill-status" hidden></div>
+    <p class="muted">Bills that arrive by mail land in the reading queue on the Input screen:
+      read them there with the bill button.</p>
+  </div>
+
+  <div class="card" id="bill-review" hidden>
+    <h2>Check, then save</h2>
+    <div class="row">
+      <label class="field grow"><span>Supplier</span><input id="b-supplier" autocomplete="off"></label>
+      <label class="field grow"><span>Invoice no</span><input id="b-number" autocomplete="off"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>Bill date</span><input id="b-bill_date" type="date"></label>
+      <label class="field grow"><span>Due date</span><input id="b-due_date" type="date"></label>
+      <label class="field narrow"><span>Currency</span><input id="b-currency" value="EUR"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>Net</span><input id="b-net" inputmode="decimal"></label>
+      <label class="field grow"><span>Tax</span><input id="b-tax" inputmode="decimal"></label>
+      <label class="field grow"><span>Total</span><input id="b-total" inputmode="decimal"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>Site</span><input id="b-site" autocomplete="off"></label>
+      <label class="field grow"><span>Order / note ref</span><input id="b-order_ref" autocomplete="off"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>Note</span><input id="b-note" autocomplete="off"></label>
+    </div>
+    <div class="row">
+      <button class="action" id="bill-save">Save the bill</button>
+      <button class="action ghost" id="bill-discard">Discard</button>
+    </div>
+    <div id="bill-review-note"></div>
+  </div>
+</section>
+
+<section class="panel" id="panel-ddmrp" role="tabpanel" hidden>
+  <div class="row tight">
+    <button class="mini" id="ddmrp-reload">Refresh</button>
+    <span class="grow"></span>
+  </div>
+  <div id="ddmrp-notice"></div>
+<div class="side-by-side">
+    <div class="card">
+      <h2>OUTPUTS</h2>
+      <div id="weeks-chart"></div>
+    </div>
+    <div class="card">
+      <h2>SITE</h2>
+      <div id="sites-chart"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>FLOW</h2>
+    <div class="row tight">
+      <button class="mini period" id="period-week" aria-pressed="true">per week</button>
+      <button class="mini period" id="period-month" aria-pressed="false">per month</button>
+      <button class="mini period" id="period-half" aria-pressed="false">per 6 months</button>
+      <span class="grow"></span>
+    </div>
+    <div class="scroll-x"><table id="table-movements"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Safety sock watch</h2>
+    <div class="row">
+      <label class="field narrow">
+        <span>order cycle days</span>
+        <input id="buffer-cycle" type="number" min="1" max="90" step="1" value="7">
+      </label>
+      <label class="field narrow">
+        <span>horizon weeks</span>
+        <input id="buffer-horizon" type="number" min="1" max="26" step="1" value="4">
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="buffer-apply">RUN</button>
+      </label>
+      <span class="grow"></span>
+      <label class="field narrow" style="justify-content: flex-end">
+        <a class="mini" id="buffer-csv" href="/export/safety-stock.csv">export csv</a>
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <a class="mini" id="buffer-xlsx" href="/export/safety-stock.xlsx">export xlsx</a>
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <a class="mini" id="buffer-sql" href="/export/safety-stock.sql">export sql</a>
+      </label>
+    </div>
+    <div class="row tight">
+      <button class="mini" id="buffer-risky" aria-pressed="true">redzone</button>
+      <button class="mini" id="buffer-all" aria-pressed="false">all articles</button>
+      <span class="grow"></span>
+      <span class="muted" id="buffer-counts"></span>
+    </div>
+    <div class="scroll-x short-box"><table id="table-buffers"></table></div>
+    <div class="scroll-x"><table id="table-chain"></table></div>
+    <div id="buffer-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Dots orders</h2>
+    <div class="row">
+      <label class="field grow">
+        <span>site</span>
+        <input id="order-site">
+      </label>
+      <label class="field grow">
+        <span>work item</span>
+        <input id="order-work">
+      </label>
+    </div>
+    <div class="row">
+      <button class="action" id="ask-dots">ask dots</button>
+      <button class="action ghost" id="drop-draft" hidden>discard</button>
+    </div>
+    <div id="dots-note"></div>
+    <div id="draft" hidden>
+      <div class="scroll-x"><table id="table-draft"></table></div>
+      <p class="legend" id="draft-reason"></p>
+      <div class="row">
+        <button class="action" id="save-draft">save as purchase order</button>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
   <div class="card">
     <h2>Space used</h2>
@@ -253,6 +432,61 @@
     <h2>Checks</h2>
     <div class="scroll-x"><table id="table-checks"></table></div>
     <div id="checks-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mailbox</h2>
+    <div class="row">
+      <label class="field grow"><span>Provider</span>
+        <select id="mail-provider"></select>
+      </label>
+      <label class="field grow"><span>User name</span>
+        <input id="mail-user" autocomplete="off" placeholder="name@company.com"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>Password</span>
+        <input id="mail-password" type="password" autocomplete="new-password"
+               placeholder="leave empty to keep the one stored"></label>
+      <label class="field narrow"><span>Folder</span><input id="mail-folder" value="INBOX"></label>
+      <label class="field narrow"><span>Check every (min)</span>
+        <input id="mail-every" type="number" min="1" max="1440" value="15"></label>
+    </div>
+    <div class="row" id="mail-by-hand" hidden>
+      <label class="field grow"><span>IMAP server</span><input id="mail-host"></label>
+      <label class="field narrow"><span>Port</span><input id="mail-port" type="number" min="1" max="65535"></label>
+      <label class="field narrow"><span>Security</span>
+        <select id="mail-security"><option value="ssl">SSL</option><option value="starttls">STARTTLS</option></select>
+      </label>
+    </div>
+    <p class="muted" id="mail-help"></p>
+    <div class="row">
+      <button class="action" id="mail-save">Save the mailbox</button>
+      <button class="action ghost" id="mail-settings-check">Test the connection</button>
+      <span class="grow"></span>
+      <span class="muted" id="mail-stored"></span>
+    </div>
+    <div id="mail-settings-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Chat bot (Discord)</h2>
+    <p class="muted" id="chat-state"></p>
+    <div class="row">
+      <label class="field grow"><span>Bot token</span>
+        <input id="chat-token" type="password" autocomplete="new-password"
+               placeholder="leave empty to keep the one stored"></label>
+      <label class="field grow"><span>Channel ids it answers in</span>
+        <input id="chat-channels" autocomplete="off" placeholder="empty = every channel"></label>
+    </div>
+    <div class="row">
+      <button class="action" id="chat-save">Save the bot</button>
+      <button class="action ghost" id="chat-forget">Forget the token</button>
+    </div>
+    <p class="muted">Commands: <code>/basket</code>, <code>/basket_show</code>,
+      <code>/basket_clear</code>, <code>/purchase</code>, <code>/stock</code>.
+      <code>/purchase</code> writes the order into Purchase orders; a person still places it
+      on the supplier's site.</p>
+    <div id="chat-note"></div>
   </div>
 
   <div class="card">
@@ -334,6 +568,18 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
+const SVG = "http://www.w3.org/2000/svg";
+
+function svg(tag, props = {}, children = []) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [key, value] of Object.entries(props)) node.setAttribute(key, value);
+  for (const child of children) node.append(child);
+  return node;
+}
+
+const short = (text, size = 22) =>
+  String(text ?? "").length > size ? `${String(text).slice(0, size - 1)}…` : String(text ?? "");
+
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -374,6 +620,7 @@ const postJson = (body) => ({
 });
 
 const patchJson = (body) => ({ ...postJson(body), method: "PATCH" });
+const putJson = (body) => ({ ...postJson(body), method: "PUT" });
 
 const QUIET_TYPES = new Set(["number", "date", "password", "file", "checkbox", "radio",
                              "range", "color", "hidden"]);
@@ -401,6 +648,7 @@ let lists = [];
 let draft = null;
 let draftFile = null;
 let draftSha = null;
+let billFile = null;
 let proposed = null;
 let listDraft = null;
 let listFile = null;
@@ -425,13 +673,17 @@ function flatten() {
     })));
 }
 
-const TABS = ["capture", "inventory", "query", "orders", "settings"];
+const TABS = ["capture", "inventory", "query", "orders", "bills", "settings", "ddmrp"];
 
 function openTab(name) {
   for (const other of TABS) {
-    const on = other === name;
-    $(`tab-${other}`).setAttribute("aria-selected", String(on));
-    $(`panel-${other}`).hidden = !on;
+    $(`panel-${other}`).hidden = other !== name;
+  }
+  // Browsing a site is reading, not scanning: the capture cards stay out of the way.
+  const browsing = Boolean(treePick);
+  $("order-scan").hidden = browsing;
+  if (browsing) {
+    $("list-review").hidden = true;
   }
   for (const node of document.querySelectorAll(".tree button[data-goes]")) {
     node.setAttribute("aria-current", String(node.dataset.goes === name));
@@ -442,10 +694,15 @@ function openTab(name) {
   }
 }
 
-for (const name of TABS) $(`tab-${name}`).addEventListener("click", () => openTab(name));
-
 for (const node of document.querySelectorAll(".tree button[data-goes]")) {
-  node.addEventListener("click", () => openTab(node.dataset.goes));
+  node.addEventListener("click", () => {
+    treePick = null;
+    renderSiteTree();
+    renderDeliveries();
+    renderOrders();
+    openTab(node.dataset.goes);
+    say("Ready");
+  });
 }
 
 function say(message, kind = "") {
@@ -458,6 +715,7 @@ const COMMANDS = {
   "/n": "capture", note: "capture", capture: "capture", inventory: "inventory",
   stock: "inventory", sql: "query", query: "query", orders: "orders", po: "orders",
   settings: "settings", ddmrp: "ddmrp", buffers: "ddmrp", planner: "ddmrp",
+  bills: "bills", bill: "bills", invoices: "bills", factures: "bills",
 };
 
 function runCommand() {
@@ -490,26 +748,16 @@ $("tool-refresh").addEventListener("click", () => { say("Refreshing..."); refres
 $("tool-find").addEventListener("click", () => { openTab("inventory"); $("q-search").focus(); });
 $("tool-export").addEventListener("click", () => { window.location.href = "/export/inventory.csv"; });
 $("tool-planner").addEventListener("click", () => openPredictions());
-$("tree-planner").addEventListener("click", () => openPredictions());
-$("menu-note").addEventListener("click", () => openTab("capture"));
 $("menu-inventory").addEventListener("click", () => openTab("inventory"));
 $("menu-orders").addEventListener("click", () => openTab("orders"));
+$("menu-bills").addEventListener("click", () => openTab("bills"));
 $("menu-goto").addEventListener("click", () => openTab("query"));
-$("menu-system").addEventListener("click", () => openTab("settings"));
 $("menu-help").addEventListener("click", () => { window.location.href = "/license"; });
 
-let planner = null;
-
 function openPredictions() {
-  if (planner && !planner.closed) {
-    planner.focus();
-    return;
-  }
-  planner = window.open("/predictions", "predictions", "width=1180,height=900");
-  if (!planner) window.location.href = "/predictions";
+  openTab("ddmrp");
+  loadDdmrp();
 }
-
-$("open-predictions").addEventListener("click", openPredictions);
 
 try {
   const saved = localStorage.getItem("tab");
@@ -579,7 +827,7 @@ $("intake-files").addEventListener("change", (event) => {
   intakeFiles = [...(event.target.files ?? [])];
   $("intake-name").textContent = intakeFiles.length
     ? `${intakeFiles.length} file(s) chosen`
-    : "Choose files";
+    : "Open Files";
   $("intake-send").disabled = !intakeFiles.length;
 });
 
@@ -648,12 +896,6 @@ async function loadQueue() {
     return;
   }
   queue = data.waiting ?? [];
-  const mail = data.mail ?? {};
-  $("mail-state").textContent = mail.configured
-    ? `${mail.folder} every ${mail.every_minutes} min · last run ${mail.at ?? "never"} · ${mail.detail}`
-    : "No mailbox yet: set IMAP_HOST, IMAP_USER and IMAP_PASSWORD in the settings file "
-      + "(Proton needs its Bridge on 127.0.0.1).";
-  $("mail-fetch").disabled = !mail.configured;
 
   renderTable($("table-intake"), [
     { label: "File", cell: (item) => {
@@ -674,6 +916,12 @@ async function loadQueue() {
         });
         open.addEventListener("click", () =>
           (item.kind === "sheet" ? openMapping(item) : readQueued(item)));
+        row.append(open);
+        if (item.kind !== "sheet") {
+          const asBill = el("button", { className: "mini", textContent: "bill" });
+          asBill.addEventListener("click", () => readQueuedBill(item));
+          row.append(asBill);
+        }
         const gone = el("button", { className: "mini", textContent: "remove" });
         gone.addEventListener("click", async () => {
           try {
@@ -683,10 +931,10 @@ async function loadQueue() {
             notice($("queue-note"), "bad", e.message);
           }
         });
-        row.append(open, gone);
+        row.append(gone);
         return row;
       } },
-  ], queue, "Nothing waiting.");
+  ], queue, "...");
 }
 
 async function readQueued(item) {
@@ -978,11 +1226,17 @@ function renderTable(table, columns, data, empty) {
     })))));
 }
 
+let treePick = null;
+
 function filtered() {
   const search = upper($("q-search").value);
   const site = $("q-site").value;
 
   return rows.filter((row) => {
+    if (treePick) {
+      if ((row.site ?? "") !== treePick.site) return false;
+      if (treePick.work !== null && (row.work_item ?? "") !== treePick.work) return false;
+    }
     if (site && (row.site ?? "") !== site) return false;
     if (!search) return true;
     const haystack = upper(`${row.article} ${row.designation} ${row.supplier} ${row.site ?? ""}`);
@@ -1032,7 +1286,11 @@ function renderDeliveries() {
   const units = data.reduce((sum, row) => sum + (row.quantity ?? 0), 0);
   const backorders = data.filter((row) => row.backorder).length;
   $("q-summary").textContent = `${data.length} line(s) · ${showNum(units)} units`
-    + (backorders ? ` · ${backorders} on backorder` : "");
+    + (backorders ? ` · ${backorders} on backorder` : "")
+    + (treePick
+        ? ` · ${treePick.site || "no site"}, `
+          + (treePick.work === null ? "all work items" : treePick.work || "no work item")
+        : "");
 
   renderTable($("table-inventory"), [
     {
@@ -1098,6 +1356,73 @@ function confirmButton(label, action) {
     }
   });
   return button;
+}
+
+function treeNode(label, className, chosen, action) {
+  const node = el("button", { type: "button", className, textContent: label });
+  node.setAttribute("aria-current", String(chosen));
+  node.addEventListener("click", () => {
+    action();
+    renderSiteTree();
+    openTab(treePick && treePick.lines === 0 ? "orders" : "inventory");
+    renderDeliveries();
+    renderOrders();
+    say(treePick
+      ? `${treePick.site || "no site"}`
+        + (treePick.work === null ? ", all work items" : `, ${treePick.work || "no work item"}`)
+      : "Ready");
+  });
+  return node;
+}
+
+function siteIndex() {
+  const sites = new Map();
+  const touch = (site, work, field, by = 1) => {
+    site = site ?? "";
+    work = work ?? "";
+    if (!sites.has(site)) sites.set(site, new Map());
+    const items = sites.get(site);
+    if (!items.has(work)) items.set(work, { lines: 0, orders: 0 });
+    items.get(work)[field] += by;
+  };
+
+  for (const row of rows) touch(row.site, row.work_item, "lines");
+  for (const sheet of lists) {
+    touch(sheet.site, sheet.work_item, "orders");
+  }
+  return sites;
+}
+
+function renderSiteTree() {
+  const sites = siteIndex();
+
+  const box = $("tree-sites");
+  box.replaceChildren();
+
+  const tally = (items) => [...items.values()].reduce(
+    (sum, item) => ({ lines: sum.lines + item.lines, orders: sum.orders + item.orders }),
+    { lines: 0, orders: 0 });
+  const label = (name, item) => `${name} (${item.lines})`
+    + (item.orders ? ` · ${item.orders} PO` : "");
+
+  for (const [site, items] of [...sites].sort((one, two) => one[0].localeCompare(two[0]))) {
+    const whole = tally(items);
+    const open = Boolean(treePick) && treePick.site === site;
+    const head = treeNode(label(site || "no site", whole), "node site", open, () => {
+      treePick = open ? null : { site, work: null, lines: whole.lines };
+    });
+    head.setAttribute("aria-expanded", String(open));
+    box.append(head);
+    if (!open) continue;
+
+    box.append(treeNode(label("All work items", whole), "node work", treePick.work === null,
+                        () => { treePick = { site, work: null, lines: whole.lines }; }));
+    for (const [work, item] of [...items].sort((one, two) => one[0].localeCompare(two[0]))) {
+      box.append(treeNode(label(work || "no work item", item), "node work",
+                          treePick.work === work,
+                          () => { treePick = { site, work, lines: item.lines }; }));
+    }
+  }
 }
 
 function refreshSiteFilter() {
@@ -1471,6 +1796,9 @@ function filteredOrders() {
   const site = $("o-site").value;
 
   return lists
+    .filter((sheet) => !treePick || (sheet.site ?? "") === treePick.site)
+    .filter((sheet) => !treePick || treePick.work === null
+                       || (sheet.work_item ?? "") === treePick.work)
     .filter((sheet) => !site || (sheet.site ?? "") === site)
     .map((sheet) => {
       if (!search) return sheet;
@@ -1549,6 +1877,7 @@ function renderOrders() {
 const DATASETS = [
   ["inventory", "Inventory lines"],
   ["purchase_orders", "Purchase order lines"],
+  ["bills", "Supplier bills"],
   ["safety-stock", "Safety stock watch"],
 ];
 
@@ -1948,6 +2277,798 @@ document.addEventListener("keydown", (event) => {
   entry[2]();
 });
 
+function countCell(row) {
+  const box = el("input", {
+    className: "cell", type: "number", step: "any", min: "0",
+    value: row.on_hand == null ? "" : row.on_hand,
+    title: row.counted_on ? `counted ${row.counted_on}` : "never counted",
+    "aria-label": `On hand for ${row.article}`,
+  });
+  box.addEventListener("change", async () => {
+    const quantity = box.value.trim() === "" ? null : Number(box.value);
+    if (quantity != null && (isNaN(quantity) || quantity < 0)) {
+      notice($("buffer-note"), "warn", "A count is a number, zero or more.");
+      return;
+    }
+    box.disabled = true;
+    try {
+      await api("/api/stock-count", putJson({ article: row.article, quantity }));
+      notice($("buffer-note"), "", "");
+      say(`${row.article}: ${quantity == null ? "count cleared" : quantity + " on hand"}`);
+      await renderBuffers();
+    } catch (e) {
+      notice($("buffer-note"), "bad", e.message);
+    } finally {
+      box.disabled = false;
+    }
+  });
+  return box;
+}
+
+let plan = null;
+let moves = null;
+let dotsDraft = null;
+let period = "week";
+
+function columnChart(points, label, value) {
+  const width = 640;
+  const height = 170;
+  const pad = { left: 34, right: 8, top: 10, bottom: 26 };
+  const top = Math.max(...points.map(value), 1);
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const step = plotWidth / Math.max(points.length, 1);
+  const parts = [];
+
+  points.forEach((point, index) => {
+    const tall = (value(point) / top) * plotHeight;
+    const x = pad.left + index * step + step * 0.2;
+    const barWidth = Math.max(step * 0.6, 2);
+    parts.push(svg("rect", {
+      class: "bar", x, width: barWidth,
+      y: pad.top + plotHeight - tall, height: Math.max(tall, 1),
+    }));
+    parts.push(svg("text", {
+      x: x + barWidth / 2, y: height - 14, "text-anchor": "middle",
+    }, [label(point)]));
+    if (value(point) > 0) {
+      parts.push(svg("text", {
+        class: "value", x: x + barWidth / 2, y: pad.top + plotHeight - tall - 3,
+        "text-anchor": "middle",
+      }, [showNum(Math.round(value(point)))]));
+    }
+  });
+
+  return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, [
+    svg("line", {
+      class: "axis", x1: pad.left, y1: pad.top + plotHeight, x2: width - pad.right,
+      y2: pad.top + plotHeight,
+    }),
+    svg("text", { x: 0, y: pad.top + 8 }, [showNum(Math.round(top))]),
+    ...parts,
+  ]);
+}
+
+function barList(points, label, value) {
+  const width = 640;
+  const rowHeight = 20;
+  const pad = { left: 150, right: 42, top: 6 };
+  const height = pad.top + points.length * rowHeight + 6;
+  const top = Math.max(...points.map(value), 1);
+  const plotWidth = width - pad.left - pad.right;
+  const parts = [];
+
+  points.forEach((point, index) => {
+    const y = pad.top + index * rowHeight;
+    const long = Math.max((value(point) / top) * plotWidth, 1);
+    parts.push(svg("text", { x: 0, y: y + 12 }, [short(label(point))]));
+    parts.push(svg("rect", { class: "track", x: pad.left, y: y + 3, width: plotWidth, height: 12 }));
+    parts.push(svg("rect", { class: "bar", x: pad.left, y: y + 3, width: long, height: 12 }));
+    parts.push(svg("text", {
+      class: "value", x: width - pad.right + 4, y: y + 13,
+    }, [showNum(value(point))]));
+  });
+
+  return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
+}
+
+function renderTable(table, columns, data, empty) {
+  table.replaceChildren();
+  if (!data.length) {
+    table.append(el("tbody", {}, [el("tr", {}, [el("td", { className: "muted",
+                                                          textContent: empty })])]));
+    return;
+  }
+  table.append(el("thead", {}, [
+    el("tr", {}, columns.map((col) => el("th", { textContent: col.label }))),
+  ]));
+  table.append(el("tbody", {}, data.map((item) =>
+    el("tr", {}, columns.map((col) => {
+      const cell = el("td", { className: col.numeric ? "num" : "" });
+      cell.append(col.cell(item));
+      return cell;
+    })))));
+}
+
+function renderCharts() {
+  const weeks = plan.weeks ?? [];
+  $("weeks-chart").replaceChildren(weeks.length
+    ? columnChart(weeks, (week) => week.week.slice(5), (week) => week.quantity)
+    : el("p", { className: "muted", textContent: "No delivery note yet." }));
+
+  const sites = plan.sites ?? [];
+  $("sites-chart").replaceChildren(sites.length
+    ? barList(sites, (site) => site.site, (site) => site.lines)
+    : el("p", { className: "muted", textContent: "No site named yet." }));
+}
+
+function renderMovements() {
+  const head = ["Period", "Quantity in", "Lines in", "Quantity out", "Lines out", "Net"];
+  const rows = moves.rows ?? [];
+  $("table-movements").replaceChildren(
+    el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
+    el("tbody", {}, rows.length
+      ? rows.map((row) => el("tr", {}, [
+          el("td", {}, [el("strong", { textContent: row.label })]),
+          el("td", { className: "num", textContent: showNum(row.in_quantity) }),
+          el("td", { className: "num", textContent: showNum(row.in_lines) }),
+          el("td", { className: "num", textContent: showNum(row.out_quantity) }),
+          el("td", { className: "num", textContent: showNum(row.out_lines) }),
+          el("td", { className: "num", textContent: showNum(row.net) }),
+        ]))
+      : [el("tr", {}, [el("td", { colSpan: head.length, className: "muted",
+                                  textContent: "Nothing booked in yet." })])]),
+    el("tfoot", {}, [el("tr", {}, [
+      el("th", { textContent: "total" }),
+      el("th", { className: "num", textContent: showNum(moves.totals.in_quantity) }),
+      el("th", {}),
+      el("th", { className: "num", textContent: showNum(moves.totals.out_quantity) }),
+      el("th", {}),
+      el("th", { className: "num", textContent: showNum(moves.totals.net) }),
+    ])]),
+  );
+
+  for (const name of ["week", "month", "half"]) {
+    $(`period-${name}`).setAttribute("aria-pressed", String(name === period));
+  }
+}
+
+let buffers = null;
+let bufferAll = false;
+
+function bufferRules() {
+  return {
+    cycle: Number($("buffer-cycle").value) || 7,
+    horizon: Number($("buffer-horizon").value) || 4,
+  };
+}
+
+function zonePill(zone) {
+  const words = { red: "red", yellow: "yellow", green: "green", over: "over the top",
+                  uncounted: "not counted" };
+  return el("span", { className: `pill ${zone}`, textContent: words[zone] ?? zone });
+}
+
+function drawBuffers() {
+  if (!buffers) return;
+  const rows = bufferAll
+    ? buffers.articles
+    : buffers.articles.filter((row) => row.zone === "red" || row.zone === "yellow");
+
+  renderTable($("table-buffers"), [
+    {
+      label: "Article",
+      cell: (row) => {
+        const box = el("span", {}, [el("strong", { textContent: row.article })]);
+        const under = [row.supplier, `${row.lead_class} lead ${showNum(row.lead_days)} d`,
+                       row.variability].filter(Boolean).join(" · ");
+        box.append(el("div", { className: "desig muted", textContent: under }));
+        return box;
+      },
+    },
+    { label: "weekly avg cons", numeric: true, cell: (row) => showNum(row.per_week) },
+    { label: "On hand", numeric: true, cell: (row) => countCell(row) },
+    { label: "Red", numeric: true, cell: (row) => showNum(row.red) },
+    { label: "Yellow", numeric: true, cell: (row) => showNum(row.yellow) },
+    { label: "Green", numeric: true, cell: (row) => showNum(row.green) },
+    { label: "Top", numeric: true, cell: (row) => showNum(row.top_of_green) },
+    { label: "Net flow", numeric: true, cell: (row) => showNum(row.net_flow) },
+    { label: "Buffer", numeric: true, cell: (row) => `${showNum(row.buffer_share)}%` },
+    { label: "Zone", cell: (row) => zonePill(row.zone) },
+    { label: "To order", numeric: true, cell: (row) => (row.to_order ? showNum(row.to_order) : "—") },
+    { label: "Spike risk", numeric: true, cell: (row) => `${showNum(row.spike_risk)}%` },
+  ], rows, bufferAll ? "Nothing stored yet." : "No article in the red or the yellow.");
+
+  const counts = buffers.counts;
+  $("buffer-counts").textContent =
+    `${counts.articles} article(s) · ${counts.red} red · ${counts.yellow} yellow · `
+    + `${counts.green} green · ${counts.uncounted} not counted`;
+  $("buffer-risky").setAttribute("aria-pressed", String(!bufferAll));
+  $("buffer-all").setAttribute("aria-pressed", String(bufferAll));
+
+  const chain = buffers.chain;
+  const states = chain.states;
+  renderTable($("table-chain"), [
+    { label: "This week", cell: (state) => el("strong", { textContent: state }) },
+    ...states.map((next) => ({
+      label: `→ ${next}`,
+      numeric: true,
+      cell: (state) => `${Math.round(100 * (chain.matrix[state]?.[next] ?? 0))}%`,
+    })),
+  ], states, "");
+
+  const share = states
+    .map((state) => `${state} ${Math.round(100 * (chain.steady[state] ?? 0))}%`)
+    .join(" · ");
+  notice($("buffer-note"), buffers.thin ? "warn" : "",
+    `${chain.transitions} week to week move(s) counted.`);
+
+  const { cycle, horizon } = bufferRules();
+  for (const [id, fmt] of [["buffer-csv", "csv"], ["buffer-xlsx", "xlsx"], ["buffer-sql", "sql"]]) {
+    $(id).href = `/export/safety-stock.${fmt}?cycle=${cycle}&horizon=${horizon}`;
+  }
+}
+
+async function renderBuffers() {
+  const { cycle, horizon } = bufferRules();
+  try {
+    buffers = await api(`/api/ddmrp?cycle=${cycle}&horizon=${horizon}`);
+  } catch (e) {
+    notice($("buffer-note"), "bad", e.message);
+    return;
+  }
+  drawBuffers();
+}
+
+$("buffer-apply").addEventListener("click", renderBuffers);
+$("buffer-all").addEventListener("click", () => { bufferAll = true; drawBuffers(); });
+$("buffer-risky").addEventListener("click", () => { bufferAll = false; drawBuffers(); });
+
+function renderDraft() {
+  $("draft").hidden = dotsDraft == null;
+  $("drop-draft").hidden = dotsDraft == null;
+  if (!dotsDraft) return;
+
+  const head = ["Article", "Quantity", "Unit", "Supplier", "Why"];
+  $("table-draft").replaceChildren(
+    el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
+    el("tbody", {}, dotsDraft.lines.map((line, index) => {
+      const quantity = el("input", {
+        className: "cell", type: "number", step: "any", min: "0", value: line.quantity,
+      });
+      quantity.addEventListener("change", () => {
+        dotsDraft.lines[index].quantity = Number(quantity.value) || 0;
+      });
+      return el("tr", {}, [
+        el("td", {}, [
+          el("div", {}, [el("strong", { textContent: line.article })]),
+          line.reference
+            ? el("div", { className: "desig", textContent: line.reference })
+            : el("span"),
+        ]),
+        el("td", { className: "num" }, [quantity]),
+        el("td", { textContent: line.unit ?? "—" }),
+        el("td", { textContent: line.supplier ?? "—" }),
+        el("td", { className: "desig", textContent: line.reason }),
+      ]);
+    })),
+  );
+  $("draft-reason").textContent = dotsDraft.note
+    ? `${dotsDraft.note} — drafted by ${dotsDraft.model} from ${dotsDraft.drafted_from} article(s).`
+    : `Drafted by ${dotsDraft.model} from ${dotsDraft.drafted_from} article(s).`;
+}
+
+async function renderDots() {
+  try {
+    const data = await api("/api/models");
+    const dots = (data.providers ?? []).find((provider) => provider.id === "openai");
+    $("ask-dots").disabled = !dots || dots.state === "missing";
+  } catch {
+    $("ask-dots").disabled = true;
+  }
+}
+
+async function loadMovements() {
+  try {
+    moves = await api(`/api/movements?period=${period}`);
+  } catch (e) {
+    notice($("ddmrp-notice"), "bad", e.message);
+    return;
+  }
+  renderMovements();
+}
+
+async function loadPlan(options = {}) {
+  try {
+    plan = await api("/api/forecast");
+  } catch (e) {
+    notice($("ddmrp-notice"), "bad", e.message);
+    return;
+  }
+  if (!options.keepDraft) dotsDraft = null;
+
+  renderCharts();
+  renderDraft();
+  renderBuffers();
+}
+
+function loadDdmrp(options) {
+  return Promise.all([loadPlan(options), loadMovements()]);
+}
+
+$("ddmrp-reload").addEventListener("click", () => loadDdmrp());
+$("drop-draft").addEventListener("click", () => { dotsDraft = null; renderDraft(); });
+
+function showPeriod(name) {
+  period = name;
+  return loadMovements();
+}
+
+for (const name of ["week", "month", "half"]) {
+  $(`period-${name}`).addEventListener("click", () => showPeriod(name));
+}
+
+$("ask-dots").addEventListener("click", async () => {
+  const button = $("ask-dots");
+  button.disabled = true;
+  notice($("dots-note"), "", "Dots is reading the numbers...");
+  try {
+    dotsDraft = await api("/api/forecast/dotsDraft", postJson({
+      site: $("order-site").value.trim() || null,
+      work_item: $("order-work").value.trim() || null,
+    }));
+    notice($("dots-note"), "ok", `${dotsDraft.lines.length} line(s) drafted. Check them, then save.`);
+    renderDraft();
+  } catch (e) {
+    notice($("dots-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("save-draft").addEventListener("click", async () => {
+  if (!dotsDraft) return;
+  const button = $("save-draft");
+  const lines = dotsDraft.lines
+    .filter((line) => line.quantity > 0)
+    .map((line) => ({
+      article: line.article,
+      designation: line.reason || null,
+      reference: line.reference || null,
+      quantity: line.quantity,
+      in_stock: false,
+    }));
+  if (!lines.length) {
+    notice($("dots-note"), "warn", "Every line is at zero. Nothing to save.");
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const answer = await api("/api/orders", postJson({
+      list: {
+        list_date: new Date().toISOString().slice(0, 10),
+        site: $("order-site").value.trim() || null,
+        work_item: $("order-work").value.trim() || null,
+        drafter: "DOTS",
+        lines,
+      },
+    }));
+    notice($("dots-note"), "ok",
+      `Saved as purchase order #${answer.list_id}. It is in the Purchase orders tab now.`);
+    dotsDraft = null;
+    renderDraft();
+    await loadDdmrp();
+  } catch (e) {
+    notice($("dots-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// ---- Bills: what the deliveries end up costing -----------------------------
+
+let billRows = [];
+let billMonths = [];
+let billDraft = null;
+
+const BILL_FIELDS = ["supplier", "number", "bill_date", "due_date", "currency", "net", "tax",
+                     "total", "site", "order_ref", "note"];
+
+function money(value, currency = "EUR") {
+  if (value == null || isNaN(value)) return "—";
+  return `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2,
+                                                     maximumFractionDigits: 2 })} ${currency}`;
+}
+
+function openBillReview(bill, source) {
+  billDraft = source ?? {};
+  for (const name of BILL_FIELDS) {
+    const box = $(`b-${name}`);
+    const value = bill?.[name];
+    box.value = value == null ? (name === "currency" ? "EUR" : "") : String(value);
+  }
+  $("bill-review").hidden = false;
+  $("bill-review").scrollIntoView({ block: "start" });
+}
+
+function closeBillReview() {
+  $("bill-review").hidden = true;
+  billDraft = null;
+  notice($("bill-review-note"), "", "");
+}
+
+function billFromForm() {
+  const bill = {};
+  for (const name of BILL_FIELDS) bill[name] = $(`b-${name}`).value.trim() || null;
+  return bill;
+}
+
+async function readBillFile(file) {
+  const body = new FormData();
+  body.append("photo", file);
+  spinner($("bill-status"), `Reading ${file.name}...`);
+  try {
+    const answer = await api("/api/bills/read", { method: "POST", body });
+    $("bill-status").hidden = true;
+    openBillReview(answer.bill, { sha256: answer.sha256 });
+  } catch (e) {
+    notice($("bill-status"), "bad", e.message);
+  }
+}
+
+async function readQueuedBill(item) {
+  spinner($("queue-note"), `Reading ${item.name} as a bill...`);
+  try {
+    const answer = await api(`/api/intake/${item.intake_id}/bill`, postJson({}));
+    $("queue-note").hidden = true;
+    openTab("bills");
+    openBillReview(answer.bill, { sha256: answer.sha256, intake_id: answer.intake_id,
+                                  sender: answer.sender });
+  } catch (e) {
+    notice($("queue-note"), "bad", e.message);
+  }
+}
+
+$("bill-save").addEventListener("click", async () => {
+  const button = $("bill-save");
+  button.disabled = true;
+  try {
+    const answer = await api("/api/bills", postJson({ bill: billFromForm(), ...billDraft }));
+    closeBillReview();
+    say(`Bill #${answer.bill_id} saved`);
+    await loadBills();
+    await loadQueue();
+  } catch (e) {
+    notice($("bill-review-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("bill-discard").addEventListener("click", closeBillReview);
+
+function billsShown() {
+  const search = upper($("bill-search").value);
+  const state = $("bill-state").value;
+  return billRows.filter((bill) => {
+    if (state && bill.state !== state) return false;
+    if (!search) return true;
+    const haystack = upper(`${bill.supplier} ${bill.number ?? ""} ${bill.site ?? ""} `
+                           + `${bill.order_ref ?? ""}`);
+    return haystack.includes(search);
+  });
+}
+
+async function setBillState(bill, state) {
+  try {
+    await api(`/api/bills/${bill.bill_id}`, patchJson({ state }));
+    await loadBills();
+  } catch (e) {
+    notice($("bills-note"), "bad", e.message);
+  }
+}
+
+function renderBills() {
+  const shown = billsShown();
+  const owed = shown.filter((bill) => bill.state === "to pay")
+                    .reduce((sum, bill) => sum + (bill.total ?? 0), 0);
+  const total = shown.reduce((sum, bill) => sum + (bill.total ?? 0), 0);
+  $("bill-summary").textContent =
+    `${shown.length} bill(s) · ${money(total)} in all · ${money(owed)} still to pay`;
+
+  renderTable($("table-bills"), [
+    { label: "Supplier", cell: (bill) => {
+        const box = el("span", {}, [el("strong", { textContent: bill.supplier })]);
+        const under = [bill.number, bill.site, bill.order_ref].filter(Boolean).join(" · ");
+        if (under) box.append(el("div", { className: "desig", textContent: under }));
+        return box;
+      } },
+    { label: "Bill date", cell: (bill) => bill.bill_date ?? "" },
+    { label: "Due", cell: (bill) => {
+        if (!bill.due_date) return "";
+        const late = bill.state === "to pay" && bill.due_date < new Date().toISOString().slice(0, 10);
+        if (!late) return bill.due_date;
+        return el("span", {}, [bill.due_date + " ",
+                               el("span", { className: "pill red", textContent: "late" })]);
+      } },
+    { label: "Net", numeric: true, cell: (bill) => showNum(bill.net) },
+    { label: "Tax", numeric: true, cell: (bill) => showNum(bill.tax) },
+    { label: "Total", numeric: true, cell: (bill) => money(bill.total, bill.currency) },
+    { label: "State", cell: (bill) => {
+        const box = el("select", { className: "cell", "aria-label": `State of ${bill.supplier}` });
+        for (const state of ["to pay", "paid", "disputed"]) {
+          box.append(el("option", { value: state, textContent: state,
+                                    selected: bill.state === state }));
+        }
+        box.addEventListener("change", () => setBillState(bill, box.value));
+        return box;
+      } },
+    { label: "From", cell: (bill) => el("span", { className: "muted",
+        textContent: bill.source === "mail" ? (bill.sender ?? "mail") : bill.source }) },
+    { label: "", cell: (bill) => {
+        const row = el("span", { className: "row tight" });
+        if (bill.photo) {
+          row.append(el("a", { className: "mini", href: `/api/bill-photo/${bill.bill_id}`,
+                               target: "_blank", textContent: "scan" }));
+        }
+        const gone = el("button", { className: "mini", textContent: "remove" });
+        gone.addEventListener("click", async () => {
+          try {
+            await api(`/api/bills/${bill.bill_id}`, { method: "DELETE" });
+            await loadBills();
+          } catch (e) {
+            notice($("bills-note"), "bad", e.message);
+          }
+        });
+        row.append(gone);
+        return row;
+      } },
+  ], shown, "No bill stored yet.");
+}
+
+function renderBillMonths(summary) {
+  $("bill-totals").replaceChildren(...[
+    ["This month", money(summary.this_month?.total ?? 0)],
+    ["Still to pay", money(summary.owed)],
+    ["Late", money(summary.late)],
+    ["Month on average", money(summary.per_month)],
+    ["Suppliers", String(summary.suppliers)],
+  ].map(([name, value]) => el("div", { className: "stat" }, [
+    el("span", { className: "stat-name", textContent: name }),
+    el("strong", { textContent: value }),
+  ])));
+
+  renderTable($("table-bill-months"), [
+    { label: "Month", cell: (row) => el("strong", { textContent: row.month }) },
+    { label: "Bills", numeric: true, cell: (row) => showNum(row.bills) },
+    { label: "Net", numeric: true, cell: (row) => showNum(row.net) },
+    { label: "Total", numeric: true, cell: (row) => money(row.total) },
+    { label: "Still to pay", numeric: true, cell: (row) => money(row.owed) },
+  ], billMonths, "No bill stored yet.");
+}
+
+function renderBillSuppliers(suppliers) {
+  $("bill-suppliers").replaceChildren(suppliers.length
+    ? barList(suppliers, (row) => row.supplier, (row) => row.total ?? 0)
+    : el("p", { className: "muted", textContent: "No bill stored yet." }));
+}
+
+async function loadBills() {
+  const month = $("bill-month").value;
+  let data;
+  try {
+    data = await api(`/api/bills${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+  } catch (e) {
+    notice($("bills-note"), "bad", e.message);
+    return;
+  }
+  billRows = data.bills ?? [];
+  billMonths = data.months ?? [];
+
+  const picker = $("bill-month");
+  const chosen = picker.value;
+  picker.replaceChildren(el("option", { value: "", textContent: "Every month" }),
+    ...billMonths.map((row) => el("option", { value: row.month, textContent: row.month })));
+  picker.value = billMonths.some((row) => row.month === chosen) ? chosen : "";
+
+  $("tree-bills").textContent = `(${billRows.length})`;
+  renderBillMonths(data.summary ?? {});
+  renderBillSuppliers(data.suppliers ?? []);
+  renderBills();
+}
+
+$("bill-search").addEventListener("input", renderBills);
+$("bill-state").addEventListener("change", renderBills);
+$("bill-month").addEventListener("change", () => loadBills());
+
+pickPhoto($("bill-photo"), $("bill-name"), "thumb-bill", $("bill-read"),
+          (file) => { billFile = file; });
+$("bill-read").addEventListener("click", () => billFile && readBillFile(billFile));
+
+// ---- Mailbox settings -----------------------------------------------------
+
+let mailProviders = [];
+
+function mailByHand() {
+  const chosen = $("mail-provider").value;
+  return chosen === "" || chosen === "other";
+}
+
+function showMailHelp() {
+  const chosen = mailProviders.find((row) => row.id === $("mail-provider").value);
+  $("mail-help").textContent = chosen ? chosen.help : "";
+  $("mail-by-hand").hidden = !mailByHand();
+}
+
+async function loadMailSettings() {
+  let data;
+  try {
+    data = await api("/api/mail/settings");
+  } catch (e) {
+    notice($("mail-settings-note"), "bad", e.message);
+    return;
+  }
+  mailProviders = data.providers ?? [];
+  const now = data.current ?? {};
+
+  $("mail-provider").replaceChildren(
+    el("option", { value: "", textContent: "Not set" }),
+    ...mailProviders.map((row) => el("option", { value: row.id, textContent: row.label })));
+  $("mail-provider").value = now.provider ?? "";
+  $("mail-user").value = now.user ?? "";
+  $("mail-folder").value = now.folder ?? "INBOX";
+  $("mail-every").value = now.every_minutes ?? 15;
+  $("mail-host").value = now.host ?? "";
+  $("mail-port").value = now.port ?? "";
+  $("mail-security").value = now.security ?? "ssl";
+  $("mail-stored").textContent = now.password_set
+    ? `password stored · ${now.configured ? "mailbox ready" : "user name missing"}`
+    : "no password stored yet";
+  showMailHelp();
+
+  const state = now.configured
+    ? `${now.user} on ${now.host}, folder ${now.folder}, every ${now.every_minutes} min`
+    : "No mailbox set up yet. Settings, then Mailbox.";
+  $("mail-state").textContent = data.at ? `${state} · last run ${data.at}: ${data.detail}` : state;
+}
+
+$("mail-provider").addEventListener("change", showMailHelp);
+
+$("mail-save").addEventListener("click", async () => {
+  const button = $("mail-save");
+  button.disabled = true;
+  spinner($("mail-settings-note"), "Saving...");
+  try {
+    const answer = await api("/api/mail/settings", postJson({
+      provider: $("mail-provider").value,
+      user: $("mail-user").value.trim(),
+      password: $("mail-password").value || null,
+      folder: $("mail-folder").value.trim() || "INBOX",
+      every_minutes: Number($("mail-every").value) || 15,
+      host: $("mail-host").value.trim(),
+      port: Number($("mail-port").value) || null,
+      security: $("mail-security").value,
+    }));
+    $("mail-password").value = "";
+    notice($("mail-settings-note"), "ok",
+      answer.current.configured ? "Mailbox saved. Test the connection to be sure."
+                                : "Saved. A user name and a password are still needed.");
+    await loadMailSettings();
+  } catch (e) {
+    notice($("mail-settings-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("mail-settings-check").addEventListener("click", async () => {
+  spinner($("mail-settings-note"), "Knocking...");
+  try {
+    const answer = await api("/api/mail/check", postJson({}));
+    notice($("mail-settings-note"), answer.ok ? "ok" : "warn", answer.detail);
+  } catch (e) {
+    notice($("mail-settings-note"), "bad", e.message);
+  }
+});
+
+// ---- Baskets filled from the group chat -----------------------------------
+
+async function loadBaskets() {
+  let data;
+  try {
+    data = await api("/api/baskets");
+  } catch (e) {
+    notice($("basket-note"), "bad", e.message);
+    return;
+  }
+  const open = data.baskets ?? [];
+  const chat = data.chat ?? {};
+  $("basket-card").hidden = open.length === 0 && !chat.ready;
+
+  $("basket-state").textContent = chat.ready
+    ? "The Discord bot is on. /basket fills these, /purchase turns one into an order."
+    : (chat.installed
+        ? "No bot token yet: Settings, then Chat bot."
+        : "The Discord library is not installed: pip install 'stock-manager[discord]'.");
+
+  $("chat-state").textContent = chat.ready
+    ? `Bot ready · ${chat.channels.length ? chat.channels.join(", ") : "every channel"}`
+    : (chat.installed ? (chat.token_set ? "Token stored, bot starting with the app."
+                                        : "No token stored yet.")
+                      : "Library missing: pip install 'stock-manager[discord]'");
+  $("chat-channels").value = (chat.channels ?? []).join(", ");
+
+  $("baskets").replaceChildren(...open.map((basket) => {
+    const head = el("div", { className: "row tight" }, [
+      el("strong", { textContent: basket.shop || "no shop named" }),
+      el("span", { className: "muted",
+                   textContent: `channel ${basket.channel} · ${basket.lines} line(s)`
+                                + (basket.site ? ` · ${basket.site}` : "")
+                                + (basket.last_at ? ` · ${basket.last_at}` : "") }),
+      el("span", { className: "grow" }),
+    ]);
+    const order = el("button", { className: "mini", textContent: "make it a purchase order" });
+    order.addEventListener("click", async () => {
+      order.disabled = true;
+      try {
+        const answer = await api(`/api/baskets/${encodeURIComponent(basket.channel)}/order`,
+                                 postJson({}));
+        notice($("basket-note"), "ok",
+          `Purchase order #${answer.list_id} written, ${answer.lines} line(s).`);
+        await Promise.all([loadBaskets(), refresh()]);
+      } catch (e) {
+        notice($("basket-note"), "bad", e.message);
+        order.disabled = false;
+      }
+    });
+    const gone = el("button", { className: "mini", textContent: "empty it" });
+    gone.addEventListener("click", async () => {
+      try {
+        await api(`/api/baskets/${encodeURIComponent(basket.channel)}`, { method: "DELETE" });
+        await loadBaskets();
+      } catch (e) {
+        notice($("basket-note"), "bad", e.message);
+      }
+    });
+    head.append(order, gone);
+
+    const table = el("table");
+    renderTable(table, [
+      { label: "Article", cell: (row) => el("strong", { textContent: row.article }) },
+      { label: "Quantity", numeric: true, cell: (row) => showNum(row.quantity) },
+      { label: "Work item", cell: (row) => row.work_item ?? "" },
+      { label: "Asked by", cell: (row) => el("span", { className: "muted",
+                                                       textContent: row.added_by ?? "" }) },
+    ], basket.items ?? [], "");
+    return el("div", { className: "sheet" }, [head, el("div", { className: "scroll-x" }, [table])]);
+  }));
+}
+
+async function saveChat(forget) {
+  const button = forget ? $("chat-forget") : $("chat-save");
+  button.disabled = true;
+  try {
+    await api("/api/chat/settings", postJson({
+      token: $("chat-token").value || null,
+      channels: $("chat-channels").value,
+      forget,
+    }));
+    $("chat-token").value = "";
+    notice($("chat-note"), "ok", forget
+      ? "Token forgotten. The bot stops at the next start."
+      : "Saved. Restart Stock Manager for the bot to sign in.");
+    await loadBaskets();
+  } catch (e) {
+    notice($("chat-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("chat-save").addEventListener("click", () => saveChat(false));
+$("chat-forget").addEventListener("click", () => saveChat(true));
+
 async function refresh() {
   try {
     const data = await api("/api/data");
@@ -1964,12 +3085,14 @@ async function refresh() {
     $("tree-orders").textContent = `(${lists.length})`;
     say("Ready");
 
+    renderSiteTree();
     renderDeliveries();
     renderOrders();
     renderExport();
     await Promise.all([
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
-      renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(),
+      renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(),
+      loadBills(), loadMailSettings(), loadBaskets(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {
@@ -1978,6 +3101,105 @@ async function refresh() {
   }
 }
 
-openTab(TABS.find((name) => $(`tab-${name}`).getAttribute("aria-selected") === "true") ?? "capture");
+// ---- menu bar: a menu picks the one card a screen shows -------------------
+
+const SCREEN_MENUS = [
+  { menu: "system-menu", drop: "system-drop", button: "menu-system",
+    panel: "panel-settings", tab: "settings", key: "settings-card", title: "System",
+    skip: [] },
+  { menu: "input-menu", drop: "input-drop", button: "menu-note",
+    panel: "panel-capture", tab: "capture", key: "capture-card", title: "Input",
+    skip: ["review", "mapping"] },
+];
+
+function cardName(card) {
+  return (card.querySelector("h2")?.textContent ?? "").trim();
+}
+
+function menuCards(spec) {
+  return [...document.querySelectorAll(`#${spec.panel} .card`)]
+    .filter((card) => !spec.skip.includes(card.id) && card.querySelector("h2"));
+}
+
+function showOnly(spec, card) {
+  for (const other of menuCards(spec)) {
+    other.hidden = other !== card;
+  }
+  for (const entry of document.querySelectorAll(`#${spec.drop} button`)) {
+    entry.setAttribute("aria-current", String(entry.dataset.card === cardName(card)));
+  }
+  try {
+    localStorage.setItem(spec.key, cardName(card));
+  } catch {
+  }
+}
+
+function closeMenu(spec) {
+  $(spec.menu).classList.remove("open");
+  $(spec.button).setAttribute("aria-expanded", "false");
+}
+
+function openMenu(spec) {
+  for (const other of SCREEN_MENUS) {
+    if (other !== spec) closeMenu(other);
+  }
+  $(spec.menu).classList.add("open");
+  $(spec.button).setAttribute("aria-expanded", "true");
+}
+
+function buildMenu(spec) {
+  const cards = menuCards(spec);
+  if (!cards.length) return;
+
+  $(spec.drop).replaceChildren(...cards.map((card) => {
+    const entry = el("button", { type: "button", textContent: cardName(card), role: "menuitem" });
+    entry.dataset.card = cardName(card);
+    entry.addEventListener("click", () => {
+      openTab(spec.tab);
+      showOnly(spec, card);
+      closeMenu(spec);
+      say(`${spec.title} · ${cardName(card)}`);
+    });
+    return entry;
+  }));
+
+  let wanted = null;
+  try {
+    const saved = localStorage.getItem(spec.key);
+    wanted = cards.find((card) => cardName(card) === saved) ?? null;
+  } catch {
+  }
+  showOnly(spec, wanted ?? cards[0]);
+
+  const holder = $(spec.menu);
+  let timer = null;
+  holder.addEventListener("pointerenter", () => {
+    clearTimeout(timer);
+    openMenu(spec);
+  });
+  holder.addEventListener("pointerleave", () => {
+    timer = setTimeout(() => closeMenu(spec), 250);
+  });
+  holder.addEventListener("focusout", (event) => {
+    if (!holder.contains(event.relatedTarget)) closeMenu(spec);
+  });
+  $(spec.button).addEventListener("click", () => {
+    openTab(spec.tab);
+    if (holder.classList.contains("open")) closeMenu(spec);
+    else openMenu(spec);
+  });
+}
+
+function buildScreenMenus() {
+  for (const spec of SCREEN_MENUS) buildMenu(spec);
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  for (const spec of SCREEN_MENUS) closeMenu(spec);
+});
+
+openTab("capture");
+buildScreenMenus();
 refresh();
 </script>

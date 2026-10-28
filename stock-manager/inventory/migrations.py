@@ -205,6 +205,55 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        10,
+        "supplier bills, so what is owed is tracked next to what arrived",
+        """
+        CREATE SEQUENCE IF NOT EXISTS bill_seq START 1;
+        CREATE TABLE IF NOT EXISTS bills (
+            bill_id      INTEGER PRIMARY KEY DEFAULT nextval('bill_seq'),
+            supplier     VARCHAR NOT NULL,
+            number       VARCHAR,
+            bill_date    DATE NOT NULL,
+            month        VARCHAR GENERATED ALWAYS AS (strftime(bill_date, '%Y-%m')) VIRTUAL,
+            due_date     DATE,
+            currency     VARCHAR NOT NULL DEFAULT 'EUR',
+            net          DOUBLE,
+            tax          DOUBLE,
+            total        DOUBLE,
+            site         VARCHAR,
+            order_ref    VARCHAR,
+            state        VARCHAR NOT NULL DEFAULT 'to pay',
+            paid_on      DATE,
+            source       VARCHAR NOT NULL DEFAULT 'file',
+            sender       VARCHAR,
+            image_sha256 VARCHAR UNIQUE,
+            image_path   VARCHAR,
+            added_at     TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            added_by     VARCHAR,
+            note         VARCHAR
+        );
+        """,
+    ),
+    (
+        11,
+        "chat baskets: what a group chat asks for before it becomes a purchase order",
+        """
+        CREATE SEQUENCE IF NOT EXISTS basket_seq START 1;
+        CREATE TABLE IF NOT EXISTS baskets (
+            line_id    INTEGER PRIMARY KEY DEFAULT nextval('basket_seq'),
+            channel    VARCHAR NOT NULL,
+            shop       VARCHAR,
+            article    VARCHAR NOT NULL,
+            quantity   DOUBLE,
+            site       VARCHAR,
+            work_item  VARCHAR,
+            note       VARCHAR,
+            added_by   VARCHAR,
+            added_at   TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

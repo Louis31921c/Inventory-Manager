@@ -96,6 +96,7 @@ a { color: var(--accent); }
   padding: 1px 4px;
   width: 190px;
 }
+.toolbar .toolbar-gap { flex: 1 1 auto; }
 .toolbar .sep {
   background: var(--line-soft);
   height: 18px;
@@ -164,6 +165,11 @@ button.tool.stop::before { color: var(--red); content: "\2715 "; }
 .tree button:hover { background: var(--row-hover); }
 .tree button[aria-current="true"] { background: var(--row-pick); font-weight: 700; }
 .tree .count { color: var(--ink-soft); font-weight: 400; }
+.tree .node.site { font-weight: 700; }
+.tree .node.site[aria-expanded="true"]::before { content: "\1F5C1"; }
+.tree .node.work { padding-left: 38px; }
+.tree .node.work::before { content: "\2022"; left: 26px; }
+.tree #tree-sites { max-height: 42vh; overflow-y: auto; }
 
 .work { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 8px; }
 
@@ -199,7 +205,6 @@ nav.tabs {
 section.panel {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-top: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -341,6 +346,59 @@ input.cell {
 }
 input.cell:hover { border-color: #7f9db9; }
 input.cell:focus { border-color: var(--accent); outline: none; }
+
+/* ---- a menu that drops from the menu bar --------------------------- */
+
+.menubar .menu { position: relative; }
+.menu-drop {
+  background: var(--paper);
+  border: 1px solid #8d9196;
+  box-shadow: 2px 3px 8px rgba(0, 0, 0, .25);
+  display: none;
+  left: 0;
+  min-width: 190px;
+  padding: 2px;
+  position: absolute;
+  top: 100%;
+  z-index: 40;
+}
+.menu.open .menu-drop { display: block; }
+.menu-drop button {
+  background: none;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  display: block;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 3px 18px 3px 8px;
+  text-align: left;
+  white-space: nowrap;
+  width: 100%;
+}
+.menu-drop button:hover, .menu-drop button:focus-visible {
+  background: var(--accent);
+  color: #fff;
+  outline: none;
+}
+.menu-drop button[aria-current="true"]::after { content: " \2022"; }
+
+/* ---- figures on a screen ------------------------------------------- */
+
+.stat {
+  background: var(--head-wash, #eef1f5);
+  border: 1px solid #b9bec4;
+  flex: 1 1 130px;
+  min-width: 120px;
+  padding: 4px 8px 5px;
+}
+.stat .stat-name {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.stat strong { font-size: 14px; }
 
 /* ---- status lamps and pills ---------------------------------------- */
 

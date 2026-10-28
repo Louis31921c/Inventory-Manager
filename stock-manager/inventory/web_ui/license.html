@@ -1,26 +1,48 @@
 <meta charset="utf-8">
-<title>Licence</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licence - Stock Manager</title>
 <style>
-  @font-face {
-    font-display: swap;
-    font-family: "Cascadia Mono Web";
-    src: url("/fonts/CascadiaMono.woff2") format("woff2");
+  @import url("/sap.css");
+
+  body { padding: 0; }
+  .sheet-area { padding: 10px 12px 24px; }
+  pre {
+    background: #fff;
+    border: 1px solid var(--line-soft);
+    font-family: "Liberation Mono", Consolas, monospace;
+    font-size: 11.5px;
+    margin: 0;
+    max-width: 90ch;
+    min-height: 50vh;
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
-  body {
-    background: #000; color: #39ff14; font-size: 13px; line-height: 1.5; margin: 0;
-    padding: 24px 16px 64px;
-    font-family: "Cascadia Mono Web", "DejaVu Sans Mono", ui-monospace, monospace;
-  }
-  pre { margin: 0 auto; max-width: 82ch; min-height: 60vh; white-space: pre-wrap; word-wrap: break-word; }
   pre.typing::after { animation: blink 1s steps(1) infinite; content: "\2588"; }
   @keyframes blink { 50% { opacity: 0; } }
-  footer { margin: 24px auto 0; max-width: 82ch; }
-  a { color: #39ff14; }
-  .skip { color: #1c9c10; }
+  footer { display: flex; gap: 10px; margin-top: 10px; max-width: 90ch; }
+  .skip { color: var(--ink-soft); cursor: pointer; font-size: 11px; }
 </style>
 
-<pre id="text" class="typing"></pre>
-<footer><a href="/">&lt; back</a> <span class="skip" id="skip">(click to show it all)</span></footer>
+<div class="titlebar">
+  <span class="mark">SM</span>
+  <span>Stock Manager &mdash; Help &mdash; Licence</span>
+  <span class="spacer"></span>
+  <span class="who">MIT</span>
+</div>
+
+<div class="toolbar">
+  <a class="mini" href="/">Back to the main screen</a>
+  <span class="toolbar-gap"></span>
+  <span class="skip" id="skip">show it all</span>
+</div>
+
+<div class="screen-title">Licence and warranty</div>
+
+<div class="sheet-area">
+  <pre id="text" class="typing"></pre>
+  <footer><a class="mini" href="/">&lt; back</a></footer>
+</div>
 
 <script>
 const LICENCE = LICENCE_JSON;

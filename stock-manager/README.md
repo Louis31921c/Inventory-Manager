@@ -182,6 +182,44 @@ GROUP BY a.article
 ORDER BY received DESC NULLS LAST;
 ```
 
+## Bills
+
+Every supplier bill lands on its own screen: what each month comes to, what is still to pay, what
+is late, and the spend per supplier. A bill is read the same way as a delivery note (photo, PDF or
+a scan that arrived by mail), checked by a person, then stored. Downloads: CSV, XLSX and a
+PostgreSQL script, keyed on `bill_id`.
+
+## Mailbox
+
+Settings, then Mailbox. Pick the provider and the server details fill themselves in:
+
+| Provider | What it needs |
+|---|---|
+| Proton Mail | Proton Bridge running on this machine, the Bridge's own user and password |
+| Gmail | two-step verification, then an app password |
+| Outlook / Microsoft 365 | an app password from whoever runs the tenant; a plain password is refused by Microsoft |
+| Yahoo, iCloud | an app password |
+| Another mailbox | the IMAP server, port and security by hand |
+
+Attachments from unread mail land in the reading queue every few minutes. The password is kept in
+the settings file on this machine, never shown again and never sent to the screen.
+
+## Chat bot (Discord)
+
+```bash
+pip install "stock-manager[discord]"
+```
+
+Paste the bot token in Settings, then restart. In the channel:
+
+- `/basket shop:foussier.fr items:12 hex bolt m6x25, rondelle m8 x100` fills the channel's basket
+- `/basket_show`, `/basket_clear`
+- `/purchase` writes the basket into Purchase orders
+- `/stock rondelle m8` answers what is on the shelf
+
+`/purchase` does not buy anything: it writes the order, and a person places it on the supplier's
+site. Baskets also show up in the app, on the Purchase orders screen.
+
 ## Buffers
 
 The DDMRP window sizes a buffer for every article, the demand driven way, out of what the

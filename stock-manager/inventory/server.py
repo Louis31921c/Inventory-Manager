@@ -24,16 +24,17 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, alerts, audit, backup, catalog, db, ddmrp, forecast, intake, llm,
+from . import (account, alerts, audit, backup, baskets, bills, catalog, db, ddmrp,
+               discord_bot,
+               forecast, intake, llm,
                mailbox, models_info, pg, sheets, vocabulary)
-from .config import load_config
+from .config import load_config, set_setting
 from .models import Note, parse_date
 
 log = logging.getLogger("inventory.web")
 
 WEB = Path(__file__).resolve().parent / "web_ui"
 PAGE = WEB / "app.html"
-PREDICTIONS = WEB / "predictions.html"
 LICENCE = WEB / "license.html"
 UNLOCK = WEB / "unlock.html"
 SUPPORTED = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
@@ -82,6 +83,8 @@ async def startup():
     log.info("error reports: %s", alerts.destination(config.sms))
     asyncio.create_task(_purge_loop())
     asyncio.create_task(_mail_loop())
+    if discord_bot.settings()["token"]:
+        asyncio.create_task(discord_bot.run(config))
 
 
 async def _purge_loop():
@@ -284,11 +287,6 @@ def page():
     return HTMLResponse(PAGE.read_text(encoding="utf-8"))
 
 
-@app.get("/predictions", response_class=HTMLResponse)
-def predictions_page():
-    return HTMLResponse(PREDICTIONS.read_text(encoding="utf-8"))
-
-
 @app.get("/license", response_class=HTMLResponse)
 def license_page():
     text = (WEB / "LICENSE.txt").read_text(encoding="utf-8")
@@ -389,8 +387,13 @@ def read_intake():
                      "every_minutes": config.mail.every_minutes, **last_mail}}
 
 
+MAX_FILES = 25
+
+
 @app.post("/api/intake")
 async def add_to_intake(request: Request, files: list[UploadFile]):
+    if len(files) > MAX_FILES:
+        raise HTTPException(413, f"{MAX_FILES} files at a time, no more.")
     added, refused = [], []
     for item in files:
         raw = await item.read()
@@ -469,6 +472,109 @@ async def fetch_mail(request: Request):
                      detail=f"{answer['messages']} message(s), {answer['queued']} queued")
     event(request, "mail.fetch", config.mail.folder, last_mail["detail"])
     return {**answer, "waiting": intake.waiting(config)}
+
+
+class MailSettings(BaseModel):
+    provider: str = ""
+    user: str = ""
+    password: str | None = None
+    folder: str = "INBOX"
+    every_minutes: int = 15
+    mark_read: bool = True
+    host: str = ""
+    port: int | None = None
+    security: str = ""
+
+
+def _mail_state():
+    mail = config.mail
+    return {"provider": mail.provider, "host": mail.host, "port": mail.port, "user": mail.user,
+            "folder": mail.folder, "security": mail.security, "mark_read": mail.mark_read,
+            "every_minutes": mail.every_minutes, "configured": mail.enabled,
+            "password_set": bool(mail.password)}
+
+
+@app.get("/api/mail/settings")
+def mail_settings():
+    """What the mailbox is set to. The password itself never leaves the machine."""
+    return {"providers": mailbox.providers(), "current": _mail_state(), **last_mail}
+
+
+@app.post("/api/mail/settings")
+def save_mail_settings(request: Request, body: MailSettings):
+    global config
+    provider = body.provider.strip().lower()
+    if provider and provider not in mailbox.PROVIDERS:
+        raise HTTPException(422, f"Unknown provider: {provider}.")
+    if body.security and body.security not in ("ssl", "starttls"):
+        raise HTTPException(422, "Security is ssl or starttls.")
+
+    chosen = mailbox.preset(provider)
+    by_hand = provider in ("", "other")
+    set_setting("MAIL_PROVIDER", provider)
+    set_setting("IMAP_USER", body.user.strip())
+    set_setting("IMAP_FOLDER", body.folder.strip() or "INBOX")
+    set_setting("IMAP_MARK_READ", "1" if body.mark_read else "0")
+    set_setting("MAIL_EVERY_MINUTES", str(min(max(body.every_minutes, 1), 1440)))
+    set_setting("IMAP_HOST", body.host.strip() if by_hand else "")
+    set_setting("IMAP_PORT", str(body.port) if (by_hand and body.port) else "")
+    set_setting("IMAP_SECURITY", body.security if by_hand else "")
+    if body.password:
+        set_setting("IMAP_PASSWORD", body.password)
+    elif not body.user.strip():
+        set_setting("IMAP_PASSWORD", "")
+
+    config = replace(config, mail=load_config(data_dir=config.data_dir, user=config.user).mail)
+    event(request, "mail.settings", provider or "other", config.mail.host)
+    return {"current": _mail_state(), "help": chosen["help"]}
+
+
+@app.get("/api/baskets")
+def read_baskets():
+    return {"baskets": baskets.open_baskets(config.db_path), "chat": discord_bot.status()}
+
+
+@app.post("/api/baskets/{channel}/order")
+def basket_to_order(request: Request, channel: str):
+    """What the chat asked for becomes a purchase order, for a person to place."""
+    answer = baskets.to_purchase_order(config.db_path, channel, who(request)[0])
+    if answer is None:
+        raise HTTPException(404, "That basket is empty.")
+    event(request, "basket.order", f"list #{answer['list_id']}", f"{len(answer['lines'])} line(s)")
+    return {"list_id": answer["list_id"], "lines": len(answer["lines"]), "shop": answer["shop"]}
+
+
+@app.delete("/api/baskets/{channel}")
+def drop_basket(request: Request, channel: str):
+    held = baskets.clear(config.db_path, channel)
+    if not held:
+        raise HTTPException(404, "That basket is empty.")
+    event(request, "basket.clear", channel, f"{held} line(s)")
+    return {"dropped": held}
+
+
+class ChatSettings(BaseModel):
+    token: str | None = None
+    channels: str = ""
+    forget: bool = False
+
+
+@app.get("/api/chat/settings")
+def chat_settings():
+    """Whether the Discord bot can run. The token itself never leaves the machine."""
+    return discord_bot.status()
+
+
+@app.post("/api/chat/settings")
+def save_chat_settings(request: Request, body: ChatSettings):
+    channels = ",".join(piece.strip() for piece in body.channels.split(",") if piece.strip())
+    set_setting(discord_bot.CHANNELS_KEY, channels)
+    if body.forget:
+        set_setting(discord_bot.TOKEN_KEY, "")
+    elif body.token:
+        set_setting(discord_bot.TOKEN_KEY, body.token.strip())
+    event(request, "chat.settings", "discord", f"{len(channels.split(',')) if channels else 0} channel(s)")
+    return discord_bot.status()
 
 
 @app.post("/api/mail/check")
@@ -598,6 +704,116 @@ def _photo(path):
 @app.get("/api/photo/{note_id}")
 def photo(note_id: int):
     rows = db.read(config.db_path, "SELECT image_path FROM notes WHERE note_id = ?", [note_id])
+    return _photo(rows[0][0] if rows else None)
+
+
+class BillBody(BaseModel):
+    bill: dict
+    sha256: str | None = None
+    intake_id: int | None = None
+    sender: str | None = None
+
+
+@app.get("/api/bills")
+def read_bills(month: str | None = None):
+    return {"bills": bills.recent(config.db_path),
+            "months": bills.by_month(config.db_path),
+            "suppliers": bills.per_supplier(config.db_path, month),
+            "month": month,
+            "summary": bills.summary(config.db_path)}
+
+
+async def _read_bill(raw, media_type):
+    try:
+        return await get_backend().extract_bill(raw, media_type)
+    except llm.ExtractionError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+@app.post("/api/bills/read")
+async def read_bill_photo(request: Request, photo: UploadFile):
+    """A bill dropped straight on the screen, same road as a delivery note."""
+    raw, media_type, sha = await _photo_bytes(photo)
+    already = bills.find_by_image(config.db_path, sha)
+    if already is not None:
+        raise HTTPException(409, f"This bill is already stored (bill #{already}).")
+    read = await _read_bill(raw, media_type)
+    (config.images_dir / f"{sha}{SUPPORTED[media_type]}").write_bytes(raw)
+    event(request, "bill.read", photo.filename or "upload")
+    return {"sha256": sha, "bill": read}
+
+
+@app.post("/api/intake/{intake_id}/bill")
+async def read_queued_bill(request: Request, intake_id: int):
+    """Read a queued scan or PDF as a bill, not as a delivery note."""
+    try:
+        raw, media_type, item = intake.bytes_of(config, intake_id)
+    except KeyError as e:
+        raise HTTPException(404, "That file is no longer in the queue.") from e
+    if media_type not in SUPPORTED:
+        raise HTTPException(422, "A spreadsheet is imported, not read as a bill.")
+
+    already = bills.find_by_image(config.db_path, item["sha256"])
+    if already is not None:
+        intake.mark(config, intake_id, intake.DONE, f"already bill #{already}")
+        raise HTTPException(409, f"This bill is already stored (bill #{already}).")
+
+    read = await _read_bill(raw, media_type)
+    (config.images_dir / f"{item['sha256']}{SUPPORTED[media_type]}").write_bytes(raw)
+    event(request, "bill.read", item["name"])
+    return {"sha256": item["sha256"], "bill": read, "intake_id": intake_id,
+            "sender": item.get("sender")}
+
+
+@app.post("/api/bills")
+def save_bill(request: Request, body: BillBody):
+    source = "mail" if body.sender else ("file" if body.sha256 else "hand")
+    row = bills.shape(body.bill, source=source, user=who(request)[0], sender=body.sender,
+                      sha256=body.sha256 or None, path=_stored_photo(body.sha256) or None)
+    wrong = bills.problems(row)
+    if wrong:
+        raise HTTPException(422, "To fix: " + ", ".join(wrong))
+
+    twin = bills.find_same(config.db_path, row["supplier"], row["number"])
+    if twin is not None:
+        raise HTTPException(409, f"{row['supplier']} {row['number']} is already stored "
+                                 f"(bill #{twin}).")
+    try:
+        bill_id = bills.save(config.db_path, row)
+    except duckdb.ConstraintException as e:
+        raise HTTPException(409, "This bill is already stored.") from e
+
+    if body.intake_id is not None:
+        intake.mark(config, body.intake_id, intake.DONE, f"bill #{bill_id}")
+    event(request, "bill.save", f"bill #{bill_id}",
+          f"{row['supplier']} · {row['total']} {row['currency']}")
+    return {"bill_id": bill_id, "bill": bills.one(config.db_path, bill_id)}
+
+
+@app.patch("/api/bills/{bill_id}")
+def edit_bill(request: Request, bill_id: int, body: dict):
+    if bills.one(config.db_path, bill_id) is None:
+        raise HTTPException(404, f"No bill #{bill_id}.")
+    if not bills.update(config.db_path, bill_id, body):
+        raise HTTPException(422, "Nothing to change.")
+    event(request, "bill.edit", f"bill #{bill_id}", ", ".join(sorted(body)))
+    return {"bill": bills.one(config.db_path, bill_id)}
+
+
+@app.delete("/api/bills/{bill_id}")
+def remove_bill(request: Request, bill_id: int):
+    stored = bills.one(config.db_path, bill_id)
+    if stored is None:
+        raise HTTPException(404, f"No bill #{bill_id}.")
+    if not bills.drop(config.db_path, bill_id):
+        raise HTTPException(404, f"No bill #{bill_id}.")
+    event(request, "bill.delete", f"bill #{bill_id}")
+    return {"deleted": bill_id}
+
+
+@app.get("/api/bill-photo/{bill_id}")
+def bill_photo(bill_id: int):
+    rows = db.read(config.db_path, "SELECT image_path FROM bills WHERE bill_id = ?", [bill_id])
     return _photo(rows[0][0] if rows else None)
 
 
@@ -1028,9 +1244,16 @@ def storage():
     return info
 
 
+RISKY_START = ("=", "+", "-", "@", "\t", "\r")
+
+
 def _cell(value):
-    
-    return ("yes" if value else "no") if isinstance(value, bool) else value
+    """A cell that starts like a formula is quoted: a spreadsheet must not run our data."""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, str) and value.startswith(RISKY_START):
+        return "'" + value
+    return value
 
 
 def _to_xlsx(dataset, name):
@@ -1065,6 +1288,12 @@ PG_TABLES = {
         ("list_date", "date"), ("site", "text"), ("work_item", "text"), ("drafter", "text"),
         ("designation", "text"), ("reference", "text"), ("quantity", "double precision"),
         ("stock", "double precision"), ("in_stock", "boolean"))),
+    "bills": ("bills", "Supplier bills", ("bill_id",), (
+        ("bill_id", "integer"), ("supplier", "text"), ("number", "text"), ("bill_date", "date"),
+        ("month", "text"), ("due_date", "date"), ("currency", "text"),
+        ("net", "double precision"), ("tax", "double precision"), ("total", "double precision"),
+        ("site", "text"), ("order_ref", "text"), ("state", "text"), ("paid_on", "date"),
+        ("source", "text"), ("sender", "text"))),
     "safety-stock": ("safety_stock", "Safety stock watch", ("article",), (
         ("article", "text"), ("supplier", "text"), ("per_week", "double precision"),
         ("adu", "double precision"), ("lead_days", "double precision"), ("lead_class", "text"),
@@ -1086,6 +1315,10 @@ def _rows_for(dataset, cycle, horizon):
     if dataset == "safety-stock":
         rows, _, _ = ddmrp.buffers(config.db_path, cycle, horizon)
         data = [[row.get(name) for name, _ in columns] for row in rows]
+    elif dataset == "bills":
+        names, fetched = db.export_query(config.db_path, dataset)
+        order = [names.index(name) for name, _ in columns]
+        data = [[row[at] for at in order] for row in fetched]
     else:
         names, fetched = db.export_query(config.db_path, dataset)
         order = [names.index(name) for name, _ in columns if name != "id"]

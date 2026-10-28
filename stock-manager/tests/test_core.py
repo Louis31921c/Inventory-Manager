@@ -548,7 +548,7 @@ def test_exports_cover_every_dataset(db_path, tmp_path):
     db.save_purchase_order(db_path, {"site": "C", "lines": [{"article": "BOLT M6X30", "quantity": 10}]},
                           "l1", "l.jpg", "ALEX")
     audit.record(db_path, "ALEX", "note.save", "note #1")
-    assert set(db.EXPORTS) == {"inventory", "purchase_orders"}
+    assert set(db.EXPORTS) == {"inventory", "purchase_orders", "bills"}
     for dataset in db.EXPORTS:
         columns, rows = db.export_query(db_path, dataset)
         assert columns, dataset
@@ -1261,7 +1261,7 @@ def test_planner_routes(tmp_path, monkeypatch):
                           headers=mine).status_code == 422
 
         assert "Predictions" in client.get("/").text
-        page = client.get("/predictions").text
+        page = client.get("/").text
         assert 'id="ask-dots"' in page and 'id="table-movements"' in page
         assert "/export/safety-stock.sql" in page
 
@@ -1426,10 +1426,9 @@ def test_buffer_routes(tmp_path, monkeypatch):
         assert "REFERENCES stock.articles(article)" in dump
         assert "BEGIN;" in dump and dump.rstrip().endswith("COMMIT;")
 
-        page = client.get("/predictions").text
+        page = client.get("/").text
         assert 'id="table-buffers"' in page and 'id="table-chain"' in page
-        assert "DDMRP" in page
-        assert 'id="table-buffers"' not in client.get("/").text
+        assert 'id="panel-ddmrp"' in page
 
 
 def test_the_sql_dump_loads_into_postgres(tmp_path):
@@ -1689,3 +1688,334 @@ def test_intake_routes(tmp_path, monkeypatch):
 
         page = client.get("/").text
         assert 'id="table-intake"' in page and 'id="mapping-target"' in page
+
+
+def test_a_spreadsheet_cannot_smuggle_a_formula(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    db.init(server.config.db_path)
+    note = make_note(lines=[Line(article="=cmd|' /c calc'!A1", quantity=1),
+                            Line(article="BOLT M6", quantity=2)])
+    db.save_note(server.config.db_path, note, "sha-formula", "", "ALEX")
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        sheet = client.get("/export/inventory.csv").text
+        assert "'=CMD" in sheet.upper()
+        assert "\n=" not in sheet and ";=" not in sheet
+
+        many = [("files", (f"f{number}.pdf", b"%PDF-1.4", "application/pdf"))
+                for number in range(server.MAX_FILES + 1)]
+        assert client.post("/api/intake", headers=mine, files=many).status_code == 413
+
+
+def test_the_bridge_is_the_only_unchecked_certificate(tmp_path):
+    import ssl
+
+    from inventory import mailbox
+    from inventory.config import MailConfig
+
+    def settings(host):
+        return MailConfig(host=host, port=1143, user="me", password="x", folder="INBOX",
+                          security="starttls", insecure=True, mark_read=True, every_minutes=15)
+
+    here = mailbox._context(settings("127.0.0.1"))
+    assert here.verify_mode == ssl.CERT_NONE
+
+    away = mailbox._context(settings("imap.example.com"))
+    assert away.verify_mode == ssl.CERT_REQUIRED and away.check_hostname is True
+
+
+def test_bill_shaping_fills_in_what_it_can(db_path):
+    from inventory import bills
+
+    row = bills.shape({"supplier": "foussier", "number": " FA-2210 ", "bill_date": "05/10/2026",
+                       "due_date": "2026-11-30", "net": "1 234,56", "tax": "246,91",
+                       "total": None, "site": "ariane", "order_ref": "BL 88"},
+                      source="mail", user="ALEX", sender="compta@foussier.fr")
+    assert row["supplier"] == "FOUSSIER" and row["number"] == "FA-2210"
+    assert row["bill_date"] == date(2026, 10, 5) and row["currency"] == "EUR"
+    assert row["net"] == 1234.56 and row["total"] == 1481.47
+    assert row["site"] == "ARIANE" and row["state"] == "to pay"
+    assert bills.problems(row) == []
+
+    thin = bills.shape({"supplier": None, "bill_date": "not a date", "total": None})
+    assert bills.problems(thin) == ["supplier missing", "bill date missing or unreadable",
+                                    "total missing"]
+
+    from_total = bills.shape({"supplier": "X", "bill_date": "2026-10-01", "total": "1 200.00",
+                              "tax": "200"})
+    assert from_total["net"] == 1000.0
+
+    bill_id = bills.save(db_path, row)
+    assert bills.find_same(db_path, "FOUSSIER", "FA-2210") == bill_id
+    stored = bills.one(db_path, bill_id)
+    assert stored["month"] == "2026-10" and stored["sender"] == "compta@foussier.fr"
+
+    bills.save(db_path, bills.shape({"supplier": "METALECO", "number": "M-9",
+                                     "bill_date": "2026-09-02", "total": "480"}))
+    months = bills.by_month(db_path)
+    assert [month["month"] for month in months] == ["2026-10", "2026-09"]
+    assert bills.per_supplier(db_path, "2026-09") == [
+        {"supplier": "METALECO", "bills": 1, "total": 480.0, "owed": 480.0}]
+
+    summary = bills.summary(db_path)
+    assert summary["bills"] == 2 and summary["owed"] == 1961.47 and summary["suppliers"] == 2
+
+    assert bills.update(db_path, bill_id, {"state": "paid"}) is True
+    paid = bills.one(db_path, bill_id)
+    assert paid["state"] == "paid" and paid["paid_on"] == date.today().isoformat()
+    assert bills.summary(db_path)["owed"] == 480.0
+    assert bills.update(db_path, bill_id, {"bill_id": 7, "state": "nonsense"}) is False
+    assert bills.drop(db_path, bill_id) is True and bills.drop(db_path, bill_id) is False
+
+
+def test_bill_routes(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("IMAP_HOST", raising=False)
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        empty = client.get("/api/bills").json()
+        assert empty["bills"] == [] and empty["summary"]["bills"] == 0
+
+        bill = {"supplier": "foussier", "number": "FA-1", "bill_date": "2026-10-05",
+                "due_date": "2026-10-01", "net": "100", "tax": "20"}
+        saved = client.post("/api/bills", headers=mine, json={"bill": bill}).json()
+        assert saved["bill"]["total"] == 120.0 and saved["bill"]["state"] == "to pay"
+
+        again = client.post("/api/bills", headers=mine, json={"bill": bill})
+        assert again.status_code == 409 and "already stored" in again.json()["detail"]
+
+        thin = client.post("/api/bills", headers=mine, json={"bill": {"supplier": "x"}})
+        assert thin.status_code == 422 and "bill date" in thin.json()["detail"]
+
+        listed = client.get("/api/bills").json()
+        assert listed["summary"]["owed"] == 120.0 and listed["summary"]["late"] == 120.0
+        assert listed["months"][0]["month"] == "2026-10"
+        assert listed["suppliers"][0]["supplier"] == "FOUSSIER"
+
+        bill_id = saved["bill_id"]
+        changed = client.patch(f"/api/bills/{bill_id}", headers=mine,
+                               json={"state": "paid"}).json()
+        assert changed["bill"]["state"] == "paid"
+        assert client.get("/api/bills").json()["summary"]["owed"] == 0
+        assert client.patch("/api/bills/404", headers=mine,
+                            json={"state": "paid"}).status_code == 404
+
+        sql = client.get("/export/bills.sql").text
+        assert "CREATE TABLE IF NOT EXISTS stock.bills" in sql and "FOUSSIER" in sql
+        assert client.get("/export/bills.csv").status_code == 200
+
+        class NoEyes:
+            model = "none"
+
+            async def extract_bill(self, *args, **kwargs):
+                raise llm.ExtractionError("no model on this machine")
+
+        server.backend = NoEyes()
+        refused = client.post("/api/bills/read", headers=mine,
+                              files={"photo": ("bill.pdf", b"%PDF-1.4 bill", "application/pdf")})
+        assert refused.status_code == 502 and "no model" in refused.json()["detail"]
+
+        assert client.delete(f"/api/bills/{bill_id}", headers=mine).status_code == 200
+        assert client.delete(f"/api/bills/{bill_id}", headers=mine).status_code == 404
+        assert client.get("/api/bills").json()["bills"] == []
+
+        page = client.get("/").text
+        assert 'id="table-bills"' in page and 'id="bill-month"' in page
+
+
+def test_mail_provider_presets_fill_the_server_in(monkeypatch, tmp_path):
+    from inventory import mailbox
+    from inventory.config import load_config
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    for key in ("IMAP_HOST", "IMAP_PORT", "IMAP_SECURITY", "IMAP_INSECURE"):
+        monkeypatch.delenv(key, raising=False)
+
+    monkeypatch.setenv("MAIL_PROVIDER", "gmail")
+    gmail = load_config(data_dir=tmp_path).mail
+    assert (gmail.host, gmail.port, gmail.security) == ("imap.gmail.com", 993, "ssl")
+    assert gmail.insecure is False and gmail.provider == "gmail"
+
+    monkeypatch.setenv("MAIL_PROVIDER", "proton")
+    proton = load_config(data_dir=tmp_path).mail
+    assert (proton.host, proton.port, proton.security) == ("127.0.0.1", 1143, "starttls")
+    assert proton.insecure is True
+
+    monkeypatch.setenv("IMAP_HOST", "mail.example.com")
+    monkeypatch.setenv("IMAP_PORT", "143")
+    by_hand = load_config(data_dir=tmp_path).mail
+    assert (by_hand.host, by_hand.port) == ("mail.example.com", 143)
+
+    monkeypatch.delenv("MAIL_PROVIDER")
+    monkeypatch.delenv("IMAP_HOST")
+    monkeypatch.delenv("IMAP_PORT")
+    plain = load_config(data_dir=tmp_path).mail
+    assert plain.host == "" and plain.provider == "" and plain.enabled is False
+
+    assert {row["id"] for row in mailbox.providers()} == set(mailbox.PROVIDERS)
+    assert all(row["help"] for row in mailbox.providers())
+    assert "insecure" not in mailbox.providers()[0]
+    assert mailbox.preset("nonsense") == mailbox.PROVIDERS["other"]
+
+
+def test_chat_basket_becomes_a_purchase_order(db_path):
+    from inventory import baskets, discord_bot
+
+    items = baskets.parse_items("12 vis th 6x25 inox\n3x rondelle m8; ecrou borgne d6 x 100")
+    assert items == [{"article": "VIS TH 6X25 INOX", "quantity": 12.0},
+                     {"article": "RONDELLE M8", "quantity": 3.0},
+                     {"article": "ECROU BORGNE D6", "quantity": 100.0}]
+    assert baskets.parse_items("   ") == []
+    assert baskets.parse_items("silicone noir")[0]["quantity"] == 1.0
+
+    baskets.add(db_path, 777, items, shop="foussier.fr", site="ariane",
+                work_item="ecran acoustique", who="LOUIS")
+    held = baskets.lines(db_path, 777)
+    assert len(held) == 3 and held[0]["shop"] == "foussier.fr" and held[0]["site"] == "ARIANE"
+    assert baskets.shops(db_path, 777) == ["foussier.fr"]
+
+    open_now = baskets.open_baskets(db_path)
+    assert open_now[0]["channel"] == "777" and open_now[0]["lines"] == 3
+
+    assert baskets.drop_line(db_path, 777, held[0]["line_id"]) is True
+    assert baskets.drop_line(db_path, 777, held[0]["line_id"]) is False
+
+    answer = baskets.to_purchase_order(db_path, 777, "LOUIS")
+    assert answer["list_id"] and answer["site"] == "ARIANE" and len(answer["lines"]) == 2
+    assert baskets.lines(db_path, 777) == []
+    assert baskets.to_purchase_order(db_path, 777, "LOUIS") is None
+
+    stored = db.purchase_orders(db_path)[0]
+    assert {line["article"] for line in stored["lines"]} == {"RONDELLE M8", "ECROU BORGNE D6"}
+    assert stored["drafter"] == "LOUIS"
+
+    assert "does not pay" in discord_bot.purchase_text(answer)
+    assert "#" + str(answer["list_id"]) in discord_bot.purchase_text(answer)
+    assert discord_bot.purchase_text(None) == "Nothing in the basket to order."
+    assert "empty" in discord_bot.basket_text([])
+    assert "foussier.fr" in discord_bot.basket_text(held)
+    assert discord_bot.allowed(777, []) is True
+    assert discord_bot.allowed(777, ["42"]) is False
+    assert discord_bot.allowed(777, ["777"]) is True
+
+
+def test_mail_and_chat_settings_routes(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    for key in ("IMAP_HOST", "IMAP_USER", "IMAP_PASSWORD", "MAIL_PROVIDER",
+                "DISCORD_BOT_TOKEN", "DISCORD_CHANNELS"):
+        monkeypatch.delenv(key, raising=False)
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        start = client.get("/api/mail/settings").json()
+        assert start["current"]["configured"] is False
+        assert start["current"]["password_set"] is False
+        assert "gmail" in {row["id"] for row in start["providers"]}
+
+        saved = client.post("/api/mail/settings", headers=mine, json={
+            "provider": "gmail", "user": "stock@company.com", "password": "hunter2-xyzzy",
+            "folder": "Suppliers", "every_minutes": 5,
+        }).json()
+        assert saved["current"]["host"] == "imap.gmail.com"
+        assert saved["current"]["folder"] == "Suppliers"
+        assert saved["current"]["configured"] is True
+        assert saved["current"]["password_set"] is True
+        assert "hunter2-xyzzy" not in client.get("/api/mail/settings").text
+
+        kept = client.post("/api/mail/settings", headers=mine, json={
+            "provider": "gmail", "user": "stock@company.com", "every_minutes": 5,
+        }).json()
+        assert kept["current"]["password_set"] is True
+
+        assert client.post("/api/mail/settings", headers=mine,
+                           json={"provider": "nope"}).status_code == 422
+
+        chat = client.post("/api/chat/settings", headers=mine,
+                           json={"token": "a-bot-token", "channels": "777, 888"}).json()
+        assert chat["token_set"] is True and chat["channels"] == ["777", "888"]
+        assert "a-bot-token" not in client.get("/api/chat/settings").text
+
+        gone = client.post("/api/chat/settings", headers=mine,
+                           json={"channels": "777", "forget": True}).json()
+        assert gone["token_set"] is False
+
+        assert client.get("/api/baskets").json()["baskets"] == []
+        assert client.post("/api/baskets/777/order", headers=mine).status_code == 404
+        assert client.delete("/api/baskets/777", headers=mine).status_code == 404
+
+        page = client.get("/").text
+        assert 'id="mail-provider"' in page and 'id="chat-token"' in page
+
+
+def test_the_bot_registers_its_commands(db_path, tmp_path):
+    """Only runs where the extra is installed: pip install 'stock-manager[discord]'."""
+    discord = pytest.importorskip("discord")
+    from discord import app_commands
+
+    from inventory import discord_bot
+
+    held = []
+
+    class Spy(app_commands.CommandTree):
+        def __init__(self, *args, **kw):
+            super().__init__(*args, **kw)
+            held.append(self)
+
+    config = make_config(tmp_path)
+    original = app_commands.CommandTree
+    app_commands.CommandTree = Spy
+    try:
+        client = discord_bot.build_client(config, ["777"])
+    finally:
+        app_commands.CommandTree = original
+
+    assert isinstance(client, discord.Client)
+    names = {command.name: [p.name for p in command.parameters]
+             for command in held[0].get_commands()}
+    assert set(names) == {"basket", "basket_show", "basket_clear", "purchase", "stock"}
+    assert names["basket"] == ["shop", "items", "site", "work_item"]

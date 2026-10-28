@@ -1,0 +1,14 @@
+functionnalities to developp : 
+
+- more modules = the goal is to offer an app that manages inventory and centralizes procurement, smartly
+
+- a chatbot for microsoft teams ( or Zoom or Slack or discord) companies groupchats: 
+       you type /basket-"the-website-you-want-to-order-from" and list the items you wana add to your basket
+                /purchase to actually purchase it 
+	   obviously only for the websites that allow ai agents.
+	   
+- connecting to outlook, gmail, proton, yahoo mail, apple email
+
+- a new section : bills. where all bills are listed down. you track them by connecting to the mail provider. Add a total supplier bill cost per month indicator
+
+

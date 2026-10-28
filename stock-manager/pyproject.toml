@@ -19,12 +19,14 @@ dependencies = [
 
 [project.optional-dependencies]
 gemini = ["google-genai>=2.24"]
+discord = ["discord.py>=2.3"]
 dev = ["pytest", "pytest-asyncio", "pillow", "httpx"]
 
 [project.scripts]
 stock-manager = "inventory.desktop:main"
 stock = "inventory.cli:main"
 stock-tui = "inventory.cli:main"
+stock-bot = "inventory.discord_bot:main"
 
 [project.urls]
 Source = "https://github.com/Louis31921c/Inventory-Manager"

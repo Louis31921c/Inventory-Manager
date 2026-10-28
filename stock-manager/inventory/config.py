@@ -55,6 +55,7 @@ class MailConfig:
     insecure: bool
     mark_read: bool
     every_minutes: int
+    provider: str = ""
 
     @property
     def enabled(self):
@@ -96,18 +97,32 @@ def _sms():
 
 
 def _mail():
-    host = os.environ.get("IMAP_HOST", "").strip()
+    """A named provider fills in the server details; anything set by hand still wins."""
+    from .mailbox import preset
+
+    provider = os.environ.get("MAIL_PROVIDER", "").strip().lower()
+    known = preset(provider)
+    host = os.environ.get("IMAP_HOST", "").strip() or (known["host"] if provider else "")
+
     security = os.environ.get("IMAP_SECURITY", "").strip().lower()
     if security not in ("ssl", "starttls"):
-        security = "starttls" if host in ("127.0.0.1", "localhost") else "ssl"
+        security = known["security"] if provider else (
+            "starttls" if host in ("127.0.0.1", "localhost") else "ssl")
+
+    port = os.environ.get("IMAP_PORT", "").strip()
+    if not port:
+        port = known["port"] if provider else (1143 if security == "starttls" else 993)
+
+    insecure = os.environ.get("IMAP_INSECURE", "").strip().lower() in ("1", "true", "yes")
     return MailConfig(
+        provider=provider,
         host=host,
-        port=int(os.environ.get("IMAP_PORT", "1143" if security == "starttls" else "993")),
+        port=int(port),
         user=os.environ.get("IMAP_USER", "").strip(),
         password=os.environ.get("IMAP_PASSWORD", ""),
         folder=os.environ.get("IMAP_FOLDER", "INBOX").strip() or "INBOX",
         security=security,
-        insecure=os.environ.get("IMAP_INSECURE", "").strip().lower() in ("1", "true", "yes"),
+        insecure=insecure or (known["insecure"] if provider else False),
         mark_read=os.environ.get("IMAP_MARK_READ", "1").strip().lower() not in ("0", "false", "no"),
         every_minutes=int(os.environ.get("MAIL_EVERY_MINUTES", "15")),
     )

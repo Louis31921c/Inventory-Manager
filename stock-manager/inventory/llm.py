@@ -86,6 +86,26 @@ LIST_SCHEMA = {
     "additionalProperties": False,
 }
 
+BILL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "supplier": _STR,
+        "number": _STR,
+        "bill_date": _STR,
+        "due_date": _STR,
+        "currency": _STR,
+        "net": _NUM,
+        "tax": _NUM,
+        "total": _NUM,
+        "site": _STR,
+        "order_ref": _STR,
+        "note": _STR,
+    },
+    "required": ["supplier", "number", "bill_date", "due_date", "currency", "net", "tax",
+                 "total", "site", "order_ref", "note"],
+    "additionalProperties": False,
+}
+
 SQL_SCHEMA = {
     "type": "object",
     "properties": {"sql": _STR, "note": _STR},
@@ -154,6 +174,10 @@ def list_prompt(known_articles=()):
     return prompt_text("purchase_order.md") + _house_rules() + _vocabulary(known_articles)
 
 
+def bill_prompt():
+    return prompt_text("bill.md") + _house_rules()
+
+
 def _question_prompt(question, previous):
     prompt = f"Today is {date.today().isoformat()}.\n\nQuestion: {question}"
     if previous:
@@ -191,6 +215,10 @@ class ClaudeCodeBackend:
         return await self._read_file(data, media_type, "list", LIST_SCHEMA,
                                      "a photo of a purchase order sheet",
                                      list_prompt(known_articles))
+
+    async def extract_bill(self, data, media_type):
+        return await self._read_file(data, media_type, "bill", BILL_SCHEMA,
+                                     "a scan or PDF of a supplier bill", bill_prompt())
 
     async def to_sql(self, question, previous=None):
         with tempfile.TemporaryDirectory(prefix="sql-") as tmp:
@@ -267,6 +295,12 @@ class GeminiBackend:
             response_format=_json_format(LIST_SCHEMA),
         )
 
+    async def extract_bill(self, data, media_type):
+        return await self._call(
+            input=[self._file(data, media_type), {"type": "text", "text": bill_prompt()}],
+            response_format=_json_format(BILL_SCHEMA),
+        )
+
     async def to_sql(self, question, previous=None):
         result = await self._call(
             system_instruction=prompt_text("sql.md"),
@@ -322,6 +356,9 @@ class OpenAIBackend:
         raise ExtractionError(NO_EYES)
 
     async def extract_list(self, data, media_type, known_articles=()):
+        raise ExtractionError(NO_EYES)
+
+    async def extract_bill(self, data, media_type):
         raise ExtractionError(NO_EYES)
 
     async def to_sql(self, question, previous=None):

@@ -16,7 +16,7 @@ LIST_COLUMNS = ("list_date", "site", "work_item", "drafter", "image_sha256", "im
 LIST_LINE_COLUMNS = ("list_id", "line_no", "article", "designation", "reference", "quantity",
                      "stock", "in_stock")
 COUNTED_TABLES = ("notes", "inventory_lines", "purchase_orders", "purchase_order_lines", "catalog",
-                  "article_names", "audit", "stock_counts")
+                  "article_names", "audit", "stock_counts", "bills")
 
 
 class QueryError(Exception):
@@ -175,6 +175,9 @@ EXPORTS = {
                                  l.stock, l.in_stock
                    FROM purchase_orders h JOIN purchase_order_lines l USING (list_id)
                    ORDER BY h.list_id, l.line_no""",
+    "bills": """SELECT bill_id, supplier, number, bill_date, month, due_date, currency,
+                       net, tax, total, site, order_ref, state, paid_on, source, sender
+                FROM bills ORDER BY bill_date DESC, bill_id DESC""",
 }
 
 
