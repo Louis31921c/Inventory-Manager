@@ -184,6 +184,16 @@ GROUP BY a.article
 ORDER BY received DESC NULLS LAST;
 ```
 
+## The globe on the landing screen
+
+The Home screen draws the logo as a planet: one ring runs right round it, its far half behind
+the sphere and its near half in front, with an arrowhead at each end so the two arrows of the
+drawing read as a single band. Drag it to turn the ring and the road with it; flick and let go
+and it coasts to a stop. The arrow keys turn it a notch at a time. The wordmark does not move.
+
+Only the ring and the road are drawn in the page; the wordmark is the artwork itself
+(`web_ui/wordmark.png`), cut out of it so it can sit still on top.
+
 ## What the shelf holds
 
 Inventory counts itself. Supplier delivery notes bring articles in, customer purchase orders take

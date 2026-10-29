@@ -226,12 +226,29 @@ section.panel {
   justify-content: center;
   min-height: calc(100vh - 230px);
 }
-.home-logo {
-  background: url("/logo.png") center / contain no-repeat;
-  height: min(520px, 62vh);
+.globe {
+  aspect-ratio: 1 / .94;
+  cursor: grab;
   opacity: .65;
-  width: min(720px, 86%);
+  position: relative;
+  touch-action: none;
+  width: min(700px, 86%);
 }
+.globe.turning { cursor: grabbing; }
+.globe:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+.globe svg { display: block; height: 100%; width: 100%; }
+.globe .word {
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 51%;
+  transform: translate(-50%, -50%);
+  user-select: none;
+  width: 94%;
+}
+svg polygon.orbit { fill: #0d0d0d; }
+svg polyline.road { stroke: #0d0d0d; stroke-linecap: round; }
+svg polyline.road-line { stroke: #fff; stroke-linecap: butt; }
 
 /* ---- group boxes --------------------------------------------------- */
 
