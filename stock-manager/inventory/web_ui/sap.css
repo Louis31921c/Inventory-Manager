@@ -572,31 +572,12 @@ select.replaced { display: none; }
 .dd-list li { cursor: pointer; overflow: hidden; padding: 3px 7px; text-overflow: ellipsis; white-space: nowrap; }
 .dd-list li:hover, .dd-list li.active, .dd-list li[aria-selected="true"] { background: var(--row-pick); }
 
-/* ---- status bar ---------------------------------------------------- */
+/* ---- function key bar ---------------------------------------------- */
 
-.statusbar {
+.fkeys {
   align-items: center;
   background: #e4e6e8;
   border-top: 1px solid var(--line);
-  display: flex;
-  font-size: 11px;
-  gap: 0;
-  padding: 2px 4px;
-}
-.statusbar .field {
-  border: 1px solid var(--line-soft);
-  margin-right: 4px;
-  overflow: hidden;
-  padding: 1px 6px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.statusbar .field.grow { flex: 1 1 auto; }
-.statusbar .field.lamp::before { color: var(--green); content: "\25CF "; }
-
-.fkeys {
-  background: #eceef0;
-  border-top: 1px solid var(--line-soft);
   display: flex;
   flex-wrap: wrap;
   gap: 3px;

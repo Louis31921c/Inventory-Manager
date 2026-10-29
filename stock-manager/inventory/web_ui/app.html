@@ -665,13 +665,6 @@
 </div>
 </div>
 
-<div class="statusbar">
-  <span class="field lamp" id="status-text">Ready</span>
-  <span class="field grow" id="headline-count"></span>
-  <span class="field">STOCK MANAGER</span>
-  <span class="field" id="status-user"></span>
-</div>
-
 <nav class="fkeys" id="fkeys" aria-label="Function keys"></nav>
 
 <script>
@@ -828,7 +821,9 @@ for (const node of document.querySelectorAll(".tree button[data-goes]")) {
 }
 
 function say(message, kind = "") {
+  // The status line can be off the page; the screens say it themselves then.
   const field = $("status-text");
+  if (!field) return;
   field.textContent = message;
   field.style.color = kind === "bad" ? "#b00020" : "";
 }
@@ -3584,9 +3579,11 @@ async function refresh() {
 
     const user = data.user ? String(data.user) : "";
     $("who").textContent = user ? `User ${user}` : "";
-    $("status-user").textContent = user;
-    $("headline-count").textContent =
-      `${notes.length} note(s) · ${rows.length} line(s) · ${lists.length} purchase order(s)`;
+    if ($("status-user")) $("status-user").textContent = user;
+    if ($("headline-count")) {
+      $("headline-count").textContent =
+        `${notes.length} note(s) · ${rows.length} line(s) · ${lists.length} purchase order(s)`;
+    }
     $("tree-lines").textContent = `(${rows.length})`;
     $("tree-orders").textContent = `(${lists.length})`;
     say("Ready");
