@@ -3740,7 +3740,7 @@ function siteEntries(spec) {
                            item.orders ? `${item.orders} PO` : ""].filter(Boolean).join(" · ")
                           || "nothing yet";
 
-  const out = [el("hr")];
+  const out = [];
   for (const [site, items] of sites) {
     const whole = tally(items);
     const head = el("button", {
@@ -3775,13 +3775,34 @@ function renderLinkMenu(spec) {
   const entries = spec.links.map(([label, tab]) => {
     const entry = el("button", { type: "button", textContent: label, role: "menuitem" });
     entry.addEventListener("click", () => {
+      if (tab === "orders") treePick = null;
       openTab(tab);
       closeMenu(spec);
+      renderSiteTree();
+      renderDeliveries();
+      renderOrders();
       say(`Screen ${tab.toUpperCase()}`);
     });
-    return entry;
+
+    // Purchase orders itself rolls out once more: every site, then its work items.
+    if (!spec.sites || tab !== "orders") return entry;
+    const sites = siteEntries(spec);
+    if (!sites.length) return entry;
+    entry.setAttribute("aria-haspopup", "true");
+    const all = el("button", { type: "button", role: "menuitem",
+                               textContent: "All purchase orders" });
+    all.addEventListener("click", () => {
+      treePick = null;
+      closeMenu(spec);
+      renderSiteTree();
+      renderDeliveries();
+      renderOrders();
+      openTab("orders");
+      say("Screen ORDERS");
+    });
+    return el("span", { className: "sub" },
+              [entry, el("div", { className: "menu-drop", role: "menu" }, [all, ...sites])]);
   });
-  if (spec.sites) entries.push(...siteEntries(spec));
   $(spec.drop).replaceChildren(...entries);
 }
 
