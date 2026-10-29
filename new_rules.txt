@@ -1,14 +1,23 @@
 functionnalities to developp : 
 
 - more modules = the goal is to offer an app that manages inventory and centralizes procurement, smartly
+      [ still open: say which module you want next ]
 
-- a chatbot for microsoft teams ( or Zoom or Slack or discord) companies groupchats: 
-       you type /basket-"the-website-you-want-to-order-from" and list the items you wana add to your basket
-                /purchase to actually purchase it 
-	   obviously only for the websites that allow ai agents.
-	   
-- connecting to outlook, gmail, proton, yahoo mail, apple email
+- DONE: a chatbot for discord companies groupchats: /basket-"website" + items, /purchase, /quote
+       quote = request only: article, quantity, unit (ml, m2, m3, kg, t, l, h, piece), supplier, site
 
-- a new section : bills. where all bills are listed down. you track them by connecting to the mail provider. Add a total supplier bill cost per month indicator
+- DONE: connecting to outlook, gmail, proton, yahoo mail, apple email
 
+- DONE: a new section : bills, tracked from the mailbox, with a supplier cost per month indicator
 
+- DONE: a rolling menu for purchase order = hover gives PO, quotes and bills
+
+- DONE: inventory counts itself from the input (supplier delivery notes) and the output
+        (customer purchase orders, shipped within 24h)
+
+- DONE: ddmrp landing page with 2 buffer graphs, then a roll-down for flow, safety stock watch, dots
+
+- DONE: the sql screen lists every table name with its row count; click one to query it
+
+- DONE: route wrangler: save the yard, type the delivery addresses, shortest run by road
+        (Nominatim + OSRM, OpenStreetMap)

@@ -14,6 +14,15 @@ import urllib.request
 from pathlib import Path
 
 TITLE = "Stock Manager"
+ICON = Path(__file__).resolve().parent / "web_ui" / "icon.png"
+
+
+def dress(window):
+    """The app's own logo on the window and in the task bar, a stock icon if it is missing."""
+    try:
+        window.set_icon_from_file(str(ICON))
+    except Exception:
+        window.set_icon_name("utilities-terminal")
 
 
 def free_port():
@@ -111,7 +120,7 @@ def open_window(url, stop):
 
     window = Gtk.Window(title=TITLE)
     window.set_default_size(1180, 820)
-    window.set_icon_name("utilities-terminal")
+    dress(window)
 
     view = WebKit2.WebView()
     view.load_uri(url)
@@ -141,7 +150,7 @@ def open_window(url, stop):
         child = WebKit2.WebView.new_with_related_view(source)
         extra = Gtk.Window(title=f"{TITLE} - {_name_of(action)}")
         extra.set_default_size(1180, 900)
-        extra.set_icon_name("utilities-terminal")
+        dress(extra)
         extra.add(child)
         extra.connect("key-press-event", fullscreen_key(extra))
         child.connect("create", second_window)

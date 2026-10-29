@@ -254,6 +254,53 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        12,
+        "quote requests: what to ask a supplier for, by the metre, the kilo or the cubic metre",
+        """
+        CREATE SEQUENCE IF NOT EXISTS quote_seq START 1;
+        CREATE TABLE IF NOT EXISTS quotes (
+            quote_id   INTEGER PRIMARY KEY DEFAULT nextval('quote_seq'),
+            supplier   VARCHAR,
+            site       VARCHAR,
+            work_item  VARCHAR,
+            needed_by  DATE,
+            state      VARCHAR NOT NULL DEFAULT 'open',
+            note       VARCHAR,
+            asked_at   TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            asked_by   VARCHAR
+        );
+
+        CREATE TABLE IF NOT EXISTS quote_lines (
+            quote_id    INTEGER NOT NULL,
+            line_no     INTEGER NOT NULL,
+            article     VARCHAR NOT NULL,
+            quantity    DOUBLE,
+            unit        VARCHAR,
+            designation VARCHAR,
+            PRIMARY KEY (quote_id, line_no)
+        );
+        """,
+    ),
+    (
+        13,
+        "places: the yard the truck leaves from and the addresses it delivers to",
+        """
+        CREATE SEQUENCE IF NOT EXISTS place_seq START 1;
+        CREATE TABLE IF NOT EXISTS places (
+            place_id  INTEGER PRIMARY KEY DEFAULT nextval('place_seq'),
+            kind      VARCHAR NOT NULL DEFAULT 'stop',
+            label     VARCHAR,
+            address   VARCHAR NOT NULL,
+            lat       DOUBLE,
+            lon       DOUBLE,
+            note      VARCHAR,
+            done      BOOLEAN NOT NULL DEFAULT FALSE,
+            added_at  TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            added_by  VARCHAR
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

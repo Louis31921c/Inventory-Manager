@@ -141,13 +141,15 @@ first screen.
 
 ## Downloads
 
-Three tables come out of the app, and they are the same three everywhere: the Settings tab,
-and the buffers card in the DDMRP window.
+The tables come out of the app the same way everywhere: the Settings tab, the buffers card in the
+DDMRP window, and each screen's own card.
 
 | Download | What is in it | Key |
 |---|---|---|
 | Inventory lines | every line of every delivery note | `id`, with `note_id` and `line_no` as they were read |
 | Purchase order lines | every line of every stored purchase order, with its sheet | `id`, with `list_id` and `line_no` |
+| Supplier bills | one row per bill, with its month | `bill_id` |
+| Quote requests | every line of every quote request, with its unit | `quote_id`, `line_no` |
 | Safety stock watch | one row per article: rate, lead time, zones, net flow, what to order | `article` |
 
 Each one comes as `csv`, `xlsx` or `sql`.
@@ -181,6 +183,40 @@ LEFT JOIN stock.safety_stock s         ON s.article = a.article
 GROUP BY a.article
 ORDER BY received DESC NULLS LAST;
 ```
+
+## What the shelf holds
+
+Inventory counts itself. Supplier delivery notes bring articles in, customer purchase orders take
+them out, and an order counts as gone one day after it was taken, because a package is picked and
+shipped within 24 hours. The Inventory screen shows in, out, still being picked and what is left,
+and a hand count (Safety stock watch) still wins for the article it was made on. The buffers read
+the same number, so nothing has to be counted by hand to be watched.
+
+## Quotes
+
+Purchase orders, Quotes and Bills sit under the one menu: hover **Purchase orders** and pick.
+
+A quote is a request, not a price. Name the article, how much of it and in what unit — `ml` linear
+metre, `m2`, `m3`, `kg`, `t`, `l`, `h` or `piece` — with the supplier and the site, and the app
+writes the request you send out:
+
+```
+120 ml skirting board; 3 m3 gravel; 250 kg sand
+```
+
+Mark it sent, then answered, then closed as the supplier replies. Downloads: CSV, XLSX and a
+PostgreSQL script keyed on `quote_id, line_no`. In the chat: `/quote supplier:foussier items:...`.
+
+## Route wrangler
+
+Save the yard the truck leaves from, type the day's delivery addresses, and the app orders them
+into the shortest run (nearest neighbour, then 2-opt) and says how many kilometres that is.
+
+Addresses are placed on the map by **Nominatim** and measured by road by **OSRM**, both run by
+OpenStreetMap. No account, no key, no cost; one lookup a second. That call is the only thing the
+app ever tells the internet about a place, and it only happens when you add an address or ask for
+a route. If the road service is quiet the ordering falls back to straight-line distance and says
+so. Tick a stop off when it is delivered; clear the list at the end of the day.
 
 ## Bills
 
@@ -216,6 +252,7 @@ Paste the bot token in Settings, then restart. In the channel:
 - `/basket_show`, `/basket_clear`
 - `/purchase` writes the basket into Purchase orders
 - `/stock rondelle m8` answers what is on the shelf
+- `/quote supplier:foussier items:120 ml skirting board; 3 m3 gravel` writes a quote request
 
 `/purchase` does not buy anything: it writes the order, and a person places it on the supplier's
 site. Baskets also show up in the app, on the Purchase orders screen.
@@ -342,6 +379,9 @@ device` to the Admin. Repeats are muted.
 | `inventory/llm.py` | the model backends, Dots among them |
 | `inventory/forecast.py` | rates, safety stock, reorder points, shortage risk |
 | `inventory/ddmrp.py` | buffer zones, lead times, the demand chain |
+| `inventory/stock.py` | what is on the shelf: notes in, orders out |
+| `inventory/quotes.py` | quote requests and their units |
+| `inventory/routing.py` | the yard, the stops, and the shortest run |
 | `inventory/vocabulary.py` | shared article names, aliases, merges |
 | `inventory/audit.py`, `alerts.py` | who did what, and what broke |
 

@@ -57,6 +57,13 @@ a { color: var(--accent); }
   letter-spacing: .5px;
   padding: 0 5px;
 }
+.titlebar img.mark {
+  background: #fff;
+  display: block;
+  height: 18px;
+  padding: 1px 3px;
+  width: auto;
+}
 .titlebar .spacer { flex: 1 1 auto; }
 .titlebar .who { font-weight: 400; opacity: .95; }
 
@@ -209,6 +216,21 @@ section.panel {
   flex-direction: column;
   gap: 10px;
   padding: 10px;
+}
+
+/* ---- landing screen ------------------------------------------------ */
+
+.home {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: calc(100vh - 230px);
+}
+.home-logo {
+  background: url("/logo.png") center / contain no-repeat;
+  height: min(520px, 62vh);
+  opacity: .65;
+  width: min(720px, 86%);
 }
 
 /* ---- group boxes --------------------------------------------------- */
@@ -500,6 +522,13 @@ svg text.value { fill: var(--ink-label); }
 svg .axis { stroke: var(--line); stroke-width: 1; }
 svg rect.bar { fill: var(--accent); }
 svg rect.track { fill: var(--panel); stroke: var(--line-soft); }
+svg rect.zone-red { fill: #d4504e; }
+svg rect.zone-yellow { fill: #e8c45a; }
+svg rect.zone-green { fill: #5aa469; }
+svg rect.zone-over { fill: #9fb3c8; }
+svg line.flow { stroke: #11324f; stroke-width: 2; }
+svg line.guide { stroke: var(--line); stroke-dasharray: 3 3; }
+.card .menu { position: relative; }
 
 /* ---- dropdown ------------------------------------------------------ */
 

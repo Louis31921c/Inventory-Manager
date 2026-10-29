@@ -1,10 +1,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stock Manager</title>
+<link rel="icon" href="/icon.png">
 <link rel="stylesheet" href="/sap.css">
 
 <div class="titlebar">
-  <span class="mark">SM</span>
+  <img class="mark" src="/icon.png" alt="" width="256" height="256">
   <span>Stock Manager &mdash; Inventory &amp; Procurement (Production)</span>
   <span class="spacer"></span>
   <span class="who" id="who"></span>
@@ -16,8 +17,12 @@
     <div class="menu-drop" id="input-drop" role="menu"></div>
   </span>
   <button type="button" id="menu-inventory">Inventory</button>
-  <button type="button" id="menu-orders">Purchase orders</button>
+  <span class="menu" id="orders-menu">
+    <button type="button" id="menu-orders" aria-haspopup="true" aria-expanded="false">Purchase orders</button>
+    <div class="menu-drop" id="orders-drop" role="menu"></div>
+  </span>
   <button type="button" id="menu-bills">Bills</button>
+  <button type="button" id="menu-route">Route wrangler</button>
   <button type="button" id="menu-goto">SQL</button>
   <span class="menu" id="system-menu">
     <button type="button" id="menu-system" aria-haspopup="true" aria-expanded="false">System</button>
@@ -49,11 +54,14 @@
 <div class="workspace">
 <aside class="tree" aria-label="Navigation">
   <div class="tree-head">Stock Manager</div>
-  <button type="button" data-goes="capture" aria-current="true">Import data</button>
+  <button type="button" data-goes="home" aria-current="true">Home</button>
+  <button type="button" data-goes="capture">Import data</button>
   <button type="button" data-goes="inventory">Inventory <span class="count" id="tree-lines"></span></button>
   <button type="button" data-goes="query">SQL</button>
   <button type="button" data-goes="orders">Purchase orders <span class="count" id="tree-orders"></span></button>
+  <button type="button" data-goes="quotes">Quotes <span class="count" id="tree-quotes"></span></button>
   <button type="button" data-goes="bills">Bills <span class="count" id="tree-bills"></span></button>
+  <button type="button" data-goes="route">Route wrangler <span class="count" id="tree-route"></span></button>
   <button type="button" data-goes="settings">Settings</button>
   <button type="button" data-goes="ddmrp">DDMRP buffers</button>
   <div class="tree-head">Sites</div>
@@ -64,6 +72,12 @@
 
 
 <div id="global-notice" hidden></div>
+
+<section class="panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home">
+  <div class="home">
+    <div class="home-logo" role="img" aria-label="Logistics Manager"></div>
+  </div>
+</section>
 
 <section class="panel" id="panel-capture" role="tabpanel" aria-labelledby="tab-capture">
   <div class="card">
@@ -163,6 +177,20 @@
 
 <section class="panel" id="panel-inventory" role="tabpanel" aria-labelledby="tab-inventory" hidden>
   <div class="card">
+    <h2>What the shelf holds</h2>
+    <div class="row" id="stock-stats"></div>
+    <p class="legend" id="stock-legend"></p>
+    <div class="row tight">
+      <label class="field grow"><span>search</span><input id="stock-search" placeholder="article"></label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="mini" id="stock-short" aria-pressed="false">below zero only</button>
+      </label>
+    </div>
+    <div class="scroll-x short-box"><table id="table-stock"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Delivered lines</h2>
     <div class="row">
       <label class="field grow"><span>Search</span><input id="q-search" placeholder="article, reference, supplier..."></label>
       <label class="field grow"><span>Project</span><select id="q-site"><option value="">All</option></select></label>
@@ -247,15 +275,100 @@
   </div>
 </section>
 
+<section class="panel" id="panel-quotes" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Ask for a quote</h2>
+    <div class="row">
+      <label class="field grow"><span>supplier</span><input id="quote-supplier"></label>
+      <label class="field grow"><span>site</span><input id="quote-site"></label>
+      <label class="field grow"><span>work item</span><input id="quote-work"></label>
+      <label class="field narrow"><span>needed by</span><input id="quote-needed" type="date"></label>
+    </div>
+    <label class="field"><span>what to price</span><textarea id="quote-items"
+      placeholder="120 ml skirting board; 3 m3 gravel; 250 kg sand"></textarea></label>
+    <p class="legend" id="quote-units"></p>
+    <div class="row">
+      <button class="action" id="quote-save">SAVE</button>
+      <span class="grow"></span>
+      <span class="muted" id="quote-summary"></span>
+    </div>
+    <div id="quote-note"></div>
+  </div>
+
+  <div class="card" id="quote-open" hidden>
+    <h2>The request</h2>
+    <pre class="sql" id="quote-text"></pre>
+    <div class="row tight">
+      <button class="mini" id="quote-sent">mark sent</button>
+      <button class="mini" id="quote-answered">mark answered</button>
+      <button class="mini" id="quote-closed">close it</button>
+      <span class="grow"></span>
+      <button class="mini" id="quote-drop">delete</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Quote requests</h2>
+    <div class="row tight">
+      <a class="mini" href="/export/quotes.csv">export csv</a>
+      <a class="mini" href="/export/quotes.xlsx">export xlsx</a>
+    </div>
+    <div class="scroll-x"><table id="table-quotes"></table></div>
+  </div>
+</section>
+
+<section class="panel" id="panel-route" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Departure Hub</h2>
+    <div class="row">
+      <label class="field grow"><span>address</span><input id="depot-address"></label>
+      <label class="field narrow"><span>name it</span><input id="depot-label"></label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="depot-save">SAVE</button>
+      </label>
+    </div>
+    <p class="legend" id="depot-now">No yard saved yet.</p>
+  </div>
+
+  <div class="card">
+    <h2>Destination</h2>
+    <div class="row">
+      <label class="field grow"><span>address</span><input id="stop-address"></label>
+      <label class="field narrow"><span>set a name</span><input id="stop-label"></label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="stop-add">ADD</button>
+      </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="mini" id="stops-clear">clear the list</button>
+      </label>
+    </div>
+    <div id="route-note"></div>
+    <div class="scroll-x"><table id="table-stops"></table></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button class="action" id="route-go">FIND THE SHORTEST RUN</button>
+      <label class="field narrow" style="justify-content: flex-end">
+        <span>back to the hub</span>
+        <input type="checkbox" id="route-loop" checked>
+      </label>
+      <span class="grow"></span>
+      <span class="muted" id="route-total"></span>
+    </div>
+    <div class="scroll-x"><table id="table-route"></table></div>
+  </div>
+</section>
+
 <section class="panel" id="panel-bills" role="tabpanel" hidden>
   <div class="card">
-    <h2>What the bills come to</h2>
+    <h2>Monthly bill</h2>
     <div class="row" id="bill-totals"></div>
     <div class="scroll-x short-box"><table id="table-bill-months"></table></div>
   </div>
 
   <div class="card">
-    <h2>Cost per supplier</h2>
+    <h2>Cost/ supplier</h2>
     <div class="row">
       <label class="field narrow"><span>month</span>
         <select id="bill-month"><option value="">Every month</option></select>
@@ -295,8 +408,6 @@
       <button class="action" id="bill-read" disabled>ENTER</button>
     </div>
     <div id="bill-status" hidden></div>
-    <p class="muted">Bills that arrive by mail land in the reading queue on the Input screen:
-      read them there with the bill button.</p>
   </div>
 
   <div class="card" id="bill-review" hidden>
@@ -336,19 +447,42 @@
     <span class="grow"></span>
   </div>
   <div id="ddmrp-notice"></div>
-<div class="side-by-side">
-    <div class="card">
-      <h2>OUTPUTS</h2>
-      <div id="weeks-chart"></div>
+
+  <div class="card" id="ddmrp-landing">
+    <h2>Buffers</h2>
+    <div class="row" id="ddmrp-stats"></div>
+    <div class="side-by-side">
+      <div>
+        <p class="eyebrow">Red, yellow and green, with what is on hand</p>
+        <div id="buffer-chart"></div>
+      </div>
+      <div>
+        <p class="eyebrow">Net flow against the top of green</p>
+        <div id="netflow-chart"></div>
+      </div>
     </div>
-    <div class="card">
-      <h2>SITE</h2>
-      <div id="sites-chart"></div>
+    <div class="row tight">
+      <span class="menu" id="tools-menu">
+        <button type="button" class="mini" id="ddmrp-tools" aria-haspopup="true"
+                aria-expanded="false">tools</button>
+        <div class="menu-drop" id="tools-drop" role="menu"></div>
+      </span>
+      <span class="muted" id="ddmrp-open"></span>
     </div>
   </div>
 
   <div class="card">
     <h2>FLOW</h2>
+    <div class="side-by-side">
+      <div>
+        <p class="eyebrow">Outputs per week</p>
+        <div id="weeks-chart"></div>
+      </div>
+      <div>
+        <p class="eyebrow">Lines per site</p>
+        <div id="sites-chart"></div>
+      </div>
+    </div>
     <div class="row tight">
       <button class="mini period" id="period-week" aria-pressed="true">per week</button>
       <button class="mini period" id="period-month" aria-pressed="false">per month</button>
@@ -469,12 +603,10 @@
   </div>
 
   <div class="card">
-    <h2>Chat bot (Discord)</h2>
-    <p class="muted" id="chat-state"></p>
+    <h2>Chat bot</h2>
     <div class="row">
       <label class="field grow"><span>Bot token</span>
-        <input id="chat-token" type="password" autocomplete="new-password"
-               placeholder="leave empty to keep the one stored"></label>
+        <input id="chat-token" type="password" autocomplete="new-password"></label>
       <label class="field grow"><span>Channel ids it answers in</span>
         <input id="chat-channels" autocomplete="off" placeholder="empty = every channel"></label>
     </div>
@@ -482,10 +614,8 @@
       <button class="action" id="chat-save">Save the bot</button>
       <button class="action ghost" id="chat-forget">Forget the token</button>
     </div>
-    <p class="muted">Commands: <code>/basket</code>, <code>/basket_show</code>,
-      <code>/basket_clear</code>, <code>/purchase</code>, <code>/stock</code>.
-      <code>/purchase</code> writes the order into Purchase orders; a person still places it
-      on the supplier's site.</p>
+    <p class="muted">Commands: <code>/basket</code>--- <code>/basket_show</code>---
+      <code>/basket_clear</code>--- <code>/purchase</code>--- <code>/stock</code></p>
     <div id="chat-note"></div>
   </div>
 
@@ -499,8 +629,6 @@
     <h2>Errors</h2>
     <p class="muted" id="alerting"></p>
     <div class="row"><button class="action ghost" id="error-test">report a bug</button></div>
-    <div class="scroll-x"><table id="table-errors"></table></div>
-    <div id="error-note"></div>
   </div>
 
   <div class="card">
@@ -522,7 +650,7 @@
   </div>
 
   <div class="card">
-    <h2>Audit</h2>
+    <h2>users Log</h2>
     <p class="muted">Users</p>
     <div class="scroll-x short-box"><table id="table-users"></table></div>
     <p class="muted">Lastest events</p>
@@ -673,7 +801,8 @@ function flatten() {
     })));
 }
 
-const TABS = ["capture", "inventory", "query", "orders", "bills", "settings", "ddmrp"];
+const TABS = ["home", "capture", "inventory", "query", "orders", "quotes", "bills",
+              "route", "settings", "ddmrp"];
 
 function openTab(name) {
   for (const other of TABS) {
@@ -712,10 +841,12 @@ function say(message, kind = "") {
 }
 
 const COMMANDS = {
-  "/n": "capture", note: "capture", capture: "capture", inventory: "inventory",
+  home: "home", "/n": "capture", note: "capture", capture: "capture", inventory: "inventory",
   stock: "inventory", sql: "query", query: "query", orders: "orders", po: "orders",
   settings: "settings", ddmrp: "ddmrp", buffers: "ddmrp", planner: "ddmrp",
   bills: "bills", bill: "bills", invoices: "bills", factures: "bills",
+  quotes: "quotes", quote: "quotes", devis: "quotes",
+  route: "route", routes: "route", wrangler: "route", tournee: "route",
 };
 
 function runCommand() {
@@ -749,8 +880,8 @@ $("tool-find").addEventListener("click", () => { openTab("inventory"); $("q-sear
 $("tool-export").addEventListener("click", () => { window.location.href = "/export/inventory.csv"; });
 $("tool-planner").addEventListener("click", () => openPredictions());
 $("menu-inventory").addEventListener("click", () => openTab("inventory"));
-$("menu-orders").addEventListener("click", () => openTab("orders"));
 $("menu-bills").addEventListener("click", () => openTab("bills"));
+$("menu-route").addEventListener("click", () => { openTab("route"); loadRoute(); });
 $("menu-goto").addEventListener("click", () => openTab("query"));
 $("menu-help").addEventListener("click", () => { window.location.href = "/license"; });
 
@@ -1941,10 +2072,6 @@ async function renderChecks() {
     { label: "Check", cell: ([name]) => el("strong", { textContent: name }) },
     { label: "Value", cell: ([, value]) => value },
   ], lines, "");
-
-  const problems = state.problems ?? [];
-  notice($("checks-note"), ok ? "" : "warn",
-    problems.length ? `To look at: ${problems.join(" ; ")}` : "");
 }
 
 async function renderModels() {
@@ -2008,7 +2135,7 @@ async function renderErrors() {
   try {
     data = await api("/api/errors?limit=25");
   } catch (e) {
-    notice($("error-note"), "bad", e.message);
+    if ($("error-note")) notice($("error-note"), "bad", e.message);
     return;
   }
 
@@ -2016,7 +2143,9 @@ async function renderErrors() {
   $("alerting").textContent = alerting.enabled
     ? `Texting ${alerting.to} through ${alerting.provider} · at most `
       + `${alerting.max_per_hour} message(s) per hour`
-    : "Notify Admin a bug, typo or any error";
+    : "";
+
+  if (!$("table-errors")) return;
 
   renderTable($("table-errors"), [
     { label: "#", numeric: true, cell: (error) => String(error.error_no) },
@@ -2043,15 +2172,20 @@ async function renderErrors() {
 }
 
 $("error-test").addEventListener("click", async () => {
+  // The errors table can be taken off the screen; the button still has to say what happened.
+  const tell = (kind, text) => {
+    if ($("error-note")) notice($("error-note"), kind, text);
+    else say(text, kind === "bad" ? "bad" : "");
+  };
   $("error-test").disabled = true;
-  notice($("error-note"), "", "Sending...");
+  tell("", "Sending...");
   try {
     const result = await api("/api/errors/test", { method: "POST" });
-    notice($("error-note"), result.sms_status === "sent" ? "ok" : "warn",
-      `Error #${result.error_no}, message: ${result.sms_status}`);
+    tell(result.sms_status === "sent" ? "ok" : "warn",
+         `Error #${result.error_no}, message: ${result.sms_status}`);
     await renderErrors();
   } catch (e) {
-    notice($("error-note"), "bad", e.message);
+    tell("bad", e.message);
   } finally {
     $("error-test").disabled = false;
   }
@@ -2449,6 +2583,96 @@ function zonePill(zone) {
   return el("span", { className: `pill ${zone}`, textContent: words[zone] ?? zone });
 }
 
+const BUFFER_SHOWN = 10;
+
+function bufferBars(rows) {
+  const width = 640;
+  const rowHeight = 22;
+  const pad = { left: 150, right: 46, top: 16 };
+  const height = pad.top + rows.length * rowHeight + 6;
+  const top = Math.max(...rows.map((row) => Math.max(row.top_of_green, row.net_flow)), 1);
+  const plotWidth = width - pad.left - pad.right;
+  const scale = (value) => Math.max((value / top) * plotWidth, 0);
+  const parts = [svg("text", { x: pad.left, y: 10 }, ["red · yellow · green, the line is what is on hand"])];
+
+  rows.forEach((row, index) => {
+    const y = pad.top + index * rowHeight;
+    const zones = [
+      ["zone-red", 0, row.top_of_red],
+      ["zone-yellow", row.top_of_red, row.top_of_yellow],
+      ["zone-green", row.top_of_yellow, row.top_of_green],
+    ];
+    parts.push(svg("text", { x: 0, y: y + 13 }, [short(row.article, 24)]));
+    for (const [kind, from, to] of zones) {
+      parts.push(svg("rect", {
+        class: kind, x: pad.left + scale(from), y: y + 3,
+        width: Math.max(scale(to - from), 1), height: 13,
+      }));
+    }
+    const flow = pad.left + scale(Math.max(row.net_flow, 0));
+    parts.push(svg("line", { class: "flow", x1: flow, y1: y, x2: flow, y2: y + 19 }));
+    parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 13 },
+                   [showNum(row.net_flow)]));
+  });
+
+  return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
+}
+
+function netFlowBars(rows) {
+  const width = 640;
+  const rowHeight = 20;
+  const pad = { left: 150, right: 48, top: 16 };
+  const height = pad.top + rows.length * rowHeight + 6;
+  const plotWidth = width - pad.left - pad.right;
+  const top = Math.max(...rows.map((row) => Math.max(row.buffer_share, 0)), 120);
+  const scale = (share) => Math.max((Math.max(share, 0) / top) * plotWidth, 1);
+  const full = pad.left + (100 / top) * plotWidth;
+  const parts = [
+    svg("text", { x: pad.left, y: 10 }, ["share of the buffer each article is holding"]),
+    svg("line", { class: "guide", x1: full, y1: pad.top - 4, x2: full, y2: height - 4 }),
+    svg("text", { x: full + 3, y: 10 }, ["top of green"]),
+  ];
+
+  rows.forEach((row, index) => {
+    const y = pad.top + index * rowHeight;
+    parts.push(svg("text", { x: 0, y: y + 12 }, [short(row.article, 24)]));
+    parts.push(svg("rect", { class: "track", x: pad.left, y: y + 3, width: plotWidth, height: 12 }));
+    parts.push(svg("rect", {
+      class: `zone-${row.zone === "uncounted" ? "over" : row.zone}`,
+      x: pad.left, y: y + 3, width: scale(row.buffer_share), height: 12,
+    }));
+    parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 13 },
+                   [`${showNum(row.buffer_share)}%`]));
+  });
+
+  return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
+}
+
+function drawBufferCharts() {
+  if (!buffers) return;
+  const rows = (buffers.articles ?? []).slice(0, BUFFER_SHOWN);
+  const counts = buffers.counts ?? {};
+  const tiles = [
+    ["articles", showNum(counts.articles ?? 0)],
+    ["red", showNum(counts.red ?? 0)],
+    ["yellow", showNum(counts.yellow ?? 0)],
+    ["green", showNum(counts.green ?? 0)],
+    ["over the top", showNum(counts.over ?? 0)],
+    ["not counted", showNum(counts.uncounted ?? 0)],
+  ];
+  $("ddmrp-stats").replaceChildren(...tiles.map(([name, value]) =>
+    el("span", { className: "stat" }, [
+      el("span", { className: "stat-name", textContent: name }),
+      el("strong", { textContent: value }),
+    ])));
+
+  const empty = (text) => el("p", { className: "muted", textContent: text });
+  $("buffer-chart").replaceChildren(rows.length
+    ? bufferBars(rows) : empty("Nothing to size a buffer from yet."));
+  $("netflow-chart").replaceChildren(rows.length
+    ? netFlowBars(rows) : empty("Nothing to compare to a buffer yet."));
+}
+
 function drawBuffers() {
   if (!buffers) return;
   const rows = bufferAll
@@ -2485,6 +2709,7 @@ function drawBuffers() {
     + `${counts.green} green · ${counts.uncounted} not counted`;
   $("buffer-risky").setAttribute("aria-pressed", String(!bufferAll));
   $("buffer-all").setAttribute("aria-pressed", String(bufferAll));
+  drawBufferCharts();
 
   const chain = buffers.chain;
   const states = chain.states;
@@ -2992,11 +3217,13 @@ async function loadBaskets() {
         ? "No bot token yet: Settings, then Chat bot."
         : "The Discord library is not installed: pip install 'stock-manager[discord]'.");
 
-  $("chat-state").textContent = chat.ready
-    ? `Bot ready · ${chat.channels.length ? chat.channels.join(", ") : "every channel"}`
-    : (chat.installed ? (chat.token_set ? "Token stored, bot starting with the app."
-                                        : "No token stored yet.")
-                      : "Library missing: pip install 'stock-manager[discord]'");
+  if ($("chat-state")) {
+    $("chat-state").textContent = chat.ready
+      ? `Bot ready · ${chat.channels.length ? chat.channels.join(", ") : "every channel"}`
+      : (chat.installed ? (chat.token_set ? "Token stored, bot starting with the app."
+                                          : "No token stored yet.")
+                        : "Library missing: pip install 'stock-manager[discord]'");
+  }
   $("chat-channels").value = (chat.channels ?? []).join(", ");
 
   $("baskets").replaceChildren(...open.map((basket) => {
@@ -3069,6 +3296,286 @@ async function saveChat(forget) {
 $("chat-save").addEventListener("click", () => saveChat(false));
 $("chat-forget").addEventListener("click", () => saveChat(true));
 
+// ---- what the shelf holds -------------------------------------------------
+
+let stockRows = [];
+
+function renderStockStats(data) {
+  const tiles = [
+    ["articles", showNum(data.articles)],
+    ["came in", showNum(data.received)],
+    ["shipped out", showNum(data.shipped)],
+    ["being picked", showNum(data.picking)],
+    ["on the shelf", showNum(data.on_hand)],
+    ["below zero", showNum(data.negative)],
+  ];
+  $("stock-stats").replaceChildren(...tiles.map(([name, value]) =>
+    el("span", { className: "stat" }, [
+      el("span", { className: "stat-name", textContent: name }),
+      el("strong", { textContent: value }),
+    ])));
+  
+}
+
+function renderStock() {
+  const needle = upper($("stock-search").value.trim());
+  const shortOnly = $("stock-short").getAttribute("aria-pressed") === "true";
+  const shown = stockRows.filter((row) =>
+    (!needle || row.article.includes(needle)) && (!shortOnly || row.on_hand < 0));
+  renderTable($("table-stock"), [
+    { label: "Article", cell: (row) => document.createTextNode(row.article) },
+    { label: "In", numeric: true, cell: (row) => document.createTextNode(showNum(row.received)) },
+    { label: "Out", numeric: true, cell: (row) => document.createTextNode(showNum(row.shipped)) },
+    { label: "Picking", numeric: true,
+      cell: (row) => document.createTextNode(showNum(row.picking)) },
+    { label: "On hand", numeric: true, cell: (row) =>
+      el("strong", { className: row.on_hand < 0 ? "bad" : "", textContent: showNum(row.on_hand) }) },
+    { label: "Counted", numeric: true,
+      cell: (row) => document.createTextNode(row.counted == null ? "—" : showNum(row.counted)) },
+    { label: "Gap", numeric: true,
+      cell: (row) => document.createTextNode(row.gap == null ? "—" : showNum(row.gap)) },
+    { label: "Last in", cell: (row) => document.createTextNode(showDate(row.last_in)) },
+    { label: "Last out", cell: (row) => document.createTextNode(showDate(row.last_out)) },
+  ], shown, "Nothing on the shelf yet.");
+}
+
+async function loadStock() {
+  try {
+    const data = await api("/api/stock");
+    stockRows = data.rows ?? [];
+    renderStockStats(data);
+    renderStock();
+  } catch {
+  }
+}
+
+$("stock-search").addEventListener("input", renderStock);
+$("stock-short").addEventListener("click", () => {
+  const on = $("stock-short").getAttribute("aria-pressed") === "true";
+  $("stock-short").setAttribute("aria-pressed", String(!on));
+  renderStock();
+});
+
+// ---- the tables a question can be asked about -----------------------------
+
+async function loadTables() {
+  if (!$("tables-list")) return;
+  try {
+    const data = await api("/api/tables");
+    $("tables-list").replaceChildren(...(data.tables ?? []).map((table) => {
+      const chip = el("button", {
+        type: "button", className: "mini",
+        title: table.columns.join(", "),
+        textContent: `${table.table} (${showNum(table.rows)})`,
+      });
+      chip.addEventListener("click", () => {
+        $("question").value = `SELECT * FROM ${table.table} LIMIT 100`;
+        $("question").focus();
+      });
+      return chip;
+    }));
+  } catch {
+  }
+}
+
+// ---- quote requests -------------------------------------------------------
+
+let quoteRows = [];
+let quoteOpen = null;
+
+function renderQuotes() {
+  renderTable($("table-quotes"), [
+    { label: "#", numeric: true, cell: (row) => {
+      const open = el("button", { className: "mini", type: "button",
+                                  textContent: `#${row.quote_id}` });
+      open.addEventListener("click", () => openQuote(row.quote_id));
+      return open;
+    } },
+    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier ?? "—") },
+    { label: "Lines", numeric: true, cell: (row) => document.createTextNode(showNum(row.lines)) },
+    { label: "Site", cell: (row) => document.createTextNode(row.site ?? "—") },
+    { label: "Work item", cell: (row) => document.createTextNode(row.work_item ?? "—") },
+    { label: "Needed by", cell: (row) => document.createTextNode(showDate(row.needed_by)) },
+    { label: "State", cell: (row) => el("span", { className: "pill", textContent: row.state }) },
+    { label: "Asked", cell: (row) => document.createTextNode(showTime(row.asked_at)) },
+  ], quoteRows, "No quote asked for yet.");
+}
+
+async function openQuote(quoteId) {
+  try {
+    const quote = await api(`/api/quotes/${quoteId}`);
+    quoteOpen = quote;
+    $("quote-open").hidden = false;
+    $("quote-text").textContent = quote.text;
+    say(`Quote #${quoteId}`);
+  } catch (e) {
+    notice($("quote-note"), "bad", e.message);
+  }
+}
+
+async function setQuoteState(state) {
+  if (!quoteOpen) return;
+  try {
+    await api(`/api/quotes/${quoteOpen.quote_id}`, patchJson({ state }));
+    notice($("quote-note"), "ok", `Quote #${quoteOpen.quote_id} is ${state}.`);
+    await loadQuotes();
+    await openQuote(quoteOpen.quote_id);
+  } catch (e) {
+    notice($("quote-note"), "bad", e.message);
+  }
+}
+
+async function loadQuotes() {
+  try {
+    const data = await api("/api/quotes");
+    quoteRows = data.quotes ?? [];
+    $("tree-quotes").textContent = `(${quoteRows.length})`;
+    $("quote-summary").textContent =
+      `${data.summary?.quotes ?? 0} request(s), ${data.summary?.open ?? 0} waiting on a price`;
+    $("quote-units").textContent = "One line each: quantity, unit, then the article — "
+      + (data.units ?? []).map((unit) => `${unit.id} = ${unit.label}`).join(", ");
+    renderQuotes();
+  } catch {
+  }
+}
+
+$("quote-save").addEventListener("click", async () => {
+  const body = {
+    supplier: $("quote-supplier").value.trim() || null,
+    site: $("quote-site").value.trim() || null,
+    work_item: $("quote-work").value.trim() || null,
+    needed_by: $("quote-needed").value || null,
+    text: $("quote-items").value,
+  };
+  if (!body.text.trim()) {
+    notice($("quote-note"), "warn", "Say what has to be priced.");
+    return;
+  }
+  $("quote-save").disabled = true;
+  try {
+    const saved = await api("/api/quotes", postJson(body));
+    $("quote-items").value = "";
+    notice($("quote-note"), "ok", `Quote #${saved.quote_id} saved.`);
+    await loadQuotes();
+    await openQuote(saved.quote_id);
+  } catch (e) {
+    notice($("quote-note"), "bad", e.message);
+  } finally {
+    $("quote-save").disabled = false;
+  }
+});
+
+$("quote-sent").addEventListener("click", () => setQuoteState("sent"));
+$("quote-answered").addEventListener("click", () => setQuoteState("answered"));
+$("quote-closed").addEventListener("click", () => setQuoteState("closed"));
+$("quote-drop").addEventListener("click", async () => {
+  if (!quoteOpen) return;
+  if (!confirm(`Delete quote #${quoteOpen.quote_id}?`)) return;
+  try {
+    await api(`/api/quotes/${quoteOpen.quote_id}`, { method: "DELETE" });
+    quoteOpen = null;
+    $("quote-open").hidden = true;
+    await loadQuotes();
+  } catch (e) {
+    notice($("quote-note"), "bad", e.message);
+  }
+});
+
+// ---- route wrangler -------------------------------------------------------
+
+let stopRows = [];
+
+function renderStops() {
+  renderTable($("table-stops"), [
+    { label: "Stop", cell: (row) => document.createTextNode(row.label ?? "—") },
+    { label: "Address", cell: (row) => document.createTextNode(short(row.address, 46)) },
+    { label: "Placed", cell: (row) => document.createTextNode(
+      row.lat == null ? "not on the map" : `${row.lat.toFixed(4)}, ${row.lon.toFixed(4)}`) },
+    { label: "Done", cell: (row) => {
+      const box = el("input", { type: "checkbox", checked: row.done });
+      box.addEventListener("change", async () => {
+        await api(`/api/route/places/${row.place_id}`, patchJson({ done: box.checked }));
+        await loadRoute();
+      });
+      return box;
+    } },
+    { label: "", cell: (row) => {
+      const drop = el("button", { className: "mini", type: "button", textContent: "delete" });
+      drop.addEventListener("click", async () => {
+        await api(`/api/route/places/${row.place_id}`, { method: "DELETE" });
+        await loadRoute();
+      });
+      return drop;
+    } },
+  ], stopRows, "No delivery address yet.");
+}
+
+async function loadRoute() {
+  try {
+    const data = await api("/api/route");
+    stopRows = data.stops ?? [];
+    $("tree-route").textContent = `(${stopRows.filter((row) => !row.done).length})`;
+    $("depot-now").textContent = data.depot
+      ? `Leaving from ${data.depot.label} — ${data.depot.address}`
+      : "No yard saved yet.";
+    renderStops();
+  } catch {
+  }
+}
+
+async function addPlace(kind) {
+  const address = $(kind === "depot" ? "depot-address" : "stop-address");
+  const label = $(kind === "depot" ? "depot-label" : "stop-label");
+  if (!address.value.trim()) {
+    notice($("route-note"), "warn", "Type an address first.");
+    return;
+  }
+  notice($("route-note"), "", "Looking the address up on the map...");
+  try {
+    await api("/api/route/places",
+              postJson({ address: address.value.trim(), label: label.value.trim() || null, kind }));
+    address.value = "";
+    label.value = "";
+    notice($("route-note"), "ok", "Address placed on the map.");
+    await loadRoute();
+  } catch (e) {
+    notice($("route-note"), "bad", e.message);
+  }
+}
+
+$("depot-save").addEventListener("click", () => addPlace("depot"));
+$("stop-add").addEventListener("click", () => addPlace("stop"));
+$("stops-clear").addEventListener("click", async () => {
+  if (!confirm("Clear every delivery address?")) return;
+  await api("/api/route/stops", { method: "DELETE" });
+  $("table-route").replaceChildren();
+  $("route-total").textContent = "";
+  await loadRoute();
+});
+
+$("route-go").addEventListener("click", async () => {
+  const loop = $("route-loop").checked;
+  $("route-go").disabled = true;
+  notice($("route-note"), "", "Measuring the roads...");
+  try {
+    const plan = await api(`/api/route/plan?round_trip=${loop}`, postJson({}));
+    renderTable($("table-route"), [
+      { label: "Order", numeric: true,
+        cell: (row) => document.createTextNode(String(row.position + 1)) },
+      { label: "Stop", cell: (row) => document.createTextNode(row.label ?? "—") },
+      { label: "Address", cell: (row) => document.createTextNode(short(row.address, 52)) },
+    ], plan.stops, "Nothing to drive.");
+    $("route-total").textContent =
+      `${plan.km} km over ${plan.legs.length} leg(s), `
+      + (plan.source === "road" ? "measured by road" : "straight-line only, the road service was quiet");
+    notice($("route-note"), "ok", "Route worked out.");
+  } catch (e) {
+    notice($("route-note"), "bad", e.message);
+  } finally {
+    $("route-go").disabled = false;
+  }
+});
+
 async function refresh() {
   try {
     const data = await api("/api/data");
@@ -3092,7 +3599,8 @@ async function refresh() {
     await Promise.all([
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(),
-      loadBills(), loadMailSettings(), loadBaskets(),
+      loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
+      loadQuotes(), loadRoute(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {
@@ -3110,7 +3618,18 @@ const SCREEN_MENUS = [
   { menu: "input-menu", drop: "input-drop", button: "menu-note",
     panel: "panel-capture", tab: "capture", key: "capture-card", title: "Input",
     skip: ["review", "mapping"] },
+  { menu: "tools-menu", drop: "tools-drop", button: "ddmrp-tools",
+    panel: "panel-ddmrp", tab: "ddmrp", key: "ddmrp-card", title: "DDMRP",
+    skip: ["ddmrp-landing"] },
 ];
+
+// A menu that walks to another screen instead of picking a card on this one.
+const LINK_MENUS = [
+  { menu: "orders-menu", drop: "orders-drop", button: "menu-orders", title: "Purchase orders",
+    links: [["Purchase orders", "orders"], ["Quotes", "quotes"], ["Bills", "bills"]] },
+];
+
+const ALL_MENUS = [...SCREEN_MENUS, ...LINK_MENUS];
 
 function cardName(card) {
   return (card.querySelector("h2")?.textContent ?? "").trim();
@@ -3140,7 +3659,7 @@ function closeMenu(spec) {
 }
 
 function openMenu(spec) {
-  for (const other of SCREEN_MENUS) {
+  for (const other of ALL_MENUS) {
     if (other !== spec) closeMenu(other);
   }
   $(spec.menu).classList.add("open");
@@ -3170,7 +3689,10 @@ function buildMenu(spec) {
   } catch {
   }
   showOnly(spec, wanted ?? cards[0]);
+  hover(spec, () => openTab(spec.tab));
+}
 
+function hover(spec, onClick) {
   const holder = $(spec.menu);
   let timer = null;
   holder.addEventListener("pointerenter", () => {
@@ -3184,22 +3706,37 @@ function buildMenu(spec) {
     if (!holder.contains(event.relatedTarget)) closeMenu(spec);
   });
   $(spec.button).addEventListener("click", () => {
-    openTab(spec.tab);
+    onClick();
     if (holder.classList.contains("open")) closeMenu(spec);
     else openMenu(spec);
   });
 }
 
+function buildLinkMenu(spec) {
+  $(spec.drop).replaceChildren(...spec.links.map(([label, tab]) => {
+    const entry = el("button", { type: "button", textContent: label, role: "menuitem" });
+    entry.addEventListener("click", () => {
+      openTab(tab);
+      closeMenu(spec);
+      say(`Screen ${tab.toUpperCase()}`);
+    });
+    return entry;
+  }));
+  hover(spec, () => openTab(spec.links[0][1]));
+}
+
 function buildScreenMenus() {
   for (const spec of SCREEN_MENUS) buildMenu(spec);
+  for (const spec of LINK_MENUS) buildLinkMenu(spec);
 }
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  for (const spec of SCREEN_MENUS) closeMenu(spec);
+  for (const spec of ALL_MENUS) closeMenu(spec);
 });
 
-openTab("capture");
+// The landing screen is the logo, not a card: the work starts from a menu or the tree.
+openTab("home");
 buildScreenMenus();
 refresh();
 </script>

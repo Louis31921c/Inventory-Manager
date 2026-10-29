@@ -16,7 +16,8 @@ LIST_COLUMNS = ("list_date", "site", "work_item", "drafter", "image_sha256", "im
 LIST_LINE_COLUMNS = ("list_id", "line_no", "article", "designation", "reference", "quantity",
                      "stock", "in_stock")
 COUNTED_TABLES = ("notes", "inventory_lines", "purchase_orders", "purchase_order_lines", "catalog",
-                  "article_names", "audit", "stock_counts", "bills")
+                  "article_names", "audit", "stock_counts", "bills", "quotes", "quote_lines",
+                  "places")
 
 
 class QueryError(Exception):
@@ -178,6 +179,10 @@ EXPORTS = {
     "bills": """SELECT bill_id, supplier, number, bill_date, month, due_date, currency,
                        net, tax, total, site, order_ref, state, paid_on, source, sender
                 FROM bills ORDER BY bill_date DESC, bill_id DESC""",
+    "quotes": """SELECT q.quote_id, l.line_no, l.article, l.quantity, l.unit, l.designation,
+                        q.supplier, q.site, q.work_item, q.needed_by, q.state
+                 FROM quotes q JOIN quote_lines l USING (quote_id)
+                 ORDER BY q.quote_id, l.line_no""",
 }
 
 
@@ -246,6 +251,27 @@ def purge_photos(db_path, images_dir, days=42):
             unlink(str(orphan))
 
     return {"files": removed, "bytes": freed, "notes": len(old_notes), "lists": len(old_lists)}
+
+
+def table_counts(db_path):
+    """Every table a question can be asked about, with how full it is."""
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        names = [row[0] for row in con.execute("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'main' ORDER BY table_name
+                """).fetchall()]
+        out = []
+        for name in names:
+            if name == "schema_migrations":
+                continue
+            rows = con.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
+            columns = [line[0] for line in con.execute(f"""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_schema = 'main' AND table_name = '{name}'
+                    ORDER BY ordinal_position
+                    """).fetchall()]
+            out.append({"table": name, "rows": rows, "columns": columns})
+    return out
 
 
 def storage(db_path, data_dir, images_dir):

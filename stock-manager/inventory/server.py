@@ -27,7 +27,7 @@ from dataclasses import replace
 from . import (account, alerts, audit, backup, baskets, bills, catalog, db, ddmrp,
                discord_bot,
                forecast, intake, llm,
-               mailbox, models_info, pg, sheets, vocabulary)
+               mailbox, models_info, pg, quotes, routing, sheets, stock, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
 
@@ -44,7 +44,7 @@ app = FastAPI(title="Stock manager")
 lock = account.Lock(config.data_dir)
 backend = None
 stopper = None
-OPEN_PATHS = ("/unlock", "/robots.txt", "/sap.css")
+OPEN_PATHS = ("/unlock", "/robots.txt", "/sap.css", "/logo.png", "/icon.png")
 OPEN_PREFIXES = ("/fonts/",)
 WRITING = ("POST", "PUT", "PATCH", "DELETE")
 MAX_UPLOAD = 30 * 1024 * 1024
@@ -299,6 +299,18 @@ def stylesheet():
     return Response((WEB / "sap.css").read_text(encoding="utf-8"),
                     media_type="text/css; charset=utf-8",
                     headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/logo.png")
+def logo():
+    return FileResponse(WEB / "logo.png", media_type="image/png",
+                        headers={"Cache-Control": "max-age=604800"})
+
+
+@app.get("/icon.png")
+def icon():
+    return FileResponse(WEB / "icon.png", media_type="image/png",
+                        headers={"Cache-Control": "max-age=604800"})
 
 
 @app.get("/fonts/{name}")
@@ -817,6 +829,137 @@ def bill_photo(bill_id: int):
     return _photo(rows[0][0] if rows else None)
 
 
+# ---- quote requests -------------------------------------------------------
+
+class QuoteBody(BaseModel):
+    supplier: str | None = None
+    site: str | None = None
+    work_item: str | None = None
+    needed_by: str | None = None
+    note: str | None = None
+    lines: list[dict] = []
+    text: str | None = None
+
+
+@app.get("/api/quotes")
+def read_quotes():
+    return {"quotes": quotes.recent(config.db_path), "units": quotes.units(),
+            "summary": quotes.summary(config.db_path)}
+
+
+@app.get("/api/quotes/{quote_id}")
+def read_quote(quote_id: int):
+    found = quotes.one(config.db_path, quote_id)
+    if found is None:
+        raise HTTPException(404, f"No quote #{quote_id}.")
+    found["text"] = quotes.as_text(found)
+    return found
+
+
+@app.post("/api/quotes")
+def save_quote(request: Request, body: QuoteBody):
+    lines = body.lines or quotes.parse_request(body.text)
+    if not lines:
+        raise HTTPException(422, "Name at least one thing to be quoted.")
+    head = body.model_dump(exclude={"lines", "text"})
+    try:
+        quote_id = quotes.save(config.db_path, head, lines, who(request)[0])
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "quote.save", f"quote #{quote_id}",
+          f"{head.get('supplier') or 'no supplier'} · {len(lines)} line(s)")
+    return {"quote_id": quote_id, "quote": quotes.one(config.db_path, quote_id)}
+
+
+@app.patch("/api/quotes/{quote_id}")
+def edit_quote(request: Request, quote_id: int, body: dict):
+    if quotes.one(config.db_path, quote_id) is None:
+        raise HTTPException(404, f"No quote #{quote_id}.")
+    if not quotes.update(config.db_path, quote_id, body):
+        raise HTTPException(422, "Nothing to change.")
+    event(request, "quote.edit", f"quote #{quote_id}", ", ".join(sorted(body)))
+    return {"quote": quotes.one(config.db_path, quote_id)}
+
+
+@app.delete("/api/quotes/{quote_id}")
+def remove_quote(request: Request, quote_id: int):
+    if not quotes.drop(config.db_path, quote_id):
+        raise HTTPException(404, f"No quote #{quote_id}.")
+    event(request, "quote.delete", f"quote #{quote_id}")
+    return {"deleted": quote_id}
+
+
+# ---- what the shelf holds -------------------------------------------------
+
+@app.get("/api/stock")
+def read_stock():
+    return stock.summary(config.db_path)
+
+
+@app.get("/api/tables")
+def read_tables():
+    """What a question can be asked about, with how many rows there are to ask about."""
+    return {"tables": db.table_counts(config.db_path)}
+
+
+# ---- route wrangler -------------------------------------------------------
+
+class PlaceBody(BaseModel):
+    address: str
+    label: str | None = None
+    kind: str = "stop"
+    note: str | None = None
+
+
+@app.get("/api/route")
+def read_route_places():
+    return {"depot": routing.depot(config.db_path),
+            "stops": routing.places(config.db_path, "stop")}
+
+
+@app.post("/api/route/places")
+def add_route_place(request: Request, body: PlaceBody):
+    kind = "depot" if body.kind == "depot" else "stop"
+    try:
+        place_id = routing.add(config.db_path, body.address, body.label, kind,
+                               body.note, who(request)[0])
+    except routing.MapError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "route.place", f"{kind} #{place_id}", body.address)
+    return {"place_id": place_id, "depot": routing.depot(config.db_path),
+            "stops": routing.places(config.db_path, "stop")}
+
+
+@app.patch("/api/route/places/{place_id}")
+def mark_route_place(place_id: int, body: dict):
+    routing.mark(config.db_path, place_id, bool(body.get("done")))
+    return {"stops": routing.places(config.db_path, "stop")}
+
+
+@app.delete("/api/route/places/{place_id}")
+def remove_route_place(request: Request, place_id: int):
+    if not routing.drop(config.db_path, place_id):
+        raise HTTPException(404, f"No place #{place_id}.")
+    event(request, "route.delete", f"place #{place_id}")
+    return {"deleted": place_id}
+
+
+@app.delete("/api/route/stops")
+def clear_route_stops(request: Request):
+    held = routing.clear_stops(config.db_path)
+    event(request, "route.clear", f"{held} stop(s)")
+    return {"deleted": held}
+
+
+@app.post("/api/route/plan")
+async def plan_route(round_trip: bool = True):
+    """Asks OpenStreetMap for road distances; the only call that leaves this machine."""
+    try:
+        return await asyncio.to_thread(routing.route, config.db_path, round_trip)
+    except routing.MapError as e:
+        raise HTTPException(422, str(e)) from e
+
+
 class WorkItem(BaseModel):
     work_item: str | None = None
 
@@ -1294,6 +1437,11 @@ PG_TABLES = {
         ("net", "double precision"), ("tax", "double precision"), ("total", "double precision"),
         ("site", "text"), ("order_ref", "text"), ("state", "text"), ("paid_on", "date"),
         ("source", "text"), ("sender", "text"))),
+    "quotes": ("quote_lines", "Quote requests", ("quote_id", "line_no"), (
+        ("quote_id", "integer"), ("line_no", "integer"), ("article", "text"),
+        ("quantity", "double precision"), ("unit", "text"), ("designation", "text"),
+        ("supplier", "text"), ("site", "text"), ("work_item", "text"),
+        ("needed_by", "date"), ("state", "text"))),
     "safety-stock": ("safety_stock", "Safety stock watch", ("article",), (
         ("article", "text"), ("supplier", "text"), ("per_week", "double precision"),
         ("adu", "double precision"), ("lead_days", "double precision"), ("lead_class", "text"),
@@ -1315,7 +1463,7 @@ def _rows_for(dataset, cycle, horizon):
     if dataset == "safety-stock":
         rows, _, _ = ddmrp.buffers(config.db_path, cycle, horizon)
         data = [[row.get(name) for name, _ in columns] for row in rows]
-    elif dataset == "bills":
+    elif dataset in ("bills", "quotes"):
         names, fetched = db.export_query(config.db_path, dataset)
         order = [names.index(name) for name, _ in columns]
         data = [[row[at] for at in order] for row in fetched]

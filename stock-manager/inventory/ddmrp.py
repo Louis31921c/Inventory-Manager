@@ -1,7 +1,7 @@
 import math
 from datetime import timedelta
 
-from . import db
+from . import db, stock
 
 DEFAULT_CYCLE = 7
 DEFAULT_HORIZON = 4
@@ -91,10 +91,8 @@ def _spread(values, mean):
 
 
 def _on_hand(db_path):
-    return {article: float(quantity)
-            for article, quantity, _, _ in db.read(db_path, """
-            SELECT article, quantity, counted_on, counted_by FROM stock_counts
-            """)}
+    """Counted from the notes in and the orders out, unless somebody counted the shelf."""
+    return stock.on_hand_map(db_path)
 
 
 def _open_demand(db_path):

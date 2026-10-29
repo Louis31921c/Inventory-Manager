@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 
-from . import baskets
+from . import baskets, quotes
 from .config import load_config
 
 log = logging.getLogger(__name__)
@@ -64,6 +64,17 @@ def purchase_text(answer):
             f" ({len(answer['lines'])} line(s){site}){where}.\n{lines}\n"
             f"Someone has to place it on the supplier's site and tick it off in the app: "
             f"the bot does not pay for anything.")
+
+
+def quote_text(quote):
+    """A quote asks for a price; it never says what the price is."""
+    lines = "\n".join(f"· {quotes.show_quantity(row)} {row['article']}"
+                      for row in quote["rows"][:MAX_SHOWN])
+    where = f" from **{quote['supplier']}**" if quote["supplier"] else ""
+    site = f", site {quote['site']}" if quote["site"] else ""
+    return (f"**Quote request #{quote['quote_id']}**{where} is in Stock Manager"
+            f" ({len(quote['rows'])} line(s){site}).\n{lines}\n"
+            f"Send it out and type the prices in when they answer.")
 
 
 def stock_text(article, rows):
@@ -132,6 +143,25 @@ def build_client(config, channels):
         answer = await asyncio.to_thread(baskets.to_purchase_order, config.db_path,
                                          interaction.channel_id, who(interaction))
         await interaction.response.send_message(purchase_text(answer))
+
+    @tree.command(name="quote",
+                  description="Ask a supplier to price something by the metre, kilo or m3")
+    @app_commands.describe(supplier="Who should price it",
+                           items="120 ml skirting board; 3 m3 gravel; 12 anchors",
+                           site="Job site the goods are for",
+                           work_item="Part of the job, if it matters")
+    async def quote(interaction, supplier: str, items: str, site: str = "", work_item: str = ""):
+        if await refuse(interaction):
+            return
+        asked = quotes.parse_request(items)
+        if not asked:
+            await interaction.response.send_message("I read no article in that.", ephemeral=True)
+            return
+        head = {"supplier": supplier, "site": site, "work_item": work_item}
+        quote_id = await asyncio.to_thread(quotes.save, config.db_path, head, asked,
+                                           who(interaction))
+        stored = await asyncio.to_thread(quotes.one, config.db_path, quote_id)
+        await interaction.response.send_message(quote_text(stored))
 
     @tree.command(name="stock", description="What the shelf holds for an article")
     @app_commands.describe(article="Part of the name, e.g. rondelle m8")

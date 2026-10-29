@@ -40,7 +40,7 @@ packages = ["inventory"]
 
 [tool.setuptools.package-data]
 inventory = ["rules.md", "prompts/*.md", "web_ui/*.html", "web_ui/*.css", "web_ui/*.txt",
-             "web_ui/fonts/*.woff2"]
+             "web_ui/*.png", "web_ui/fonts/*.woff2"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

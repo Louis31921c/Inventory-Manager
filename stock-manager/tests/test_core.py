@@ -548,7 +548,7 @@ def test_exports_cover_every_dataset(db_path, tmp_path):
     db.save_purchase_order(db_path, {"site": "C", "lines": [{"article": "BOLT M6X30", "quantity": 10}]},
                           "l1", "l.jpg", "ALEX")
     audit.record(db_path, "ALEX", "note.save", "note #1")
-    assert set(db.EXPORTS) == {"inventory", "purchase_orders", "bills"}
+    assert set(db.EXPORTS) == {"inventory", "purchase_orders", "bills", "quotes"}
     for dataset in db.EXPORTS:
         columns, rows = db.export_query(db_path, dataset)
         assert columns, dataset
@@ -1346,7 +1346,8 @@ def test_buffers_size_the_zones_from_the_data(tmp_path):
     assert bolts["red"] == round(bolts["red_base"] + bolts["red_safety"], 1)
     assert bolts["yellow"] == round(bolts["adu"] * 10, 1)
     assert bolts["top_of_green"] == round(bolts["red"] + bolts["yellow"] + bolts["green"], 1)
-    assert bolts["zone"] == "uncounted" and bolts["on_hand"] is None
+    # Nothing has shipped, so the shelf is what the notes brought in.
+    assert bolts["on_hand"] == 1500 and bolts["zone"] == "green"
 
     db.save_stock_count(path, "BOLT M6", 10, "ALEX")
     rows, _, _ = ddmrp.buffers(path, cycle=7, horizon=4)
@@ -2017,5 +2018,179 @@ def test_the_bot_registers_its_commands(db_path, tmp_path):
     assert isinstance(client, discord.Client)
     names = {command.name: [p.name for p in command.parameters]
              for command in held[0].get_commands()}
-    assert set(names) == {"basket", "basket_show", "basket_clear", "purchase", "stock"}
+    assert set(names) == {"basket", "basket_show", "basket_clear", "purchase", "stock", "quote"}
+    assert names["quote"] == ["supplier", "items", "site", "work_item"]
     assert names["basket"] == ["shop", "items", "site", "work_item"]
+
+
+def test_the_logo_is_served_before_the_password(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("STOCK_USER", raising=False)
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    with TestClient(server.app) as client:
+        for path in ("/logo.png", "/icon.png"):
+            answer = client.get(path, follow_redirects=False)
+            assert answer.status_code == 200
+            assert answer.headers["content-type"] == "image/png"
+            assert answer.content[:8] == b"\x89PNG\r\n\x1a\n"
+        page = client.get("/unlock").text
+        assert 'href="/icon.png"' in page
+        assert 'url("/logo.png")' in page
+
+
+def test_the_shelf_counts_itself_from_notes_and_orders(db_path):
+    from inventory import stock
+
+    db.save_note(db_path, make_note(lines=[Line(article="BOLT M6", quantity=100)]),
+                 "in-1", "", "ALEX")
+    db.save_purchase_order(db_path, {"list_date": date.today() - timedelta(days=3), "site": "C",
+                                     "lines": [{"article": "BOLT M6", "quantity": 30}]},
+                           "out-1", "", "ALEX")
+    db.save_purchase_order(db_path, {"list_date": date.today(), "site": "C",
+                                     "lines": [{"article": "BOLT M6", "quantity": 5}]},
+                           "out-2", "", "ALEX")
+
+    answer = stock.summary(db_path)
+    bolts = {row["article"]: row for row in answer["rows"]}["BOLT M6"]
+    assert bolts["received"] == 100 and bolts["shipped"] == 30
+    # Today's order has not had its 24 hours yet, so it is still being picked.
+    assert bolts["picking"] == 5 and bolts["on_hand"] == 70
+    assert bolts["counted"] is None and answer["negative"] == 0
+
+    db.save_stock_count(db_path, "BOLT M6", 64, "ALEX")
+    again = {row["article"]: row for row in stock.rows(db_path)}["BOLT M6"]
+    assert again["counted"] == 64 and again["gap"] == -6
+    assert stock.on_hand_map(db_path)["BOLT M6"] == 64
+
+
+def test_a_quote_asks_in_the_right_unit(db_path):
+    from inventory import quotes
+
+    asked = quotes.parse_request("120 ml skirting board; 3 m3 gravel; 12 anchors")
+    assert [(line["quantity"], line["unit"], line["article"]) for line in asked] == [
+        (120.0, "ml", "SKIRTING BOARD"), (3.0, "m3", "GRAVEL"), (12.0, "piece", "ANCHORS")]
+
+    quote_id = quotes.save(db_path, {"supplier": "foussier", "site": "villa"}, asked, "ALEX")
+    stored = quotes.one(db_path, quote_id)
+    assert stored["supplier"] == "FOUSSIER" and stored["state"] == "open"
+    assert [row["unit_label"] for row in stored["rows"]] == ["linear metre", "cubic metre", "piece"]
+
+    text = quotes.as_text(stored)
+    assert "120 ml SKIRTING BOARD" in text and "price" in text
+    assert "€" not in text and "EUR" not in text
+
+    assert quotes.update(db_path, quote_id, {"state": "sent"})
+    assert quotes.one(db_path, quote_id)["state"] == "sent"
+    assert not quotes.update(db_path, quote_id, {"state": "nonsense"})
+    assert quotes.drop(db_path, quote_id) and quotes.one(db_path, quote_id) is None
+
+
+def test_quote_and_stock_routes(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        assert client.get("/api/quotes").json()["quotes"] == []
+        saved = client.post("/api/quotes", headers=mine,
+                            json={"supplier": "foussier", "text": "250 kg sand; 40 ml pipe"}).json()
+        quote_id = saved["quote_id"]
+        assert len(saved["quote"]["rows"]) == 2
+
+        one = client.get(f"/api/quotes/{quote_id}").json()
+        assert "250 kg SAND" in one["text"]
+        assert client.patch(f"/api/quotes/{quote_id}", headers=mine,
+                            json={"state": "sent"}).json()["quote"]["state"] == "sent"
+
+        empty = client.post("/api/quotes", headers=mine, json={"text": "   "})
+        assert empty.status_code == 422
+
+        tables = {row["table"] for row in client.get("/api/tables").json()["tables"]}
+        assert {"inventory_lines", "purchase_orders", "bills", "quotes", "places"} <= tables
+        assert "schema_migrations" not in tables
+
+        shelf = client.get("/api/stock").json()
+        assert shelf["articles"] == 0 and shelf["shipping_days"] == 1
+
+        assert client.delete(f"/api/quotes/{quote_id}", headers=mine).status_code == 200
+        assert client.get(f"/api/quotes/{quote_id}").status_code == 404
+
+
+def test_the_route_is_ordered_without_the_internet(db_path):
+    from inventory import routing
+
+    answers = {
+        "YARD": {"lat": 0.0, "lon": 0.0, "display_name": "Yard, Town"},
+        "FAR": {"lat": 0.0, "lon": 0.9, "display_name": "Far, Town"},
+        "NEAR": {"lat": 0.0, "lon": 0.1, "display_name": "Near, Town"},
+        "MIDDLE": {"lat": 0.0, "lon": 0.5, "display_name": "Middle, Town"},
+    }
+
+    def fake(url):
+        if "nominatim" in url:
+            for name, point in answers.items():
+                if name.lower() in url.lower():
+                    return [{"lat": str(point["lat"]), "lon": str(point["lon"]),
+                             "display_name": point["display_name"]}]
+            return []
+        raise OSError("no road service here")
+
+    routing.add(db_path, "yard", "YARD", "depot", None, "ALEX", fetch=fake)
+    for name in ("far", "near", "middle"):
+        routing.add(db_path, name, name.upper(), "stop", None, "ALEX", fetch=fake)
+
+    plan = routing.route(db_path, round_trip=False, fetch=fake)
+    assert plan["source"] == "straight"
+    assert [stop["label"] for stop in plan["stops"]] == ["YARD", "NEAR", "MIDDLE", "FAR"]
+    assert plan["km"] > 0 and len(plan["legs"]) == 3
+
+    # A round trip ends where it started, so it is longer.
+    loop = routing.route(db_path, round_trip=True, fetch=fake)
+    assert loop["metres"] > plan["metres"] and len(loop["legs"]) == 4
+
+    only_depot = routing.clear_stops(db_path)
+    assert only_depot == 3
+    with pytest.raises(routing.MapError):
+        routing.route(db_path, fetch=fake)
+
+
+def test_the_route_asks_the_road_service_first(db_path):
+    from inventory import routing
+
+    def fake(url):
+        if "nominatim" in url:
+            return [{"lat": "1.0", "lon": "1.0", "display_name": "Somewhere"}]
+        return {"code": "Ok", "distances": [[0, 400, 900], [400, 0, 600], [900, 600, 0]]}
+
+    routing.add(db_path, "yard", "YARD", "depot", None, "ALEX", fetch=fake)
+    routing.add(db_path, "a", "A", "stop", None, "ALEX", fetch=fake)
+    routing.add(db_path, "b", "B", "stop", None, "ALEX", fetch=fake)
+
+    plan = routing.route(db_path, round_trip=True, fetch=fake)
+    assert plan["source"] == "road"
+    assert plan["metres"] == 400 + 600 + 900
+    assert [stop["label"] for stop in plan["stops"]] == ["YARD", "A", "B"]
