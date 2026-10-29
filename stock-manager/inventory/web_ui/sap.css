@@ -384,7 +384,15 @@ input.cell:focus { border-color: var(--accent); outline: none; }
   top: 100%;
   z-index: 40;
 }
-.menu.open .menu-drop { display: block; }
+.menu.open > .menu-drop { display: block; }
+
+/* a second level: a site opens its work items beside it */
+.menu-drop .sub { display: block; position: relative; }
+.menu-drop .sub > button::after { content: " \25B8"; float: right; padding-left: 10px; }
+.menu-drop .sub > .menu-drop { left: 100%; top: -3px; }
+.menu-drop .sub:hover > .menu-drop,
+.menu-drop .sub:focus-within > .menu-drop { display: block; }
+.menu-drop hr { border: 0; border-top: 1px solid var(--line-soft); margin: 3px 2px; }
 .menu-drop button {
   background: none;
   border: 0;

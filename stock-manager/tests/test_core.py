@@ -1688,7 +1688,9 @@ def test_intake_routes(tmp_path, monkeypatch):
         assert client.get("/api/intake").json()["waiting"] == []
 
         page = client.get("/").text
-        assert 'id="table-intake"' in page and 'id="mapping-target"' in page
+        # The queue table was taken off the screen; importing and mapping stayed.
+        assert 'id="intake-files"' in page and 'id="mapping-target"' in page
+        assert 'id="table-intake"' not in page
 
 
 def test_a_spreadsheet_cannot_smuggle_a_formula(tmp_path, monkeypatch):

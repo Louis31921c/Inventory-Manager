@@ -21,7 +21,6 @@
     <button type="button" id="menu-orders" aria-haspopup="true" aria-expanded="false">Purchase orders</button>
     <div class="menu-drop" id="orders-drop" role="menu"></div>
   </span>
-  <button type="button" id="menu-bills">Bills</button>
   <button type="button" id="menu-route">Route wrangler</button>
   <button type="button" id="menu-goto">SQL</button>
   <span class="menu" id="system-menu">
@@ -117,12 +116,6 @@
       <button class="action ghost" id="mail-check">Test the connection</button>
     </div>
     <div id="mail-note"></div>
-  </div>
-
-  <div class="card">
-    <h2>Reading queue</h2>
-    <div class="scroll-x short-box"><table id="table-intake"></table></div>
-    <div id="queue-note"></div>
   </div>
 
   <div class="card" id="mapping" hidden>
@@ -880,7 +873,6 @@ $("tool-find").addEventListener("click", () => { openTab("inventory"); $("q-sear
 $("tool-export").addEventListener("click", () => { window.location.href = "/export/inventory.csv"; });
 $("tool-planner").addEventListener("click", () => openPredictions());
 $("menu-inventory").addEventListener("click", () => openTab("inventory"));
-$("menu-bills").addEventListener("click", () => openTab("bills"));
 $("menu-route").addEventListener("click", () => { openTab("route"); loadRoute(); });
 $("menu-goto").addEventListener("click", () => openTab("query"));
 $("menu-help").addEventListener("click", () => { window.location.href = "/license"; });
@@ -1019,6 +1011,8 @@ $("mail-check").addEventListener("click", async () => {
 });
 
 async function loadQueue() {
+  if (!$("table-intake")) return;
+
   let data;
   try {
     data = await api("/api/intake");
@@ -1553,6 +1547,11 @@ function renderSiteTree() {
                           treePick.work === work,
                           () => { treePick = { site, work, lines: item.lines }; }));
     }
+  }
+
+  // The Purchase orders menu drops the same sites, so it is rebuilt with the tree.
+  for (const spec of LINK_MENUS) {
+    if (spec.sites) renderLinkMenu(spec);
   }
 }
 
@@ -3626,7 +3625,8 @@ const SCREEN_MENUS = [
 // A menu that walks to another screen instead of picking a card on this one.
 const LINK_MENUS = [
   { menu: "orders-menu", drop: "orders-drop", button: "menu-orders", title: "Purchase orders",
-    links: [["Purchase orders", "orders"], ["Quotes", "quotes"], ["Bills", "bills"]] },
+    links: [["Purchase orders", "orders"], ["Quotes", "quotes"], ["Bills", "bills"]],
+    sites: true },
 ];
 
 const ALL_MENUS = [...SCREEN_MENUS, ...LINK_MENUS];
@@ -3713,7 +3713,66 @@ function hover(spec, onClick) {
 }
 
 function buildLinkMenu(spec) {
-  $(spec.drop).replaceChildren(...spec.links.map(([label, tab]) => {
+  renderLinkMenu(spec);
+  hover(spec, () => openTab(spec.links[0][1]));
+}
+
+function pickFromMenu(spec, site, work, lines) {
+  treePick = { site, work, lines };
+  closeMenu(spec);
+  renderSiteTree();
+  renderDeliveries();
+  renderOrders();
+  openTab("orders");
+  say(`${site || "no site"}`
+      + (work === null ? ", all work items" : `, ${work || "no work item"}`));
+}
+
+function siteEntries(spec) {
+  // Second level: a site opens the list of its work items.
+  const sites = [...siteIndex()].sort((one, two) => one[0].localeCompare(two[0]));
+  if (!sites.length) return [];
+
+  const tally = (items) => [...items.values()].reduce(
+    (sum, item) => ({ lines: sum.lines + item.lines, orders: sum.orders + item.orders }),
+    { lines: 0, orders: 0 });
+  const count = (item) => [item.lines ? `${item.lines} line(s)` : "",
+                           item.orders ? `${item.orders} PO` : ""].filter(Boolean).join(" · ")
+                          || "nothing yet";
+
+  const out = [el("hr")];
+  for (const [site, items] of sites) {
+    const whole = tally(items);
+    const head = el("button", {
+      type: "button", role: "menuitem", className: "sub-head",
+      textContent: `${site || "no site"} — ${count(whole)}`,
+    });
+    head.setAttribute("aria-haspopup", "true");
+    head.setAttribute("aria-current", String(Boolean(treePick) && treePick.site === site));
+    head.addEventListener("click", () => pickFromMenu(spec, site, null, whole.lines));
+
+    const work = [el("button", {
+      type: "button", role: "menuitem", textContent: `All work items — ${count(whole)}`,
+    })];
+    work[0].addEventListener("click", () => pickFromMenu(spec, site, null, whole.lines));
+    for (const [name, item] of [...items].sort((one, two) => one[0].localeCompare(two[0]))) {
+      const entry = el("button", {
+        type: "button", role: "menuitem",
+        textContent: `${name || "no work item"} — ${count(item)}`,
+      });
+      entry.setAttribute("aria-current", String(
+        Boolean(treePick) && treePick.site === site && treePick.work === name));
+      entry.addEventListener("click", () => pickFromMenu(spec, site, name, item.lines));
+      work.push(entry);
+    }
+    out.push(el("span", { className: "sub" },
+                [head, el("div", { className: "menu-drop", role: "menu" }, work)]));
+  }
+  return out;
+}
+
+function renderLinkMenu(spec) {
+  const entries = spec.links.map(([label, tab]) => {
     const entry = el("button", { type: "button", textContent: label, role: "menuitem" });
     entry.addEventListener("click", () => {
       openTab(tab);
@@ -3721,8 +3780,9 @@ function buildLinkMenu(spec) {
       say(`Screen ${tab.toUpperCase()}`);
     });
     return entry;
-  }));
-  hover(spec, () => openTab(spec.links[0][1]));
+  });
+  if (spec.sites) entries.push(...siteEntries(spec));
+  $(spec.drop).replaceChildren(...entries);
 }
 
 function buildScreenMenus() {
