@@ -3623,43 +3623,64 @@ async function refresh() {
 }
 
 // ---- the globe on the landing screen --------------------------------------
-// One ring runs right round the planet: the far half is drawn before the
-// sphere, so it passes behind it, and the near half after. Drag to turn it,
-// flick to let it coast. The wordmark sits still on top.
+// The ring and the road are circles in space. Two angles turn them, a flat
+// drawing comes out: whatever ends up behind the sphere is drawn before it,
+// so the band passes behind the planet and comes back round. Drag turns it
+// both ways, a flick lets it coast. The wordmark sits still on top.
 
 const PLANET = { cx: 500, cy: 470, r: 322 };
-const ORBIT = { cx: 500, cy: 452, rx: 455, ry: 152, tilt: -0.26, width: 40, head: 100 };
-const ROAD = { cx: 500, cy: 652, rx: 268, ry: 74, tilt: -0.1, width: 21 };
-const COMET = Math.PI + 0.16;  // each arrow reaches the next one's head, so the ring closes
-const DRAG_TURNS = 2.2;     // turns per screen width of dragging
-const FRICTION = 0.972;
-const STOPPED = 0.0005;
+const ORBIT = { radius: 452, tilt: 0.2, width: 40, head: 104, arc: Math.PI - 0.62 };
+const ROAD = { lat: -0.52, width: 22, dashes: 30, dash: 0.07 };
+const ROLL = -0.22;          // how the whole thing leans on the screen
+const DEPTH = 0.00055;       // a little perspective: the near side comes out bigger
+const DRAG_TURNS = 1.5;
+const FRICTION = 0.957;
+const STOPPED = 0.0006;
+const FASTEST = 0.2;
 
-let spin = -0.6;           // where the arrows sit before anybody touches it
-let spinning = 0;
+let yaw = 0;                 // where it rests before anybody touches it
+let pitch = -0.34;
+let spinYaw = 0;
+let spinPitch = 0;
 let booked = false;
 let dragging = null;
 
-function ringPoint(ring, t) {
-  const x = ring.rx * Math.cos(t);
-  const y = ring.ry * Math.sin(t);
-  const c = Math.cos(ring.tilt);
-  const s = Math.sin(ring.tilt);
-  return { x: ring.cx + x * c - y * s, y: ring.cy + x * s + y * c, far: Math.sin(t) < 0 };
+function project(p) {
+  const ca = Math.cos(yaw);
+  const sa = Math.sin(yaw);
+  const x1 = p.x * ca + p.z * sa;
+  const z1 = p.z * ca - p.x * sa;
+  const cb = Math.cos(pitch);
+  const sb = Math.sin(pitch);
+  const y2 = p.y * cb - z1 * sb;
+  const z2 = p.y * sb + z1 * cb;
+  const near = 1 + z2 * DEPTH;
+  const cr = Math.cos(ROLL);
+  const sr = Math.sin(ROLL);
+  return {
+    x: PLANET.cx + (x1 * cr - y2 * sr) * near,
+    y: PLANET.cy - (x1 * sr + y2 * cr) * near,
+    far: z2 < 0,
+    near,
+  };
 }
 
-function ringStep(ring, t) {
-  const ahead = ringPoint(ring, t + 0.01);
-  const behind = ringPoint(ring, t - 0.01);
-  const dx = ahead.x - behind.x;
-  const dy = ahead.y - behind.y;
-  const long = Math.hypot(dx, dy) || 1;
-  return { dx: dx / long, dy: dy / long };
+function orbitPoint(t) {
+  const x = ORBIT.radius * Math.cos(t);
+  const z = ORBIT.radius * Math.sin(t);
+  return project({ x, y: -z * Math.sin(ORBIT.tilt), z: z * Math.cos(ORBIT.tilt) });
 }
 
-function runs(ring, from, to, steps, width) {
-  // The arrow is sliced where it crosses the rim, so each piece knows which
-  // side of the planet it belongs to.
+function roadPoint(t) {
+  const ring = PLANET.r * Math.cos(ROAD.lat) * 1.004;
+  return project({
+    x: ring * Math.cos(t), y: PLANET.r * Math.sin(ROAD.lat), z: ring * Math.sin(t),
+  });
+}
+
+function strip(at, from, to, steps, widthAt) {
+  // A band along the circle, cut where it crosses the rim so each piece knows
+  // which side of the planet it is on.
   const pieces = [];
   let left = [];
   let right = [];
@@ -3674,17 +3695,21 @@ function runs(ring, from, to, steps, width) {
   for (let step = 0; step <= steps; step += 1) {
     const along = step / steps;
     const t = from + (to - from) * along;
-    const at = ringPoint(ring, t);
-    const way = ringStep(ring, t);
-    const half = (width * Math.pow(along, 1.2) + 5) / 2;
-    const one = [at.x - way.dy * half, at.y + way.dx * half];
-    const other = [at.x + way.dy * half, at.y - way.dx * half];
-    if (side === null) side = at.far;
-    if (at.far !== side) {
+    const here = at(t);
+    const ahead = at(t + 0.008);
+    const behind = at(t - 0.008);
+    const dx = ahead.x - behind.x;
+    const dy = ahead.y - behind.y;
+    const long = Math.hypot(dx, dy) || 1;
+    const half = (widthAt(along) * here.near) / 2;
+    const one = [here.x - (dy / long) * half, here.y + (dx / long) * half];
+    const other = [here.x + (dy / long) * half, here.y - (dx / long) * half];
+    if (side === null) side = here.far;
+    if (here.far !== side) {
       left.push(one);
       right.push(other);
       close();
-      side = at.far;
+      side = here.far;
     }
     left.push(one);
     right.push(other);
@@ -3693,57 +3718,54 @@ function runs(ring, from, to, steps, width) {
   return pieces;
 }
 
-function arrowHead(ring, t, size) {
-  const at = ringPoint(ring, t);
-  const way = ringStep(ring, t);
-  const tip = { x: at.x + way.dx * size * 0.62, y: at.y + way.dy * size * 0.62 };
-  const back = { x: at.x - way.dx * size * 0.45, y: at.y - way.dy * size * 0.45 };
-  const wide = size * 0.42;
+function arrowHead(at, t, size) {
+  const here = at(t);
+  const ahead = at(t + 0.01);
+  const behind = at(t - 0.01);
+  // The band is laid from its tail at the larger angle, so the point looks the other way.
+  const dx = behind.x - ahead.x;
+  const dy = behind.y - ahead.y;
+  const long = Math.hypot(dx, dy) || 1;
+  const wx = dx / long;
+  const wy = dy / long;
+  const span = size * here.near;
+  const tip = [here.x + wx * span * 0.62, here.y + wy * span * 0.62];
+  const tail = [here.x - wx * span * 0.42, here.y - wy * span * 0.42];
+  const wide = span * 0.42;
   return {
-    far: at.far,
-    points: [[tip.x, tip.y],
-             [back.x - way.dy * wide, back.y + way.dx * wide],
-             [at.x - way.dx * size * 0.1, at.y - way.dy * size * 0.1],
-             [back.x + way.dy * wide, back.y - way.dx * wide]],
+    far: here.far,
+    points: [tip,
+             [tail[0] - wy * wide, tail[1] + wx * wide],
+             [here.x - wx * span * 0.08, here.y - wy * span * 0.08],
+             [tail[0] + wy * wide, tail[1] - wx * wide]],
   };
-}
-
-function dashed(ring, from, to, steps) {
-  const points = [];
-  for (let step = 0; step <= steps; step += 1) {
-    const point = ringPoint(ring, from + ((to - from) * step) / steps);
-    points.push(`${point.x.toFixed(1)},${point.y.toFixed(1)}`);
-  }
-  return points.join(" ");
 }
 
 function drawGlobe() {
   const back = [];
   const front = [];
-  const put = (shape, node) => (shape.far ? back : front).push(node);
-
-  // the road: a line of latitude, its dashes sliding as the planet turns
-  const lane = dashed(ROAD, 0, Math.PI, 48);
-  const tarmac = svg("polyline", {
-    class: "road", points: lane, fill: "none", "stroke-width": ROAD.width,
+  const polygon = (piece, kind) => svg("polygon", {
+    class: kind,
+    points: piece.points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" "),
   });
-  const paint = svg("polyline", {
-    class: "road-line", points: lane, fill: "none", "stroke-width": 3.4,
-    "stroke-dasharray": "24 26",
-    "stroke-dashoffset": (-spin * ROAD.rx).toFixed(1),
-  });
-  front.push(tarmac, paint);
+  const add = (piece, kind) => (piece.far ? back : front).push(polygon(piece, kind));
 
-  // two arrows a half turn apart, each tapering into its head
-  for (const turn of [0, Math.PI]) {
-    const head = spin + turn;
-    for (const piece of runs(ORBIT, head - COMET, head, 64, ORBIT.width)) {
-      put(piece, svg("polygon", { class: "orbit", points: piece.points
-        .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ") }));
+  for (const piece of strip(roadPoint, 0, Math.PI * 2, 108, () => ROAD.width)) {
+    add(piece, "road");
+  }
+  for (let dash = 0; dash < ROAD.dashes; dash += 1) {
+    const from = (dash / ROAD.dashes) * Math.PI * 2;
+    for (const piece of strip(roadPoint, from, from + ROAD.dash, 3, () => 3.6)) {
+      add(piece, "road-line");
     }
-    const point = arrowHead(ORBIT, head, ORBIT.head);
-    put(point, svg("polygon", { class: "orbit", points: point.points
-      .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ") }));
+  }
+
+  for (const head of [0, Math.PI]) {
+    const taper = (along) => ORBIT.width * Math.pow(along, 1.2) + 5;
+    for (const piece of strip(orbitPoint, head + ORBIT.arc, head, 80, taper)) {
+      add(piece, "orbit");
+    }
+    add(arrowHead(orbitPoint, head, ORBIT.head), "orbit");
   }
 
   $("globe-back").replaceChildren(...back);
@@ -3756,13 +3778,16 @@ function turnGlobe() {
     drawGlobe();
     return;
   }
-  if (Math.abs(spinning) < STOPPED) {
-    spinning = 0;
+  if (Math.abs(spinYaw) < STOPPED && Math.abs(spinPitch) < STOPPED) {
+    spinYaw = 0;
+    spinPitch = 0;
     drawGlobe();
     return;
   }
-  spin += spinning;
-  spinning *= FRICTION;
+  yaw += spinYaw;
+  pitch += spinPitch;
+  spinYaw *= FRICTION;
+  spinPitch *= FRICTION;
   drawGlobe();
   book();
 }
@@ -3777,21 +3802,28 @@ function startGlobe() {
   const globe = $("globe");
   if (!globe) return;
 
+  const hold = (value) => Math.max(Math.min(value, FASTEST), -FASTEST);
+
   globe.addEventListener("pointerdown", (event) => {
     globe.setPointerCapture(event.pointerId);
     globe.classList.add("turning");
-    dragging = { x: event.clientX, at: performance.now(), moved: 0 };
-    spinning = 0;
+    dragging = { x: event.clientX, y: event.clientY, at: performance.now() };
+    spinYaw = 0;
+    spinPitch = 0;
   });
 
   globe.addEventListener("pointermove", (event) => {
     if (!dragging) return;
-    const step = ((event.clientX - dragging.x) / globe.clientWidth) * Math.PI * 2 * DRAG_TURNS;
+    const turns = Math.PI * 2 * DRAG_TURNS;
+    const sideways = ((event.clientX - dragging.x) / globe.clientWidth) * turns;
+    const upDown = ((event.clientY - dragging.y) / globe.clientHeight) * turns;
     const now = performance.now();
     const seconds = Math.max((now - dragging.at) / 1000, 0.001);
-    spin += step;
-    spinning = (step / seconds) / 60;   // what a flick would keep going at
-    dragging = { x: event.clientX, at: now, moved: dragging.moved + Math.abs(step) };
+    yaw += sideways;
+    pitch += upDown;
+    spinYaw = sideways / seconds / 60;
+    spinPitch = upDown / seconds / 60;
+    dragging = { x: event.clientX, y: event.clientY, at: now };
     book();
   });
 
@@ -3804,17 +3836,25 @@ function startGlobe() {
     }
     const flicked = performance.now() - dragging.at < 120;
     dragging = null;
-    if (!flicked) spinning = 0;
-    spinning = Math.max(Math.min(spinning, 0.22), -0.22);
+    if (!flicked) {
+      spinYaw = 0;
+      spinPitch = 0;
+    }
+    spinYaw = hold(spinYaw);
+    spinPitch = hold(spinPitch);
     book();
   };
   globe.addEventListener("pointerup", letGo);
   globe.addEventListener("pointercancel", letGo);
 
   globe.addEventListener("keydown", (event) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const step = 0.22;
+    if (event.key === "ArrowRight") yaw += step;
+    else if (event.key === "ArrowLeft") yaw -= step;
+    else if (event.key === "ArrowDown") pitch += step;
+    else if (event.key === "ArrowUp") pitch -= step;
+    else return;
     event.preventDefault();
-    spin += event.key === "ArrowRight" ? 0.22 : -0.22;
     book();
   });
 

@@ -186,10 +186,11 @@ ORDER BY received DESC NULLS LAST;
 
 ## The globe on the landing screen
 
-The Home screen draws the logo as a planet: one ring runs right round it, its far half behind
-the sphere and its near half in front, with an arrowhead at each end so the two arrows of the
-drawing read as a single band. Drag it to turn the ring and the road with it; flick and let go
-and it coasts to a stop. The arrow keys turn it a notch at a time. The wordmark does not move.
+The Home screen draws the logo as a planet. The ring and the road are circles in space, turned
+by two angles and drawn flat: whatever ends up behind the sphere is drawn before it, so the band
+passes behind the planet and comes back round. Drag sideways to turn it, drag up and down to tip
+it over, all the way round either way; flick and let go and it coasts to a stop. The arrow keys
+turn it a notch at a time. The wordmark does not move.
 
 Only the ring and the road are drawn in the page; the wordmark is the artwork itself
 (`web_ui/wordmark.png`), cut out of it so it can sit still on top.

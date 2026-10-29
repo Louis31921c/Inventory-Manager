@@ -247,8 +247,8 @@ section.panel {
   width: 94%;
 }
 svg polygon.orbit { fill: #0d0d0d; }
-svg polyline.road { stroke: #0d0d0d; stroke-linecap: round; }
-svg polyline.road-line { stroke: #fff; stroke-linecap: butt; }
+svg polygon.road { fill: #0d0d0d; }
+svg polygon.road-line { fill: #fff; }
 
 /* ---- group boxes --------------------------------------------------- */
 
