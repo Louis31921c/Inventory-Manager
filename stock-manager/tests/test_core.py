@@ -2050,12 +2050,12 @@ def test_the_logo_is_served_before_the_password(tmp_path, monkeypatch):
         assert 'href="/icon.png"' in page
         assert 'url("/logo.png")' in page
 
-        # The wordmark belongs to the landing screen, so it waits for the password.
-        assert client.get("/wordmark.png", follow_redirects=False).status_code == 303
+        # The landing picture belongs to the app page, so it waits for the password.
+        assert client.get("/landing.png", follow_redirects=False).status_code == 303
         client.post("/unlock", data={"user": "alex", "password": "correct horse",
                                      "again": "correct horse"},
                     headers={"origin": "http://testserver"})
-        answer = client.get("/wordmark.png")
+        answer = client.get("/landing.png")
         assert answer.status_code == 200 and answer.content[:8] == b"\x89PNG\r\n\x1a\n"
 
 

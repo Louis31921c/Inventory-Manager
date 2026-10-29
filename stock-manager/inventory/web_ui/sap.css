@@ -226,29 +226,12 @@ section.panel {
   justify-content: center;
   min-height: calc(100vh - 230px);
 }
-.globe {
-  aspect-ratio: 1 / .94;
-  cursor: grab;
+.home-logo {
+  background: url("/landing.png") center / contain no-repeat;
+  height: min(520px, 62vh);
   opacity: .65;
-  position: relative;
-  touch-action: none;
-  width: min(700px, 86%);
+  width: min(720px, 86%);
 }
-.globe.turning { cursor: grabbing; }
-.globe:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
-.globe svg { display: block; height: 100%; width: 100%; }
-.globe .word {
-  left: 50%;
-  pointer-events: none;
-  position: absolute;
-  top: 51%;
-  transform: translate(-50%, -50%);
-  user-select: none;
-  width: 94%;
-}
-svg polygon.orbit { fill: #0d0d0d; }
-svg polygon.road { fill: #0d0d0d; }
-svg polygon.road-line { fill: #fff; }
 
 /* ---- group boxes --------------------------------------------------- */
 

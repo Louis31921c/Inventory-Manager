@@ -313,9 +313,9 @@ def icon():
                         headers={"Cache-Control": "max-age=604800"})
 
 
-@app.get("/wordmark.png")
-def wordmark():
-    return FileResponse(WEB / "wordmark.png", media_type="image/png",
+@app.get("/landing.png")
+def landing():
+    return FileResponse(WEB / "landing.png", media_type="image/png",
                         headers={"Cache-Control": "max-age=604800"})
 
 
