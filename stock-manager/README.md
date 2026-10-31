@@ -321,12 +321,11 @@ same quantity off twice and put healthy articles deep in the red. Against the to
 the flow lands in the red, the yellow, the green, or over the top, and the table is sorted so
 the red comes first. Articles nobody counted are marked `not counted` rather than assumed empty.
 
-The two charts on the landing card read differently on purpose. The left one draws each
-article against its own top of green, so a buffer of ten and a buffer of ten thousand are the
-same width and can be compared by shape; the net flow sits on that band as a line, or as an
-arrow on the edge when it is below zero or past the top. The right one puts every article on
-one scale of buffer share, running either side of nought, so a shortage draws to the left of
-the line rather than vanishing.
+The landing card is counts first: the six tiles, then one strip showing how the articles
+split across the zones, then a slim line per article for the ten furthest below the top of
+their buffer. Each of those is the share of its own buffer the article is holding, so a buffer
+of ten and a buffer of ten thousand sit on the same scale. No chart prints its numbers any
+more — point at a bar, anywhere on the screen, and the figures come up on it.
 
 ### Where the demand goes next
 

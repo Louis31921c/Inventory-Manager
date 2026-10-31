@@ -445,16 +445,9 @@
   <div class="card" id="ddmrp-landing">
     <h2>Buffers</h2>
     <div class="row" id="ddmrp-stats"></div>
-    <div class="side-by-side">
-      <div>
-        <p class="eyebrow">Red, yellow and green of each buffer, the line is the net flow</p>
-        <div id="buffer-chart"></div>
-      </div>
-      <div>
-        <p class="eyebrow">How much of its buffer each article is holding</p>
-        <div id="netflow-chart"></div>
-      </div>
-    </div>
+    <div id="zone-strip"></div>
+    <p class="eyebrow">Furthest below the top of their buffer &mdash; hover a bar for the numbers</p>
+    <div id="buffer-chart"></div>
   </div>
 
   <div class="card">
@@ -2457,30 +2450,29 @@ let period = "week";
 
 function columnChart(points, label, value) {
   const width = 640;
-  const height = 170;
-  const pad = { left: 34, right: 8, top: 10, bottom: 26 };
+  const height = 120;
+  const pad = { left: 34, right: 8, top: 8, bottom: 20 };
   const top = Math.max(...points.map(value), 1);
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
   const step = plotWidth / Math.max(points.length, 1);
+  // A name over every column is a smear at a year's worth of weeks, and the quantity
+  // over every column is worse: both are on the bar itself, for whoever points at it.
+  const every = Math.ceil(points.length / 13);
   const parts = [];
 
   points.forEach((point, index) => {
     const tall = (value(point) / top) * plotHeight;
     const x = pad.left + index * step + step * 0.2;
     const barWidth = Math.max(step * 0.6, 2);
-    parts.push(svg("rect", {
+    parts.push(tip(svg("rect", {
       class: "bar", x, width: barWidth,
       y: pad.top + plotHeight - tall, height: Math.max(tall, 1),
-    }));
-    parts.push(svg("text", {
-      x: x + barWidth / 2, y: height - 14, "text-anchor": "middle",
-    }, [label(point)]));
-    if (value(point) > 0) {
+    }), `${label(point)} · ${showNum(Math.round(value(point)))}`));
+    if (index % every === 0) {
       parts.push(svg("text", {
-        class: "value", x: x + barWidth / 2, y: pad.top + plotHeight - tall - 3,
-        "text-anchor": "middle",
-      }, [showNum(Math.round(value(point)))]));
+        x: x + barWidth / 2, y: height - 8, "text-anchor": "middle",
+      }, [label(point)]));
     }
   });
 
@@ -2496,9 +2488,9 @@ function columnChart(points, label, value) {
 
 function barList(points, label, value) {
   const width = 640;
-  const rowHeight = 20;
-  const pad = { left: 150, right: 42, top: 6 };
-  const height = pad.top + points.length * rowHeight + 6;
+  const rowHeight = 15;
+  const pad = { left: 150, right: 10, top: 4 };
+  const height = pad.top + points.length * rowHeight + 4;
   const top = Math.max(...points.map(value), 1);
   const plotWidth = width - pad.left - pad.right;
   const parts = [];
@@ -2506,12 +2498,10 @@ function barList(points, label, value) {
   points.forEach((point, index) => {
     const y = pad.top + index * rowHeight;
     const long = Math.max((value(point) / top) * plotWidth, 1);
-    parts.push(svg("text", { x: 0, y: y + 12 }, [short(label(point))]));
-    parts.push(svg("rect", { class: "track", x: pad.left, y: y + 3, width: plotWidth, height: 12 }));
-    parts.push(svg("rect", { class: "bar", x: pad.left, y: y + 3, width: long, height: 12 }));
-    parts.push(svg("text", {
-      class: "value", x: width - pad.right + 4, y: y + 13,
-    }, [showNum(value(point))]));
+    parts.push(svg("text", { x: 0, y: y + 9 }, [short(label(point), 24)]));
+    parts.push(svg("rect", { class: "track", x: pad.left, y: y + 1, width: plotWidth, height: 9 }));
+    parts.push(tip(svg("rect", { class: "bar", x: pad.left, y: y + 1, width: long, height: 9 }),
+                   `${label(point)} · ${showNum(value(point))}`));
   });
 
   return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
@@ -2596,98 +2586,57 @@ function zonePill(zone) {
 
 const BUFFER_SHOWN = 10;
 
-function bufferBars(rows) {
-  const width = 640;
-  const rowHeight = 26;
-  const pad = { left: 172, right: 60, top: 22 };
-  const height = pad.top + rows.length * rowHeight + 8;
-  const plotWidth = width - pad.left - pad.right;
-  const parts = [svg("text", { class: "value", x: width - pad.right + 4, y: 10 }, ["net flow"])];
+function tip(node, text) {
+  node.append(svg("title", {}, [text]));
+  return node;
+}
 
-  // Every article against its own top of green: one shared scale would turn the
-  // small buffers into a sliver and tell nobody anything.
-  rows.forEach((row, index) => {
-    const y = pad.top + index * rowHeight;
-    const top = row.top_of_green > 0 ? row.top_of_green : 1;
-    const along = (value) => (Math.min(Math.max(value, 0), top) / top) * plotWidth;
-    const zones = [
-      ["zone-red", 0, row.top_of_red],
-      ["zone-yellow", row.top_of_red, row.top_of_yellow],
-      ["zone-green", row.top_of_yellow, top],
-    ];
-    parts.push(svg("text", { x: 0, y: y + 14 }, [short(row.article, 26)]));
-    for (const [kind, from, to] of zones) {
-      parts.push(svg("rect", {
-        class: kind, x: pad.left + along(from), y: y + 4, rx: 1,
-        width: Math.max(along(to) - along(from), 1), height: 14,
-      }));
-    }
-    parts.push(...flowMark(row, pad.left, plotWidth, y, top));
-    parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 15 },
-                   [showNum(row.net_flow)]));
+const ZONE_WORDS = { red: "red", yellow: "yellow", green: "green",
+                     over: "over the top", uncounted: "not counted" };
+
+function zoneStrip(counts) {
+  // One line for the whole workshop: how the articles sit across the zones.
+  const width = 640;
+  const height = 16;
+  const zones = ["red", "yellow", "green", "over", "uncounted"]
+    .map((zone) => [zone, counts[zone] ?? 0]).filter(([, many]) => many > 0);
+  const whole = zones.reduce((sum, [, many]) => sum + many, 0) || 1;
+
+  let x = 0;
+  const parts = zones.map(([zone, many]) => {
+    const wide = (many / whole) * width;
+    const block = tip(svg("rect", { class: `zone-${zone}`, x, y: 0, width: wide, height: 11 }),
+                      `${many} ${ZONE_WORDS[zone]}`);
+    x += wide;
+    return block;
   });
 
-  return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
+  return svg("svg", { viewBox: `0 0 ${width} ${height}`, class: "strip", role: "img" }, parts);
 }
 
-function flowMark(row, left, plotWidth, y, top) {
-  // Off the band at either end is the thing worth seeing, so it gets an arrow
-  // sitting on the edge rather than a line quietly clamped out of sight.
-  const share = row.net_flow / top;
-  if (share < 0) return [arrow(left, y + 11, -1), warn(left + 10, y + 15, "below zero")];
-  if (share > 1) {
-    return [arrow(left + plotWidth, y + 11, 1),
-            warn(left + plotWidth - 58, y + 15, `${showNum(row.buffer_share)}%`)];
-  }
-  const at = left + share * plotWidth;
-  return [svg("line", { class: "flow", x1: at, y1: y, x2: at, y2: y + 22 })];
-}
-
-function arrow(x, y, way) {
-  const tip = x + way * 7;
-  return svg("polygon", { class: "flow-arrow",
-                          points: `${tip},${y} ${x},${y - 6} ${x},${y + 6}` });
-}
-
-function warn(x, y, text) {
-  return svg("text", { class: "edge", x, y }, [text]);
-}
-
-function netFlowBars(rows) {
+function bufferBars(rows) {
+  // A slim line an article: the share of its own buffer it is holding, so a buffer of
+  // ten and a buffer of ten thousand sit on the same scale. The numbers are on hover.
   const width = 640;
-  const rowHeight = 22;
-  const pad = { left: 172, right: 58, top: 22 };
-  const height = pad.top + rows.length * rowHeight + 8;
+  const rowHeight = 15;
+  const pad = { left: 150, right: 44, top: 4 };
+  const height = pad.top + rows.length * rowHeight + 4;
   const plotWidth = width - pad.left - pad.right;
-
-  // The share runs either side of nothing, so the nought sits where the numbers
-  // need it: a bar that only ever grows to the right cannot draw a shortage.
-  const shares = rows.map((row) => row.buffer_share);
-  const low = Math.min(...shares, 0);
-  const high = Math.max(...shares, 120);
-  const span = high - low || 1;
-  const at = (share) => pad.left + ((share - low) / span) * plotWidth;
-  const nought = at(0);
-  const full = at(100);
-
-  const parts = [
-    svg("rect", { class: "track", x: pad.left, y: pad.top - 2, width: plotWidth,
-                  height: height - pad.top - 4 }),
-    svg("line", { class: "axis", x1: nought, y1: pad.top - 2, x2: nought, y2: height - 6 }),
-    svg("line", { class: "guide", x1: full, y1: pad.top - 2, x2: full, y2: height - 6 }),
-    svg("text", { x: Math.min(full + 3, width - pad.right - 48), y: 10 }, ["top of green"]),
-  ];
+  const parts = [];
 
   rows.forEach((row, index) => {
     const y = pad.top + index * rowHeight;
-    const edge = at(row.buffer_share);
-    parts.push(svg("text", { x: 0, y: y + 12 }, [short(row.article, 26)]));
-    parts.push(svg("rect", {
-      class: `zone-${row.zone === "uncounted" ? "over" : row.zone}`,
-      x: Math.min(nought, edge), y: y + 3, rx: 1,
-      width: Math.max(Math.abs(edge - nought), 1.5), height: 12,
-    }));
-    parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 13 },
+    const share = Math.max(Math.min(row.buffer_share, 100), 0);
+    const zone = row.zone === "uncounted" ? "uncounted" : row.zone;
+    parts.push(svg("text", { x: 0, y: y + 9 }, [short(row.article, 24)]));
+    parts.push(svg("rect", { class: "track", x: pad.left, y: y + 1, width: plotWidth, height: 9 }));
+    parts.push(tip(svg("rect", {
+      class: `zone-${zone}`, x: pad.left, y: y + 1,
+      width: Math.max((share / 100) * plotWidth, 1.5), height: 9,
+    }), `${row.article}\n${showNum(row.net_flow)} against a top of green of `
+       + `${showNum(row.top_of_green)} · ${ZONE_WORDS[zone]}`
+       + (row.to_order ? `\norder ${showNum(row.to_order)}` : "")));
+    parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 9 },
                    [`${showNum(row.buffer_share)}%`]));
   });
 
@@ -2713,10 +2662,9 @@ function drawBufferCharts() {
     ])));
 
   const empty = (text) => el("p", { className: "muted", textContent: text });
+  $("zone-strip").replaceChildren(zoneStrip(counts));
   $("buffer-chart").replaceChildren(rows.length
     ? bufferBars(rows) : empty("Nothing to size a buffer from yet."));
-  $("netflow-chart").replaceChildren(rows.length
-    ? netFlowBars(rows) : empty("Nothing to compare to a buffer yet."));
 }
 
 function drawBuffers() {
