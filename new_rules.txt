@@ -33,4 +33,10 @@ functionnalities to developp :
 
 -a blockchain for dots/ open claw automatic purchase : they can freely make baskets, but for the first purchase of an item ( ex first time buying spit fix), there's the synchronized ai checking for coherence, then I manually have to check it too. Important : it is a project, don't build it yet but let's discuss about it to make it work.
 
-- 
+- PO> contacts = I just want to be able to browse the contacts in my csv file. no table pre vizualisation, I just input the name of the contact or the name of the company, and the whole corresponding line appears
+
+- make the purchase order icon not clickable : I just want to be able to click on the rolling menu
+
+-for partly delivered, just write the supplier, naame of article and site/ work item
+
+- for the vans/ trucks , I want the route to appear under the shape design of each vehicle
