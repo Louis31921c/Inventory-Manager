@@ -2233,6 +2233,24 @@ def test_a_contact_rides_on_the_order(db_path):
     assert {sheet["id"]: sheet for sheet in db.purchase_orders(db_path)}[list_id]["contact"] is None
 
 
+def test_every_box_the_page_wires_up_is_on_the_page():
+    """The page is edited by hand; a box taken out must not strand its screen."""
+    import re
+
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    here = set(re.findall(r'\bid="([^"]+)"', page))
+    # Listeners hung at the top level run as the page loads: a missing one used to
+    # throw there and leave every screen below it dead.
+    wired = re.findall(r'^\$\("([^"]+)"\)(\??)\.addEventListener', page, re.M)
+    assert [name for name, optional in wired if not optional and name not in here] == []
+
+    # Nothing is left half-written either.
+    assert page.count("<section") == page.count("</section>")
+    assert page.count("<label") == page.count("</label>")
+
+
 def test_the_contact_file_on_the_disk_fills_the_book(db_path, tmp_path):
     from inventory import contacts
 

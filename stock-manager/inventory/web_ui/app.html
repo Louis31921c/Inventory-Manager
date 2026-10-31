@@ -369,6 +369,15 @@
       <label class="field narrow"><span>set a name</span><input id="stop-label"></label>
       <label class="field narrow"><span>van</span><select id="stop-van"></select></label>
     </div>
+    <div class="row">
+      <label class="field narrow"><span>load m3</span>
+        <input id="stop-cubic" type="number" min="0" step="0.1"></label>
+      <label class="field narrow"><span>load kg</span>
+        <input id="stop-kilos" type="number" min="0" step="1"></label>
+      <label class="field narrow"><span>open from</span><input id="stop-from" type="time"></label>
+      <label class="field narrow"><span>open to</span><input id="stop-to" type="time"></label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="stop-add">ADD</button>
       </label>
       <label class="field narrow" style="justify-content: flex-end">
         <button class="mini" id="stops-clear">clear the list</button>
@@ -381,6 +390,8 @@
   <div class="card">
     <div class="row">
       <button class="action" id="route-go">FIND THE SHORTEST RUN</button>
+      <label class="field narrow"><span>for</span><select id="route-van"></select></label>
+      <label class="field narrow" style="justify-content: flex-end">
         <span>back to the hub</span>
         <input type="checkbox" id="route-loop" checked>
       </label>
@@ -708,7 +719,18 @@
 <script>
 "use strict";
 
-const $ = (id) => document.getElementById(id);
+const missingBoxes = new Set();
+const $ = (id) => {
+  const found = document.getElementById(id);
+  if (found) return found;
+  // This page gets edited by hand. A box that has been taken out must not stop
+  // every screen below it from being wired up, so hand back a throwaway one.
+  if (!missingBoxes.has(id)) {
+    missingBoxes.add(id);
+    console.warn(`No element #${id} on the page; whatever uses it does nothing.`);
+  }
+  return document.createElement("input");
+};
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
