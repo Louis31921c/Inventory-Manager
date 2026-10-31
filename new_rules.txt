@@ -60,3 +60,18 @@ functionnalities to developp :
 
 - DONE: contacts = name and company, asked straight of supplier-contacts.csv, answered like
         a query
+
+- for stored purchase orders, I don't want to see all the list : just 3 inputs : site, work item or everything in stock or to order
+
+- stored PO and purchase orders is the same content = remove stored PO
+
+- on the left vertical bar , collapse the stock manager : I ant to be able to click on it to developp. remove sites. instead, put new quote and dots order
+
+- remove the horizontal bar with " Refresh Find Export DDMRP" . keep remember me and exit on the right, though
+
+- the logo is slightly cut off on the landing page, re arrange it
+
+- rolling menu for inventory : what the shelf holds, partly delivered, delivered lines. collapse the delivered lines table, make it the same format as partly delivered, it looks great
+
+- align system and help on the right, just above remember me and exit
+
