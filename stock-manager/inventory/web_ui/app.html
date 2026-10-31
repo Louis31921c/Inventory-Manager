@@ -3784,9 +3784,12 @@ function bar(used, most) {
             [el("span", { className: "fill", style: `width:${wide}%` })]);
 }
 
+const vanBoxes = new Map();
+
 function renderVans(data) {
   vans = data.vehicles ?? [];
   const stops = data.stops ?? [];
+  vanBoxes.clear();
 
   for (const [id, blank] of [["stop-van", "no van yet"], ["route-van", "every van"]]) {
     const select = $(id);
@@ -3823,30 +3826,46 @@ function renderVans(data) {
     }
     const go = el("button", { className: "mini", type: "button", textContent: "its route" });
     const run = el("div", { className: "van-route" });
+    vanBoxes.set(van.vehicle_id, run);
     go.addEventListener("click", () => vanRoute(van, go, run));
     box.append(go, run);
     return box;
   }));
 }
 
+function showRun(run, plan, said) {
+  const order = el("ol", { className: "van-run" }, plan.stops.map((stop) => el("li", {}, [
+    el("strong", { textContent: stop.label ?? stop.address }),
+    el("div", { className: "stop-where", textContent: stop.address ?? "" }),
+  ])));
+  const how = plan.source === "road" ? "measured by road"
+                                     : "straight line, the road service was quiet";
+  run.replaceChildren(order, el("p", { className: "legend",
+                                       textContent: `${plan.km} km over ${plan.legs.length} leg(s), ${how}` }));
+  if (said) run.append(el("p", { className: "legend", textContent: said }));
+  for (const wrong of plan.trouble ?? []) {
+    run.append(el("p", { className: "notice warn", textContent: wrong }));
+  }
+}
+
 async function vanRoute(van, go, run) {
   go.disabled = true;
   run.replaceChildren(el("p", { className: "muted", textContent: "Measuring the roads..." }));
+  const loop = $("route-loop").checked;
   try {
-    const loop = $("route-loop").checked;
-    const plan = await api(
-      `/api/route/plan?round_trip=${loop}&vehicle_id=${van.vehicle_id}`, postJson({}));
-    const order = el("ol", { className: "van-run" }, plan.stops.map((stop) => el("li", {}, [
-      el("strong", { textContent: stop.label ?? stop.address }),
-      el("div", { className: "stop-where", textContent: stop.address ?? "" }),
-    ])));
-    const said = el("p", { className: "legend", textContent:
-      `${plan.km} km over ${plan.legs.length} leg(s), `
-      + (plan.source === "road" ? "measured by road" : "straight line, the road service was quiet") });
-    run.replaceChildren(order, said);
-    for (const wrong of plan.trouble ?? []) {
-      run.append(el("p", { className: "notice warn", textContent: wrong }));
+    let said = "";
+    let plan = null;
+    try {
+      plan = await api(`/api/route/plan?round_trip=${loop}&vehicle_id=${van.vehicle_id}`,
+                       postJson({}));
+    } catch (e) {
+      // Nothing has been given to this lorry yet, so show it the whole list instead
+      // of an error: the VAN column on the table below is what splits them up.
+      if (!/no delivery address/i.test(e.message)) throw e;
+      plan = await api(`/api/route/plan?round_trip=${loop}`, postJson({}));
+      said = "No stop is given to this lorry yet — this is every address on the list.";
     }
+    showRun(run, plan, said);
   } catch (e) {
     run.replaceChildren(el("p", { className: "notice bad", textContent: e.message }));
   } finally {
@@ -3970,6 +3989,8 @@ async function findRoute() {
     $("route-total").textContent =
       `${plan.vehicle ? `${plan.vehicle.name}: ` : ""}${plan.km} km over ${plan.legs.length} leg(s), `
       + (plan.source === "road" ? "measured by road" : "straight-line only, the road service was quiet");
+    // A run asked for one lorry is drawn under that lorry as well.
+    if (van && vanBoxes.has(Number(van))) showRun(vanBoxes.get(Number(van)), plan, "");
     notice($("route-note"), (plan.trouble ?? []).length ? "warn" : "ok",
            (plan.trouble ?? []).length ? plan.trouble.join(" ; ") : "Route worked out.");
   } catch (e) {
