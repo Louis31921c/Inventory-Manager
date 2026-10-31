@@ -293,16 +293,14 @@
 
 <section class="panel" id="panel-quotes" role="tabpanel" hidden>
   <div class="card">
-    <h2>Ask for a quote</h2>
+    <h2>new quote (dots)</h2>
     <div class="row">
       <label class="field grow"><span>supplier</span><input id="quote-supplier"></label>
       <label class="field grow"><span>site</span><input id="quote-site"></label>
       <label class="field grow"><span>work item</span><input id="quote-work"></label>
       <label class="field narrow"><span>needed by</span><input id="quote-needed" type="date"></label>
     </div>
-    <label class="field"><span>what to price</span><textarea id="quote-items"
-      placeholder="120 ml skirting board; 3 m3 gravel; 250 kg sand"></textarea></label>
-    <p class="legend" id="quote-units"></p>
+    <label class="field"><span>your request</span><textarea id="quote-items"></textarea></label>
     <div class="row">
       <button class="action" id="quote-save">SAVE</button>
       <span class="grow"></span>
@@ -3318,8 +3316,6 @@ async function loadQuotes() {
     $("tree-quotes").textContent = `(${quoteRows.length})`;
     $("quote-summary").textContent =
       `${data.summary?.quotes ?? 0} request(s), ${data.summary?.open ?? 0} waiting on a price`;
-    $("quote-units").textContent = "One line each: quantity, unit, then the article — "
-      + (data.units ?? []).map((unit) => `${unit.id} = ${unit.label}`).join(", ");
     renderQuotes();
   } catch {
   }
