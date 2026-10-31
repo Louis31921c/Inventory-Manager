@@ -45,6 +45,12 @@ app is locked on every start for quick acess: the right password opens your data
 
 the session expires on its own after 12 hours.
 
+## Keys the window itself answers
+
+`F11` fills the screen. `ctrl-R` reads the page again, which is enough to see a change made
+to `app.html` or `sap.css` without closing the app; `ctrl-shift-R` does the same and throws
+the cache away. A change to the Python needs the app started again.
+
 ## What protects the data
 
 | Guard | What it stops |

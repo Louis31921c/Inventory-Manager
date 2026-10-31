@@ -134,15 +134,23 @@ def open_window(url, stop):
 
     window.connect("destroy", shut)
 
-    def fullscreen_key(which):
+    def window_keys(which, web):
+        """F11 fills the screen; ctrl-R reads the page again, ctrl-shift-R the whole lot."""
         def on_key(_widget, event):
-            if event.keyval != Gdk.KEY_F11:
-                return False
-            if which.get_window().get_state() & Gdk.WindowState.FULLSCREEN:
-                which.unfullscreen()
-            else:
-                which.fullscreen()
-            return True
+            held = event.state & Gdk.ModifierType.CONTROL_MASK
+            if event.keyval == Gdk.KEY_F11:
+                if which.get_window().get_state() & Gdk.WindowState.FULLSCREEN:
+                    which.unfullscreen()
+                else:
+                    which.fullscreen()
+                return True
+            if held and event.keyval in (Gdk.KEY_r, Gdk.KEY_R):
+                if event.state & Gdk.ModifierType.SHIFT_MASK:
+                    web.reload_bypass_cache()
+                else:
+                    web.reload()
+                return True
+            return False
         return on_key
 
     def second_window(source, action):
@@ -152,7 +160,7 @@ def open_window(url, stop):
         extra.set_default_size(1180, 900)
         dress(extra)
         extra.add(child)
-        extra.connect("key-press-event", fullscreen_key(extra))
+        extra.connect("key-press-event", window_keys(extra, child))
         child.connect("create", second_window)
         child.connect("notify::title",
                       lambda view, _spec: extra.set_title(f"{TITLE} - {view.get_title()}"))
@@ -170,7 +178,7 @@ def open_window(url, stop):
 
     wire_downloads(view.get_context(), tell)
     view.connect("create", second_window)
-    window.connect("key-press-event", fullscreen_key(window))
+    window.connect("key-press-event", window_keys(window, view))
     window.show_all()
     Gtk.main()
     return True
