@@ -71,8 +71,9 @@ functionnalities to developp :
 - DONE: the tool row carries nothing but Remember me and Exit, on the right
         (the /n command field went with it; the F keys underneath still do the exports)
 
-- DONE: the landing logo is sized to what is left of the window, so its foot is not
-        below the fold any more
+- DONE: the landing logo is whole: the picture itself was a crop with the L and the S
+        running off its edges, and it now carries the same art the lock screen does.
+        The page is the window too, so no screen hangs under the function keys
 
 - DONE: Inventory rolls down to its three cards and shows one at a time; delivered lines
         got the partly delivered shape: stat tiles, then a table that stays short
