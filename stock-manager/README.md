@@ -208,11 +208,14 @@ up to date by company and person, lines without a company name are skipped. The 
 for in the app folder, in `~/.local/share/stock-manager`, and in Documents, Desktop and Downloads;
 `STOCK_CONTACTS_FILE` points at it anywhere else. Reading it twice does not double the book.
 
+The book is not listed as a table: type a company or a person in the find box and that whole
+line appears, every field of it, with "to route" and "delete" beside it.
+
 ## Partly delivered
 
-A delivery note read with a backorder mark owes you something. The Inventory screen lists every
-such note: the articles still missing, their supplier, site and work item, with the day you were
-promised the rest. Past that day the date turns red; "arrived" takes the line off the list.
+A delivery note read with a backorder mark owes you something. The Inventory screen lists what
+is still missing in three columns: supplier, article, and the site with its work item.
+"arrived" takes a line off the list.
 
 ## Quotes
 
@@ -237,7 +240,8 @@ into the shortest run (nearest neighbour, then 2-opt) and says how many kilometr
 Three vans are set up: two Renault Partner (3.3 m3, 650 kg) and an Iveco Daily (19.6 m3,
 1800 kg). A stop carries its load and the hours it can be served; you drop it on a van and the
 card adds the load up against what that van takes, turns the bar red when it will not fit, and
-says so in words. Each van has its own route button, and its own distance.
+says so in words. "its route" draws that lorry's own run, in order, under its shape,
+with the distance by road.
 
 Addresses are placed on the map by **Nominatim** and measured by road by **OSRM**, both run by
 OpenStreetMap. No account, no key, no cost; one lookup a second. That call is the only thing the

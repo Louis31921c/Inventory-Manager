@@ -428,6 +428,12 @@ input.cell:focus { border-color: var(--accent); outline: none; }
 .van-load { display: grid; gap: 2px; grid-template-columns: 1fr; }
 .van-stops { font-size: 11px; list-style: none; margin: 0; padding: 0; }
 .van-stops li { color: var(--ink-soft); padding: 1px 0; }
+.van-route:not(:empty) { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
+.van-run { font-size: 11px; margin: 0; padding-left: 18px; }
+.van-run li { padding: 1px 0; }
+.contact-line { display: grid; gap: 2px 10px; grid-template-columns: 90px 1fr; margin: 4px 0 0; }
+.contact-line dt { color: var(--ink-soft); font-size: 11px; text-transform: uppercase; }
+.contact-line dd { margin: 0; }
 .meter { background: var(--panel); border: 1px solid var(--line-soft); display: block; height: 7px; }
 .meter .fill { background: var(--accent); display: block; height: 100%; }
 .meter.over .fill { background: var(--red); }
