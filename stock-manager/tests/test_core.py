@@ -2500,3 +2500,58 @@ def test_the_ddmrp_screen_is_named_on_the_menu_bar():
     # The menu that used to live inside the screen now hangs off that name.
     assert 'id="ddmrp-tools"' not in page
     assert 'id="tools-drop"' in bar
+
+
+def test_the_menu_bar_ends_with_system_and_help():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    bar = page[page.index('<nav class="menubar"'):page.index("</nav>")]
+    # The gap pushes the last two names to the far end, over Remember me and Exit.
+    assert bar.index('class="menubar-gap"') < bar.index('id="system-menu"') < bar.index('id="menu-help"')
+
+
+def test_the_tool_row_keeps_nothing_but_remember_me_and_exit():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    row = page[page.index('<div class="toolbar">'):page.index('<div class="screen-title">')]
+    for gone in ['id="command"', 'id="tool-refresh"', 'id="tool-find"',
+                 'id="tool-export"', 'id="tool-planner"']:
+        assert gone not in row
+    assert 'id="lock-form"' in row and 'id="quit-form"' in row
+
+
+def test_the_inventory_name_rolls_its_three_cards_down():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    bar = page[page.index('<nav class="menubar"'):page.index("</nav>")]
+    assert 'id="inv-drop"' in bar
+    screen = page[page.index('id="panel-inventory"'):page.index('id="panel-query"')]
+    for card in ["What the shelf holds", "Partly delivered", "Delivered lines"]:
+        assert f"<h2>{card}</h2>" in screen
+
+
+def test_the_purchase_orders_card_asks_three_things_and_no_search():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    card = page[page.index('id="stored-po"'):page.index('id="panel-quotes"')]
+    assert "<h2>Purchase orders</h2>" in card
+    for pick in ['id="o-site"', 'id="o-work"', 'id="o-state"']:
+        assert pick in card
+    assert 'id="o-search"' not in page
+    # The same orders sit behind the Purchase orders line, so the menu drops its double.
+    assert '"Stored PO"' not in page
+
+
+def test_the_tree_folds_and_carries_a_quote_and_a_dots_order():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    tree = page[page.index('<aside class="tree"'):page.index("</aside>")]
+    assert 'id="tree-toggle"' in tree and 'id="tree-list"' in tree
+    assert 'id="tree-new-quote"' in tree and 'id="tree-dots"' in tree
+    # The sites hang off the Purchase orders menu now, not off the tree.
+    assert 'id="tree-sites"' not in page

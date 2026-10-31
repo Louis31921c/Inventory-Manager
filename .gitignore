@@ -6,3 +6,6 @@ brag-output/*.wav
 *.pyc
 __pycache__/
 .venv/
+
+# Kate leaves a swap file beside whatever is open.
+.*.kate-swp

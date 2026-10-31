@@ -16,7 +16,10 @@
     <button type="button" id="menu-note" aria-haspopup="true" aria-expanded="false">Input</button>
     <div class="menu-drop" id="input-drop" role="menu"></div>
   </span>
-  <button type="button" id="menu-inventory">Inventory</button>
+  <span class="menu" id="inv-menu">
+    <button type="button" id="menu-inventory" aria-haspopup="true" aria-expanded="false">Inventory</button>
+    <div class="menu-drop" id="inv-drop" role="menu"></div>
+  </span>
   <span class="menu" id="orders-menu">
     <button type="button" id="menu-orders" aria-haspopup="true" aria-expanded="false">Purchase orders</button>
     <div class="menu-drop" id="orders-drop" role="menu"></div>
@@ -27,7 +30,8 @@
     <div class="menu-drop" id="tools-drop" role="menu"></div>
   </span>
   <button type="button" id="menu-goto">SQL</button>
-  <span class="menu" id="system-menu">
+  <span class="menubar-gap"></span>
+  <span class="menu right" id="system-menu">
     <button type="button" id="menu-system" aria-haspopup="true" aria-expanded="false">System</button>
     <div class="menu-drop" id="system-drop" role="menu"></div>
   </span>
@@ -35,14 +39,6 @@
 </nav>
 
 <div class="toolbar">
-  <input class="command" id="command" placeholder="/n transaction" autocomplete="off"
-         aria-label="Command field">
-  <button class="tool go" type="button" id="command-run" title="Enter (F2)"></button>
-  <span class="sep"></span>
-  <button class="tool" type="button" id="tool-refresh" title="Refresh (F1)">Refresh</button>
-  <button class="tool" type="button" id="tool-find" title="Find (F3)">Find</button>
-  <button class="tool" type="button" id="tool-export" title="Export CSV (F5)">Export</button>
-  <button class="tool" type="button" id="tool-planner" title="DDMRP buffers (F9)">DDMRP</button>
   <span class="toolbar-gap"></span>
   <form method="post" action="/lock" id="lock-form">
     <button class="tool" type="submit" title="Lock the session (F8)">Remember me</button>
@@ -56,7 +52,9 @@
 
 <div class="workspace">
 <aside class="tree" aria-label="Navigation">
-  <div class="tree-head">Stock Manager</div>
+  <button type="button" class="tree-head" id="tree-toggle" aria-expanded="true"
+          aria-controls="tree-list">Stock Manager</button>
+  <div id="tree-list">
   <button type="button" data-goes="home" aria-current="true">Home</button>
   <button type="button" data-goes="capture">Import data</button>
   <button type="button" data-goes="inventory">Inventory <span class="count" id="tree-lines"></span></button>
@@ -67,8 +65,9 @@
   <button type="button" data-goes="route">Route wrangler <span class="count" id="tree-route"></span></button>
   <button type="button" data-goes="settings">Settings</button>
   <button type="button" data-goes="ddmrp">DDMRP buffers</button>
-  <div class="tree-head">Sites</div>
-  <div id="tree-sites"></div>
+  <button type="button" id="tree-new-quote">New quote</button>
+  <button type="button" id="tree-dots">Dots order</button>
+  </div>
 </aside>
 
 <div class="work">
@@ -195,15 +194,12 @@
 
   <div class="card">
     <h2>Delivered lines</h2>
-    <div class="row">
-      <label class="field grow"><span>Search</span><input id="q-search" placeholder="article, reference, supplier..."></label>
-      <label class="field grow"><span>Project</span><select id="q-site"><option value="">All</option></select></label>
+    <div class="row" id="q-stats"></div>
+    <div class="row tight">
+      <label class="field grow"><span>search</span><input id="q-search" placeholder="article, reference, supplier..."></label>
+      <label class="field grow"><span>project</span><select id="q-site"><option value="">All</option></select></label>
     </div>
-    <div class="row">
-      <span class="muted" id="q-summary"></span>
-      <span class="grow"></span>
-   </div>
-    <div class="scroll-x"><table id="table-inventory"></table></div>
+    <div class="scroll-x short-box"><table id="table-inventory"></table></div>
   </div>
  </section>
 
@@ -280,15 +276,17 @@
   </div>
 
   <div class="card" id="stored-po">
-    <h2>Stored purchase orders</h2>
-    <div class="row">
-      <label class="field grow"><span>Search</span><input id="o-search" placeholder="article, reference, work item..."></label>
-      <label class="field grow"><span>Project</span><select id="o-site"><option value="">All</option></select></label>
+    <h2>Purchase orders</h2>
+    <div class="row tight">
+      <label class="field grow"><span>site</span><select id="o-site"><option value="">every site</option></select></label>
+      <label class="field grow"><span>work item</span><select id="o-work"><option value="">every work item</option></select></label>
+      <label class="field grow"><span>on the notes</span><select id="o-state">
+        <option value="">everything</option>
+        <option value="stock">in stock</option>
+        <option value="order">to order</option>
+      </select></label>
     </div>
-    <div class="row">
-      <span class="muted" id="o-summary"></span>
-      <span class="grow"></span>
-    </div>
+    <p class="muted" id="o-summary"></p>
     <div id="lists"></div>
   </div>
 </section>
@@ -815,6 +813,43 @@ function openTab(name) {
   }
 }
 
+const treeToggle = $("tree-toggle");
+treeToggle.addEventListener("click", () => {
+  const open = treeToggle.getAttribute("aria-expanded") === "true";
+  treeToggle.setAttribute("aria-expanded", String(!open));
+  $("tree-list").hidden = open;
+  try {
+    localStorage.setItem("tree-open", String(!open));
+  } catch {
+  }
+});
+try {
+  if (localStorage.getItem("tree-open") === "false") treeToggle.click();
+} catch {
+}
+
+// A card of another screen, named the way its menu names it.
+function openCard(menu, title) {
+  const spec = ALL_MENUS.find((one) => one.menu === menu);
+  const card = spec && menuCards(spec).find((one) => cardName(one) === title);
+  if (!card) return;
+  if (spec.go) spec.go(); else openTab(spec.tab);
+  showOnly(spec, card);
+}
+
+$("tree-new-quote").addEventListener("click", () => {
+  treePick = null;
+  openTab("quotes");
+  $("quote-supplier").focus();
+  say("Quotes · ask for a quote");
+});
+
+$("tree-dots").addEventListener("click", () => {
+  treePick = null;
+  openCard("tools-menu", "Dots orders");
+  say("DDMRP · dots orders");
+});
+
 for (const node of document.querySelectorAll(".tree button[data-goes]")) {
   node.addEventListener("click", () => {
     treePick = null;
@@ -834,46 +869,6 @@ function say(message, kind = "") {
   field.style.color = kind === "bad" ? "#b00020" : "";
 }
 
-const COMMANDS = {
-  home: "home", "/n": "capture", note: "capture", capture: "capture", inventory: "inventory",
-  stock: "inventory", sql: "query", query: "query", orders: "orders", po: "orders",
-  settings: "settings", ddmrp: "ddmrp", buffers: "ddmrp", planner: "ddmrp",
-  bills: "bills", bill: "bills", invoices: "bills", factures: "bills",
-  quotes: "quotes", quote: "quotes", devis: "quotes",
-  route: "route", routes: "route", wrangler: "route", tournee: "route",
-};
-
-function runCommand() {
-  const typed = $("command").value.trim().toLowerCase().replace(/^\/n\s*/, "");
-  if (!typed) return;
-  const where = COMMANDS[typed];
-  if (!where) {
-    say(`Transaction ${typed.toUpperCase()} does not exist`, "bad");
-    return;
-  }
-  $("command").value = "";
-  if (where === "ddmrp") {
-    openPredictions();
-    say("DDMRP buffers opened");
-    return;
-  }
-  openTab(where);
-  say(`Screen ${where.toUpperCase()}`);
-}
-
-$("command-run").addEventListener("click", runCommand);
-$("command").addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    runCommand();
-  }
-});
-
-$("tool-refresh").addEventListener("click", () => { say("Refreshing..."); refresh(); });
-$("tool-find").addEventListener("click", () => { openTab("inventory"); $("q-search").focus(); });
-$("tool-export").addEventListener("click", () => { window.location.href = "/export/inventory.csv"; });
-$("tool-planner").addEventListener("click", () => openPredictions());
-$("menu-inventory").addEventListener("click", () => openTab("inventory"));
 $("menu-route").addEventListener("click", () => { openTab("route"); loadRoute(); });
 $("menu-goto").addEventListener("click", () => openTab("query"));
 $("menu-help").addEventListener("click", () => { window.location.href = "/license"; });
@@ -1407,16 +1402,25 @@ function workItemCell(row) {
   return input;
 }
 
+function statTile(name, value) {
+  return el("span", { className: "stat" }, [
+    el("span", { className: "stat-name", textContent: name }),
+    el("strong", { textContent: value }),
+  ]);
+}
+
 function renderDeliveries() {
   const data = filtered();
   const units = data.reduce((sum, row) => sum + (row.quantity ?? 0), 0);
   const backorders = data.filter((row) => row.backorder).length;
-  $("q-summary").textContent = `${data.length} line(s) · ${showNum(units)} units`
-    + (backorders ? ` · ${backorders} on backorder` : "")
-    + (treePick
-        ? ` · ${treePick.site || "no site"}, `
-          + (treePick.work === null ? "all work items" : treePick.work || "no work item")
-        : "");
+  const tiles = [statTile("lines", showNum(data.length)),
+                 statTile("units", showNum(units))];
+  if (backorders) tiles.push(statTile("on backorder", showNum(backorders)));
+  if (treePick) {
+    tiles.push(statTile("picked", `${treePick.site || "no site"} · `
+      + (treePick.work === null ? "all work items" : treePick.work || "no work item")));
+  }
+  $("q-stats").replaceChildren(...tiles);
 
   renderTable($("table-inventory"), [
     {
@@ -1484,23 +1488,6 @@ function confirmButton(label, action) {
   return button;
 }
 
-function treeNode(label, className, chosen, action) {
-  const node = el("button", { type: "button", className, textContent: label });
-  node.setAttribute("aria-current", String(chosen));
-  node.addEventListener("click", () => {
-    action();
-    renderSiteTree();
-    openTab(treePick && treePick.lines === 0 ? "orders" : "inventory");
-    renderDeliveries();
-    renderOrders();
-    say(treePick
-      ? `${treePick.site || "no site"}`
-        + (treePick.work === null ? ", all work items" : `, ${treePick.work || "no work item"}`)
-      : "Ready");
-  });
-  return node;
-}
-
 function siteIndex() {
   const sites = new Map();
   const touch = (site, work, field, by = 1) => {
@@ -1520,37 +1507,7 @@ function siteIndex() {
 }
 
 function renderSiteTree() {
-  const sites = siteIndex();
-
-  const box = $("tree-sites");
-  box.replaceChildren();
-
-  const tally = (items) => [...items.values()].reduce(
-    (sum, item) => ({ lines: sum.lines + item.lines, orders: sum.orders + item.orders }),
-    { lines: 0, orders: 0 });
-  const label = (name, item) => `${name} (${item.lines})`
-    + (item.orders ? ` · ${item.orders} PO` : "");
-
-  for (const [site, items] of [...sites].sort((one, two) => one[0].localeCompare(two[0]))) {
-    const whole = tally(items);
-    const open = Boolean(treePick) && treePick.site === site;
-    const head = treeNode(label(site || "no site", whole), "node site", open, () => {
-      treePick = open ? null : { site, work: null, lines: whole.lines };
-    });
-    head.setAttribute("aria-expanded", String(open));
-    box.append(head);
-    if (!open) continue;
-
-    box.append(treeNode(label("All work items", whole), "node work", treePick.work === null,
-                        () => { treePick = { site, work: null, lines: whole.lines }; }));
-    for (const [work, item] of [...items].sort((one, two) => one[0].localeCompare(two[0]))) {
-      box.append(treeNode(label(work || "no work item", item), "node work",
-                          treePick.work === work,
-                          () => { treePick = { site, work, lines: item.lines }; }));
-    }
-  }
-
-  // The Purchase orders menu drops the same sites, so it is rebuilt with the tree.
+  // The sites hang under the Purchase orders menu now, nowhere else.
   for (const spec of LINK_MENUS) {
     if (spec.sites) renderLinkMenu(spec);
   }
@@ -1572,7 +1529,7 @@ for (const id of ["q-search", "q-site"]) {
   $(id).addEventListener("input", renderDeliveries);
 }
 
-for (const id of ["o-search", "o-site"]) {
+for (const id of ["o-site", "o-work", "o-state"]) {
   $(id).addEventListener("input", renderOrders);
 }
 
@@ -1651,6 +1608,8 @@ function dropdown(select) {
 
 const siteMenu = dropdown($("q-site"));
 const orderMenu = dropdown($("o-site"));
+const workMenu = dropdown($("o-work"));
+const stateMenu = dropdown($("o-state"));
 
 let asking = null;
 $("cancel-ask").addEventListener("click", () => asking?.abort());
@@ -1873,11 +1832,16 @@ $("list-save").addEventListener("click", async () => {
   }
 });
 
+function inStock(line) {
+  const wanted = line.quantity ?? 0;
+  return wanted > 0 && (line.have ?? 0) >= wanted;
+}
+
 function stockWord(line) {
   // Nothing to press: the delivery notes say what is standing there.
   const have = line.have ?? 0;
   const wanted = line.quantity ?? 0;
-  const enough = wanted > 0 && have >= wanted;
+  const enough = inStock(line);
   const word = el("span", { className: `stock-word ${enough ? "ok" : "short"}`,
                             textContent: enough ? "in stock" : "to order" });
   let said;
@@ -1890,39 +1854,67 @@ function stockWord(line) {
 }
 
 
-function refreshOrderSites() {
-  const select = $("o-site");
-  const current = select.value;
+function refreshOrderPicks() {
+  const site = $("o-site");
+  const keptSite = site.value;
   const sites = [...new Set(lists.map((sheet) => sheet.site).filter(Boolean))].sort();
-  select.replaceChildren(
-    el("option", { value: "", textContent: "All" }),
-    ...sites.map((site) => el("option", { value: site, textContent: site })),
+  site.replaceChildren(
+    el("option", { value: "", textContent: "every site" }),
+    ...sites.map((name) => el("option", { value: name, textContent: name })),
   );
-  select.value = sites.includes(current) ? current : "";
+  site.value = sites.includes(keptSite) ? keptSite : "";
+
+  // The work items are the ones of the site that is picked, not of every site.
+  const work = $("o-work");
+  const keptWork = work.value;
+  const items = [...new Set(lists
+    .filter((sheet) => !site.value || (sheet.site ?? "") === site.value)
+    .map((sheet) => sheet.work_item).filter(Boolean))].sort();
+  work.replaceChildren(
+    el("option", { value: "", textContent: "every work item" }),
+    ...items.map((name) => el("option", { value: name, textContent: name })),
+  );
+  work.value = items.includes(keptWork) ? keptWork : "";
+
   orderMenu.refresh();
+  workMenu.refresh();
+  stateMenu.refresh();
+}
+
+function orderPicked() {
+  return Boolean(treePick) || Boolean($("o-site").value) || Boolean($("o-state").value);
 }
 
 function filteredOrders() {
-  const search = upper($("o-search").value);
   const site = $("o-site").value;
+  const work = $("o-work").value;
+  const state = $("o-state").value;
 
   return lists
     .filter((sheet) => !treePick || (sheet.site ?? "") === treePick.site)
     .filter((sheet) => !treePick || treePick.work === null
                        || (sheet.work_item ?? "") === treePick.work)
     .filter((sheet) => !site || (sheet.site ?? "") === site)
+    .filter((sheet) => !work || (sheet.work_item ?? "") === work)
     .map((sheet) => {
-      if (!search) return sheet;
-      const lines = (sheet.lines ?? []).filter((line) =>
-        upper(`${line.article} ${line.reference ?? ""} ${line.designation ?? ""} `
-              + `${sheet.work_item ?? ""} ${sheet.site ?? ""}`).includes(search));
+      if (!state) return sheet;
+      const lines = (sheet.lines ?? []).filter(
+        (line) => inStock(line) === (state === "stock"));
       return { ...sheet, lines };
     })
     .filter((sheet) => (sheet.lines ?? []).length);
 }
 
 function renderOrders() {
-  refreshOrderSites();
+  refreshOrderPicks();
+  // A year of orders at once says nothing: a site, a work item or a state says it.
+  if (!orderPicked()) {
+    $("o-summary").textContent =
+      "Pick a site, or ask for everything in stock or to order.";
+    $("lists").replaceChildren();
+    return;
+  }
+
   const sheets = filteredOrders();
   const lineCount = sheets.reduce((sum, sheet) => sum + (sheet.lines ?? []).length, 0);
   $("o-summary").textContent =
@@ -1931,7 +1923,7 @@ function renderOrders() {
   if (!sheets.length) {
     $("lists").replaceChildren(el("p", {
       className: "muted",
-      textContent: lists.length ? "Nothing matches." : "No purchase order stored.",
+      textContent: lists.length ? "Nothing matches these three." : "No purchase order stored.",
     }));
     return;
   }
@@ -3674,6 +3666,9 @@ const SCREEN_MENUS = [
   { menu: "system-menu", drop: "system-drop", button: "menu-system",
     panel: "panel-settings", tab: "settings", key: "settings-card", title: "System",
     skip: [] },
+  { menu: "inv-menu", drop: "inv-drop", button: "menu-inventory",
+    panel: "panel-inventory", tab: "inventory", key: "inventory-card", title: "Inventory",
+    skip: [] },
   { menu: "input-menu", drop: "input-drop", button: "menu-note",
     panel: "panel-capture", tab: "capture", key: "capture-card", title: "Input",
     skip: ["review", "mapping"] },
@@ -3688,8 +3683,8 @@ const LINK_MENUS = [
   { menu: "orders-menu", drop: "orders-drop", button: "menu-orders", title: "Purchase orders",
     links: [["Purchase orders", "orders"], ["Quotes", "quotes"], ["Bills", "bills"]],
     // Each of these gets a line of its own and opens that card by itself.
-    cards: [["Scan a purchase order", "order-scan"], ["Contacts", "contacts-card"],
-            ["Stored PO", "stored-po"]],
+    // No Stored PO line: it holds the same orders the Purchase orders line walks to.
+    cards: [["Scan a purchase order", "order-scan"], ["Contacts", "contacts-card"]],
     sites: true, holdStill: true },
 ];
 

@@ -223,7 +223,7 @@ work than about next month.
 
 ## Predictions
 
-`DDMRP`, at the right of the tabs (or `F9`), opens a window of its own.
+`DDMRP`, on the menu bar (or `F9`), opens a window of its own.
 
 | Cell | What it gives you |
 |---|---|

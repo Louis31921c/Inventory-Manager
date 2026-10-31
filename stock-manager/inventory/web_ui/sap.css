@@ -84,6 +84,8 @@ a { color: var(--accent); }
   padding: 2px 8px;
 }
 .menubar button:hover { background: var(--accent-soft); border-color: var(--line-soft); }
+/* System and Help sit at the far end, over Remember me and Exit. */
+.menubar .menubar-gap { flex: 1 1 auto; }
 
 .toolbar {
   align-items: center;
@@ -94,22 +96,7 @@ a { color: var(--accent); }
   gap: 4px;
   padding: 3px 6px;
 }
-.toolbar .command {
-  background: #fff;
-  border: 1px solid #7f9db9;
-  font-family: var(--font);
-  font-size: 12px;
-  height: 22px;
-  padding: 1px 4px;
-  width: 190px;
-}
 .toolbar .toolbar-gap { flex: 1 1 auto; }
-.toolbar .sep {
-  background: var(--line-soft);
-  height: 18px;
-  margin: 0 3px;
-  width: 1px;
-}
 
 button.tool {
   background: linear-gradient(180deg, var(--button-from), var(--button-to));
@@ -149,12 +136,16 @@ button.tool.stop::before { color: var(--red); content: "\2715 "; }
   overflow: auto;
   padding: 4px 0;
 }
-.tree .tree-head {
+/* The head is the fold: click it and the screens below roll up. */
+.tree button.tree-head {
   background: var(--accent-soft);
+  border: 0;
   border-bottom: 1px solid var(--line-soft);
   font-weight: 700;
-  padding: 3px 8px;
+  padding: 3px 8px 3px 20px;
 }
+.tree button.tree-head::before { content: "\25BE"; left: 7px; }
+.tree button.tree-head[aria-expanded="false"]::before { content: "\25B8"; }
 .tree button {
   background: none;
   border: 1px solid transparent;
@@ -172,11 +163,6 @@ button.tool.stop::before { color: var(--red); content: "\2715 "; }
 .tree button:hover { background: var(--row-hover); }
 .tree button[aria-current="true"] { background: var(--row-pick); font-weight: 700; }
 .tree .count { color: var(--ink-soft); font-weight: 400; }
-.tree .node.site { font-weight: 700; }
-.tree .node.site[aria-expanded="true"]::before { content: "\1F5C1"; }
-.tree .node.work { padding-left: 38px; }
-.tree .node.work::before { content: "\2022"; left: 26px; }
-.tree #tree-sites { max-height: 42vh; overflow-y: auto; }
 
 .work { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 8px; }
 
@@ -220,17 +206,19 @@ section.panel {
 
 /* ---- landing screen ------------------------------------------------ */
 
+/* The logo has to sit inside what is left of the window, or its foot is cut off
+   below the fold: the chrome over and under the workspace is about 150px. */
 .home {
   align-items: center;
   display: flex;
   justify-content: center;
-  min-height: calc(100vh - 230px);
+  min-height: calc(100vh - 190px);
 }
 .home-logo {
   background: url("/landing.png") center / contain no-repeat;
-  height: min(520px, 62vh);
+  height: min(440px, calc(100vh - 210px));
   opacity: .65;
-  width: min(720px, 86%);
+  width: min(680px, 86%);
 }
 
 /* ---- group boxes --------------------------------------------------- */
@@ -372,6 +360,7 @@ input.cell:focus { border-color: var(--accent); outline: none; }
 /* ---- a menu that drops from the menu bar --------------------------- */
 
 .menubar .menu { position: relative; }
+.menubar .menu.right > .menu-drop { left: auto; right: 0; }
 .menu-drop {
   background: var(--paper);
   border: 1px solid #8d9196;
