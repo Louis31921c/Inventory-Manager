@@ -388,36 +388,6 @@
   </div>
 
   <div class="card">
-    <h2>Cost/ supplier</h2>
-    <div class="row">
-      <label class="field narrow"><span>month</span>
-        <select id="bill-month"><option value="">Every month</option></select>
-      </label>
-      <span class="grow"></span>
-    </div>
-    <div class="scroll-x" id="bill-suppliers"></div>
-  </div>
-
-  <div class="card">
-    <h2>Stored bills</h2>
-    <div class="row">
-      <label class="field grow"><span>Search</span>
-        <input id="bill-search" placeholder="supplier, number, site..."></label>
-      <label class="field narrow"><span>State</span>
-        <select id="bill-state">
-          <option value="">All</option>
-          <option value="to pay">to pay</option>
-          <option value="paid">paid</option>
-          <option value="disputed">disputed</option>
-        </select>
-      </label>
-    </div>
-    <div class="row"><span class="muted" id="bill-summary"></span><span class="grow"></span></div>
-    <div class="scroll-x"><table id="table-bills"></table></div>
-    <div id="bills-note"></div>
-  </div>
-
-  <div class="card">
     <h2>Read a bill</h2>
     <label class="file-drop" for="bill-photo">
       <input type="file" id="bill-photo" accept="image/jpeg,image/png,image/webp,application/pdf">
@@ -2938,7 +2908,6 @@ $("save-draft").addEventListener("click", async () => {
 
 // ---- Bills: what the deliveries end up costing -----------------------------
 
-let billRows = [];
 let billMonths = [];
 let billDraft = null;
 
@@ -3018,85 +2987,6 @@ $("bill-save").addEventListener("click", async () => {
 
 $("bill-discard").addEventListener("click", closeBillReview);
 
-function billsShown() {
-  const search = upper($("bill-search").value);
-  const state = $("bill-state").value;
-  return billRows.filter((bill) => {
-    if (state && bill.state !== state) return false;
-    if (!search) return true;
-    const haystack = upper(`${bill.supplier} ${bill.number ?? ""} ${bill.site ?? ""} `
-                           + `${bill.order_ref ?? ""}`);
-    return haystack.includes(search);
-  });
-}
-
-async function setBillState(bill, state) {
-  try {
-    await api(`/api/bills/${bill.bill_id}`, patchJson({ state }));
-    await loadBills();
-  } catch (e) {
-    notice($("bills-note"), "bad", e.message);
-  }
-}
-
-function renderBills() {
-  const shown = billsShown();
-  const owed = shown.filter((bill) => bill.state === "to pay")
-                    .reduce((sum, bill) => sum + (bill.total ?? 0), 0);
-  const total = shown.reduce((sum, bill) => sum + (bill.total ?? 0), 0);
-  $("bill-summary").textContent =
-    `${shown.length} bill(s) · ${money(total)} in all · ${money(owed)} still to pay`;
-
-  renderTable($("table-bills"), [
-    { label: "Supplier", cell: (bill) => {
-        const box = el("span", {}, [el("strong", { textContent: bill.supplier })]);
-        const under = [bill.number, bill.site, bill.order_ref].filter(Boolean).join(" · ");
-        if (under) box.append(el("div", { className: "desig", textContent: under }));
-        return box;
-      } },
-    { label: "Bill date", cell: (bill) => bill.bill_date ?? "" },
-    { label: "Due", cell: (bill) => {
-        if (!bill.due_date) return "";
-        const late = bill.state === "to pay" && bill.due_date < new Date().toISOString().slice(0, 10);
-        if (!late) return bill.due_date;
-        return el("span", {}, [bill.due_date + " ",
-                               el("span", { className: "pill red", textContent: "late" })]);
-      } },
-    { label: "Net", numeric: true, cell: (bill) => showNum(bill.net) },
-    { label: "Tax", numeric: true, cell: (bill) => showNum(bill.tax) },
-    { label: "Total", numeric: true, cell: (bill) => money(bill.total, bill.currency) },
-    { label: "State", cell: (bill) => {
-        const box = el("select", { className: "cell", "aria-label": `State of ${bill.supplier}` });
-        for (const state of ["to pay", "paid", "disputed"]) {
-          box.append(el("option", { value: state, textContent: state,
-                                    selected: bill.state === state }));
-        }
-        box.addEventListener("change", () => setBillState(bill, box.value));
-        return box;
-      } },
-    { label: "From", cell: (bill) => el("span", { className: "muted",
-        textContent: bill.source === "mail" ? (bill.sender ?? "mail") : bill.source }) },
-    { label: "", cell: (bill) => {
-        const row = el("span", { className: "row tight" });
-        if (bill.photo) {
-          row.append(el("a", { className: "mini", href: `/api/bill-photo/${bill.bill_id}`,
-                               target: "_blank", textContent: "scan" }));
-        }
-        const gone = el("button", { className: "mini", textContent: "remove" });
-        gone.addEventListener("click", async () => {
-          try {
-            await api(`/api/bills/${bill.bill_id}`, { method: "DELETE" });
-            await loadBills();
-          } catch (e) {
-            notice($("bills-note"), "bad", e.message);
-          }
-        });
-        row.append(gone);
-        return row;
-      } },
-  ], shown, "No bill stored yet.");
-}
-
 function renderBillMonths(summary) {
   $("bill-totals").replaceChildren(...[
     ["This month", money(summary.this_month?.total ?? 0)],
@@ -3118,39 +3008,19 @@ function renderBillMonths(summary) {
   ], billMonths, "No bill stored yet.");
 }
 
-function renderBillSuppliers(suppliers) {
-  $("bill-suppliers").replaceChildren(suppliers.length
-    ? barList(suppliers, (row) => row.supplier, (row) => row.total ?? 0)
-    : el("p", { className: "muted", textContent: "No bill stored yet." }));
-}
-
 async function loadBills() {
-  const month = $("bill-month").value;
   let data;
   try {
-    data = await api(`/api/bills${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+    data = await api("/api/bills");
   } catch (e) {
-    notice($("bills-note"), "bad", e.message);
+    notice($("bill-status"), "bad", e.message);
     return;
   }
-  billRows = data.bills ?? [];
   billMonths = data.months ?? [];
-
-  const picker = $("bill-month");
-  const chosen = picker.value;
-  picker.replaceChildren(el("option", { value: "", textContent: "Every month" }),
-    ...billMonths.map((row) => el("option", { value: row.month, textContent: row.month })));
-  picker.value = billMonths.some((row) => row.month === chosen) ? chosen : "";
-
-  $("tree-bills").textContent = `(${billRows.length})`;
-  renderBillMonths(data.summary ?? {});
-  renderBillSuppliers(data.suppliers ?? []);
-  renderBills();
+  const summary = data.summary ?? {};
+  $("tree-bills").textContent = `(${summary.bills ?? 0})`;
+  renderBillMonths(summary);
 }
-
-$("bill-search").addEventListener("input", renderBills);
-$("bill-state").addEventListener("change", renderBills);
-$("bill-month").addEventListener("change", () => loadBills());
 
 pickPhoto($("bill-photo"), $("bill-name"), "thumb-bill", $("bill-read"),
           (file) => { billFile = file; });

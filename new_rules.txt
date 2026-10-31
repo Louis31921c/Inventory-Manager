@@ -8,7 +8,8 @@ functionnalities to developp :
 
 - DONE: connecting to outlook, gmail, proton, yahoo mail, apple email
 
-- DONE: a new section : bills, tracked from the mailbox, with a supplier cost per month indicator
+- DONE: a new section : bills, tracked from the mailbox, with a cost per month indicator
+        (the cost per supplier and the list of stored bills were taken off again)
 
 - DONE: a rolling menu for purchase order = hover gives PO, quotes and bills
 

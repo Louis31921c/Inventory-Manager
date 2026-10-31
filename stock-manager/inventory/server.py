@@ -745,11 +745,9 @@ class BillBody(BaseModel):
 
 
 @app.get("/api/bills")
-def read_bills(month: str | None = None):
-    return {"bills": bills.recent(config.db_path),
-            "months": bills.by_month(config.db_path),
-            "suppliers": bills.per_supplier(config.db_path, month),
-            "month": month,
+def read_bills():
+    """What the months cost. The bills themselves are not listed on the screen."""
+    return {"months": bills.by_month(config.db_path),
             "summary": bills.summary(config.db_path)}
 
 

@@ -1773,9 +1773,6 @@ def test_bill_shaping_fills_in_what_it_can(db_path):
                                      "bill_date": "2026-09-02", "total": "480"}))
     months = bills.by_month(db_path)
     assert [month["month"] for month in months] == ["2026-10", "2026-09"]
-    assert bills.per_supplier(db_path, "2026-09") == [
-        {"supplier": "METALECO", "bills": 1, "total": 480.0, "owed": 480.0}]
-
     summary = bills.summary(db_path)
     assert summary["bills"] == 2 and summary["owed"] == 1961.47 and summary["suppliers"] == 2
 
@@ -1808,7 +1805,7 @@ def test_bill_routes(tmp_path, monkeypatch):
                                      "again": "correct horse"}, headers=mine)
 
         empty = client.get("/api/bills").json()
-        assert empty["bills"] == [] and empty["summary"]["bills"] == 0
+        assert empty["months"] == [] and empty["summary"]["bills"] == 0
 
         bill = {"supplier": "foussier", "number": "FA-1", "bill_date": "2026-10-05",
                 "due_date": "2026-10-01", "net": "100", "tax": "20"}
@@ -1824,7 +1821,7 @@ def test_bill_routes(tmp_path, monkeypatch):
         listed = client.get("/api/bills").json()
         assert listed["summary"]["owed"] == 120.0 and listed["summary"]["late"] == 120.0
         assert listed["months"][0]["month"] == "2026-10"
-        assert listed["suppliers"][0]["supplier"] == "FOUSSIER"
+        assert "suppliers" not in listed and "bills" not in listed
 
         bill_id = saved["bill_id"]
         changed = client.patch(f"/api/bills/{bill_id}", headers=mine,
@@ -1851,10 +1848,12 @@ def test_bill_routes(tmp_path, monkeypatch):
 
         assert client.delete(f"/api/bills/{bill_id}", headers=mine).status_code == 200
         assert client.delete(f"/api/bills/{bill_id}", headers=mine).status_code == 404
-        assert client.get("/api/bills").json()["bills"] == []
+        assert client.get("/api/bills").json()["summary"]["bills"] == 0
 
+        # The months are what the screen shows; the bills themselves are not listed.
         page = client.get("/").text
-        assert 'id="table-bills"' in page and 'id="bill-month"' in page
+        assert 'id="table-bill-months"' in page
+        assert 'id="table-bills"' not in page and 'id="bill-suppliers"' not in page
 
 
 def test_mail_provider_presets_fill_the_server_in(monkeypatch, tmp_path):

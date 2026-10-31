@@ -160,21 +160,6 @@ def by_month(db_path, months=12):
             for month, count, total, net, owed in rows]
 
 
-def per_supplier(db_path, month=None, limit=40):
-    where = "WHERE month = ?" if month else ""
-    args = [month, limit] if month else [limit]
-    rows = db.read(db_path, f"""
-            SELECT supplier, count(*), sum(coalesce(total, 0)),
-                   sum(CASE WHEN state = 'to pay' THEN coalesce(total, 0) ELSE 0 END)
-            FROM bills {where}
-            GROUP BY supplier
-            ORDER BY sum(coalesce(total, 0)) DESC
-            LIMIT ?
-            """, args)
-    return [{"supplier": supplier, "bills": count, "total": total, "owed": owed}
-            for supplier, count, total, owed in rows]
-
-
 def summary(db_path):
     row = db.read(db_path, """
             SELECT count(*), sum(coalesce(total, 0)),

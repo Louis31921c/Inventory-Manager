@@ -260,10 +260,11 @@ so. Tick a stop off when it is delivered; clear the list at the end of the day.
 
 ## Bills
 
-Every supplier bill lands on its own screen: what each month comes to, what is still to pay, what
-is late, and the spend per supplier. A bill is read the same way as a delivery note (photo, PDF or
-a scan that arrived by mail), checked by a person, then stored. Downloads: CSV, XLSX and a
-PostgreSQL script, keyed on `bill_id`.
+The Bills screen is a month at a time: what each month came to, what is still to pay, what is
+late. Neither the bills themselves nor the spend per supplier is listed on it. A bill is read the
+same way as a delivery note (photo, PDF or a scan that arrived by mail), checked by a person, then
+stored, and the months are counted from what is stored. Downloads: CSV, XLSX and a PostgreSQL
+script, keyed on `bill_id`.
 
 ## Mailbox
 
