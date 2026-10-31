@@ -252,6 +252,43 @@ buys, supplier, and one line saying why. Check it, change any quantity, then
 
 Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
 
+## The purchase gate
+
+A basket is free: anyone in the chat can fill one, and `/basket` now takes the price off the
+shop page with it — `12 vis th 6x25 @ 0.11, 4 rondelle m8`. Buying is not free. `/purchase`
+reads the basket first, and five things hold it back for a person:
+
+| Why | What it means |
+|---|---|
+| first article | this article has never been bought before |
+| new supplier | the article is known, this supplier is not |
+| over the ceiling | the basket comes to more than 500 EUR |
+| dear line | a line costs more than twice what that article usually costs |
+| no price | a line carries no price, so neither money rule can be checked |
+
+A held basket goes through two checks, and they are two different questions.
+
+**The verification agent** — Claude, reading the names — answers *is this the article we
+already know under another wording?* Dots writes `CHEVILLE SPIT FIX 10x100`, the shelf knows
+`343546 - CHEVILLE SPIT FIX 3 10X100`. It answers same, new or unsure, with its reason, and it
+approves nothing. When it cannot be reached, or is not sure, the gate stays shut.
+
+**You** answer the other question — *do we want this, at this price, from this supplier?* — on
+the Waiting for you card, which is on the landing page and only appears when something is
+waiting. The agent's answer is evidence next to the basket, not a recommendation to accept.
+
+An approval never expires; there is a Cancel instead. What it does carry is the price it was
+given at, so an order placed long after a yes, at a price that has moved more than 10%, is
+asked for again rather than going through at a number nobody agreed to.
+
+Every turn of the gate is written to a sealed log: each entry carries the hash of the one
+before it, so a line edited afterwards breaks the chain from there on and the card says at
+which entry. Nothing is ever deleted — a cancel is an entry of its own.
+
+What an article usually costs is the middle of its recent prices, kept as each order goes
+through. Early on there is no history and the price rules simply do not fire; the first
+purchase gate covers that stretch on its own.
+
 ## Where things are stored
 
 | What | Path |

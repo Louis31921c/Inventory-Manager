@@ -226,6 +226,11 @@ class ClaudeCodeBackend:
                                      cwd=tmp, system=prompt_text("sql.md"))
         return result.get("sql"), result.get("note")
 
+    async def answer(self, prompt, schema, system=None):
+        """One question, one structured answer, no files to read."""
+        with tempfile.TemporaryDirectory(prefix="ask-") as tmp:
+            return await self._run(prompt, schema, cwd=tmp, system=system)
+
     async def _read_file(self, data, media_type, stem, schema, what, instructions):
         with tempfile.TemporaryDirectory(prefix=f"{stem}-") as tmp:
             name = stem + self.SUFFIXES.get(media_type, ".jpg")

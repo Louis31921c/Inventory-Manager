@@ -1895,9 +1895,10 @@ def test_chat_basket_becomes_a_purchase_order(db_path):
     from inventory import baskets, discord_bot
 
     items = baskets.parse_items("12 vis th 6x25 inox\n3x rondelle m8; ecrou borgne d6 x 100")
-    assert items == [{"article": "VIS TH 6X25 INOX", "quantity": 12.0},
-                     {"article": "RONDELLE M8", "quantity": 3.0},
-                     {"article": "ECROU BORGNE D6", "quantity": 100.0}]
+    # A line carries a price now, empty when the shop page gave none.
+    assert items == [{"article": "VIS TH 6X25 INOX", "quantity": 12.0, "unit_price": None},
+                     {"article": "RONDELLE M8", "quantity": 3.0, "unit_price": None},
+                     {"article": "ECROU BORGNE D6", "quantity": 100.0, "unit_price": None}]
     assert baskets.parse_items("   ") == []
     assert baskets.parse_items("silicone noir")[0]["quantity"] == 1.0
 
@@ -2555,3 +2556,196 @@ def test_the_tree_folds_and_carries_a_quote_and_a_dots_order():
     assert 'id="tree-new-quote"' in tree and 'id="tree-dots"' in tree
     # The sites hang off the Purchase orders menu now, not off the tree.
     assert 'id="tree-sites"' not in page
+
+
+# ---- the gate on what the bot buys ----------------------------------------
+
+def a_basket(**kw):
+    base = dict(article="CHEVILLE SPIT FIX", quantity=100, unit_price=0.62,
+                supplier="FOUSSIER")
+    base.update(kw)
+    return base
+
+
+def test_a_price_is_remembered_and_the_usual_one_is_the_middle(db_path):
+    from inventory import prices
+
+    for price in (0.60, 0.62, 9.90):
+        prices.remember(db_path, "CHEVILLE SPIT FIX", price, supplier="FOUSSIER",
+                        source="order")
+    # The middle, not the mean: one fat-fingered price must not move the usual one.
+    assert prices.usual(db_path, "CHEVILLE SPIT FIX") == 0.62
+    assert prices.usual(db_path, "NOTHING HERE") is None
+    assert prices.remember(db_path, "BAD", None) is False
+    assert prices.remember(db_path, "BAD", -3) is False
+
+
+def test_the_first_time_an_article_is_bought_the_gate_holds_it(db_path):
+    from inventory import gate
+
+    reading = gate.look(db_path, [a_basket()])
+    assert reading["held"]
+    assert "first-article" in reading["reasons"]
+    assert reading["total"] == 62.0
+
+
+def test_an_article_the_notes_already_know_goes_through(db_path):
+    from inventory import gate, prices
+
+    db.save_note(db_path, make_note(lines=[Line(article="CEMENT 35KG", quantity=40)]),
+                 "a", "a.jpg")
+    prices.remember(db_path, "CEMENT 35KG", 7.0, supplier="ACME SUPPLIES", source="order")
+
+    reading = gate.look(db_path, [a_basket(article="CEMENT 35KG", quantity=2,
+                                           unit_price=7.0, supplier="ACME SUPPLIES")])
+    assert reading["reasons"] == []
+    assert reading["held"] is False
+
+
+def test_a_new_supplier_for_a_known_article_holds_it(db_path):
+    from inventory import gate, prices
+
+    db.save_note(db_path, make_note(lines=[Line(article="CEMENT 35KG", quantity=40)]),
+                 "a", "a.jpg")
+    prices.remember(db_path, "CEMENT 35KG", 7.0, supplier="ACME SUPPLIES", source="order")
+
+    reading = gate.look(db_path, [a_basket(article="CEMENT 35KG", quantity=1,
+                                           unit_price=7.0, supplier="SOMEONE ELSE")])
+    assert reading["reasons"] == ["new-supplier"]
+
+
+def test_a_dear_line_and_a_basket_over_the_ceiling_hold_it(db_path):
+    from inventory import gate, prices
+
+    db.save_note(db_path, make_note(lines=[Line(article="CEMENT 35KG", quantity=40)]),
+                 "a", "a.jpg")
+    for _ in range(3):
+        prices.remember(db_path, "CEMENT 35KG", 7.0, supplier="ACME SUPPLIES", source="order")
+
+    dear = gate.look(db_path, [a_basket(article="CEMENT 35KG", quantity=1, unit_price=20.0,
+                                        supplier="ACME SUPPLIES")])
+    assert "dear-line" in dear["reasons"]
+
+    plenty = gate.look(db_path, [a_basket(article="CEMENT 35KG", quantity=100, unit_price=7.0,
+                                          supplier="ACME SUPPLIES")])
+    assert "over-ceiling" in plenty["reasons"]
+    assert plenty["total"] == 700.0
+
+
+def test_a_line_with_no_price_cannot_be_checked_so_it_is_held(db_path):
+    from inventory import gate
+
+    reading = gate.look(db_path, [a_basket(unit_price=None)])
+    assert "no-price" in reading["reasons"]
+    assert reading["unpriced"] == 1
+
+
+def test_the_gate_log_is_sealed_and_an_edit_breaks_it(db_path):
+    from inventory import gate
+
+    reading = gate.look(db_path, [a_basket()])
+    request_id = gate.ask(db_path, reading, channel="42", shop="foussier.fr", asked_by="ALEX")
+    gate.record_check(db_path, request_id, "same", "the agent knows this one")
+    gate.approve(db_path, request_id, "ALEX")
+
+    whole, broken, entries = gate.verify_chain(db_path)
+    assert whole and broken is None and entries == 3
+
+    db.write(db_path, "UPDATE gate_log SET body = ? WHERE entry_id = 2", ('{"verdict":"new"}',))
+    whole, broken, entries = gate.verify_chain(db_path)
+    assert whole is False and broken == 2
+
+
+def test_only_an_approved_request_may_be_ordered(db_path):
+    from inventory import gate
+
+    reading = gate.look(db_path, [a_basket()])
+    request_id = gate.ask(db_path, reading, asked_by="ALEX")
+    allowed, why = gate.may_order(db_path, request_id)
+    assert allowed is False and "not approved" in why
+
+    gate.approve(db_path, request_id, "ALEX")
+    assert gate.may_order(db_path, request_id)[0] is True
+
+    # A price that has moved since the yes has to be asked again, however old the yes is.
+    moved = [a_basket(unit_price=0.90)]
+    allowed, why = gate.may_order(db_path, request_id, moved)
+    assert allowed is False and "approved again" in why
+
+
+def test_a_cancelled_request_cannot_be_ordered_and_leaves_its_own_entry(db_path):
+    from inventory import gate
+
+    request_id = gate.ask(db_path, gate.look(db_path, [a_basket()]), asked_by="ALEX")
+    gate.approve(db_path, request_id, "ALEX")
+    gate.cancel(db_path, request_id, "ALEX", "changed my mind")
+
+    assert gate.one(db_path, request_id)["state"] == "cancelled"
+    assert gate.may_order(db_path, request_id)[0] is False
+    events = [entry["event"] for entry in gate.chain(db_path, request_id)]
+    assert events == ["requested", "approved", "cancelled"]
+    with pytest.raises(ValueError):
+        gate.mark_ordered(db_path, request_id, "ALEX")
+
+
+def test_an_ordered_request_feeds_the_price_history(db_path):
+    from inventory import gate, prices
+
+    request_id = gate.ask(db_path, gate.look(db_path, [a_basket()]), asked_by="ALEX")
+    gate.approve(db_path, request_id, "ALEX")
+    gate.mark_ordered(db_path, request_id, "ALEX", reference="FOUSSIER 7781")
+
+    assert gate.one(db_path, request_id)["state"] == "ordered"
+    assert prices.usual(db_path, "CHEVILLE SPIT FIX") == 0.62
+    # And the next basket for the same article no longer counts as a first purchase.
+    assert "first-article" not in gate.look(db_path, [a_basket()])["reasons"]
+
+
+def test_the_verification_agent_never_opens_the_gate_when_it_fails(db_path, monkeypatch):
+    from inventory import llm, verify
+
+    async def boom(self, prompt, schema, system=None):
+        raise llm.ExtractionError("no claude here")
+
+    monkeypatch.setattr(llm.ClaudeCodeBackend, "answer", boom)
+    answer = asyncio.run(verify.check(db_path, [a_basket()]))
+    assert answer["verdict"] == "unsure"
+    assert "could not answer" in answer["note"]
+
+
+def test_the_agent_takes_the_most_doubtful_line_as_its_answer():
+    from inventory import verify
+
+    assert verify.overall([{"verdict": "same"}, {"verdict": "same"}]) == "same"
+    assert verify.overall([{"verdict": "same"}, {"verdict": "new"}]) == "new"
+    assert verify.overall([{"verdict": "new"}, {"verdict": "unsure"}]) == "unsure"
+    assert verify.overall([]) == "unsure"
+
+
+def test_the_shortlist_puts_the_nearest_known_name_first():
+    from inventory import verify
+
+    known = ["343546 - CHEVILLE SPIT FIX 3 10X95/36-26MT BTE50", "RONDELLE M8", "VIS TH 6X25"]
+    near = verify.shortlist("CHEVILLE SPIT FIX 10X95", known)
+    assert near and near[0].endswith("BTE50")
+    assert verify.shortlist("NOTHING LIKE IT AT ALL", ["RONDELLE M8"]) == []
+
+
+def test_a_basket_line_can_carry_the_price_off_the_shop_page():
+    from inventory import baskets
+
+    read = baskets.parse_items("12 vis th 6x25 @ 0.11, 4 rondelle m8, 3 cheville @ 0,62 EUR")
+    assert [(row["article"], row["quantity"], row["unit_price"]) for row in read] == [
+        ("VIS TH 6X25", 12.0, 0.11),
+        ("RONDELLE M8", 4.0, None),
+        ("CHEVILLE", 3.0, 0.62),
+    ]
+
+
+def test_the_landing_page_carries_the_approval_window():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    home = page[page.index('id="panel-home"'):page.index('id="panel-capture"')]
+    assert 'id="gate-card"' in home and "<h2>Waiting for you</h2>" in home
+    assert 'id="gate-list"' in home

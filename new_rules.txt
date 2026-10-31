@@ -37,7 +37,13 @@ functionnalities to developp :
 - DONE: route wrangler: 2 Renault Partner + 1 Iveco Daily, each drawn as a shape, each with
         its stops, its load against its capacity, the delivery windows and its own route
 
--a blockchain for dots/ open claw automatic purchase : they can freely make baskets, but for the first purchase of an item ( ex first time buying spit fix), there's the synchronized ai checking for coherence, then I manually have to check it too. Important : it is a project, don't build it yet but let's discuss about it to make it work.
+- DONE: the purchase gate (the sealed log, not a blockchain: one local hash chain, no
+        network and no coin). A basket is free; buying is held by first article, new
+        supplier, a basket over 500 EUR, a line over twice the usual price, or a line with
+        no price at all. Claude reads the names and answers same / new / unsure with its
+        reason and approves nothing; you answer on the Waiting for you card on the landing
+        page. No expiry, a cancel instead, and a 10% price drift asks again. Prices come in
+        on the basket line: /basket "12 vis th 6x25 @ 0.11"
 
 - DONE: PO > contacts = type a company or a person, the whole line appears; no table
 
@@ -80,3 +86,15 @@ functionnalities to developp :
 
 - DONE: System and Help sit at the far end of the menu bar, over Remember me and Exit
 
+- DONE, as specified below: dots purchase gate
+                      [ still open: a spend ceiling per day or per week as a backstop, and
+                        what "place the order" is — a checkout Dots drives on the shop site,
+                        or a mail to the supplier. Until that is settled the approved order
+                        is built in the app and placed by hand, as before ]
+                      - gate fires when it's the first time and article is bought and when the supplier changes
+                      - for differences between inventory lines and purchase order lines, use the second AI to decide wether it's the same or not. ie : dots wants to order “CHEVILLE SPIT FIX 10x100” , but we know “343546 - CHEVILLE SPIT FIX 3 10X100” : a claude verification agent communicates with dots to confirm it can go on. Ideally it would work like a 2 factors authentification, my manual approval comes after.
+                      - so we have to create a verifcation agent within the software
+                      - basket over €500, or a line over 2× what that article normally costs fires the gate
+                      - create a small window on the landing page for me to approve
+                      - no expiry on the approval, but a cancel button
+                      - an approved gate let the bot place the order

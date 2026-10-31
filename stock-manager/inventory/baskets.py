@@ -7,7 +7,11 @@ from .models import normalize_name
 
 LEADING = re.compile(r"^(\d+(?:[.,]\d+)?)\s*(?:x|\*)?\s+(.+)$", re.I)
 TRAILING = re.compile(r"^(.+?)\s*(?:x|\*)\s*(\d+(?:[.,]\d+)?)$", re.I)
-SPLIT = re.compile(r"[\n;,]+|\s+/\s+")
+# "VIS TH 6X25 @ 0.11" — the price off the shop page, the only place one ever comes from.
+PRICED = re.compile(r"^(.+?)\s*@\s*(\d+(?:[.,]\d+)?)\s*(?:EUR|€)?$", re.I)
+# A comma between two digits is a decimal point, not the end of a line: "0,62" is one
+# price, where "12 vis, 3 rondelle" is two articles.
+SPLIT = re.compile(r"[\n;]+|,(?!\d)|(?<!\d),|\s+/\s+")
 MAX_LINES = 60
 
 
@@ -25,7 +29,10 @@ def parse_items(text):
         piece = " ".join(piece.split())
         if not piece:
             continue
-        quantity, name = None, piece
+        quantity, name, price = None, piece, None
+        hit = PRICED.match(piece)
+        if hit:
+            piece, name, price = hit.group(1).strip(), hit.group(1).strip(), _number(hit.group(2))
         hit = LEADING.match(piece)
         if hit:
             quantity, name = _number(hit.group(1)), hit.group(2)
@@ -36,31 +43,39 @@ def parse_items(text):
         article = normalize_name(name)
         if not article:
             continue
-        out.append({"article": article, "quantity": quantity if quantity else 1.0})
+        out.append({"article": article, "quantity": quantity if quantity else 1.0,
+                    "unit_price": price})
         if len(out) >= MAX_LINES:
             break
     return out
 
 
-def add(db_path, channel, items, shop=None, site=None, work_item=None, who=None):
+def add(db_path, channel, items, shop=None, site=None, work_item=None, who=None,
+        supplier=None):
     for item in items:
         db.write(db_path, """
-                INSERT INTO baskets (channel, shop, article, quantity, site, work_item, added_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO baskets (channel, shop, article, quantity, site, work_item,
+                                     added_by, supplier, unit_price)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (str(channel), shop, item["article"], item.get("quantity"),
-                      normalize_name(site), normalize_name(work_item), who))
+                      normalize_name(site), normalize_name(work_item), who,
+                      normalize_name(item.get("supplier") or supplier),
+                      item.get("unit_price")))
     return len(items)
 
 
 def lines(db_path, channel):
     rows = db.read(db_path, """
-            SELECT line_id, shop, article, quantity, site, work_item, added_by, added_at
+            SELECT line_id, shop, article, quantity, site, work_item, added_by, added_at,
+                   supplier, unit_price
             FROM baskets WHERE channel = ? ORDER BY line_id
             """, (str(channel),))
     return [{"line_id": line_id, "shop": shop, "article": article, "quantity": quantity,
              "site": site, "work_item": work_item, "added_by": who,
-             "added_at": when.isoformat(timespec="minutes") if when else None}
-            for line_id, shop, article, quantity, site, work_item, who, when in rows]
+             "added_at": when.isoformat(timespec="minutes") if when else None,
+             "supplier": supplier, "unit_price": price}
+            for line_id, shop, article, quantity, site, work_item, who, when, supplier,
+                price in rows]
 
 
 def drop_line(db_path, channel, line_id):

@@ -26,8 +26,9 @@ from dataclasses import replace
 
 from . import (account, alerts, audit, backorders, backup, baskets, bills, catalog, contacts,
                db, ddmrp, discord_bot,
-               forecast, intake, llm,
-               mailbox, models_info, pg, quotes, routing, sheets, stock, vocabulary)
+               forecast, gate, intake, llm,
+               mailbox, models_info, pg, prices, quotes, routing, sheets, stock, verify,
+               vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
 
@@ -572,6 +573,96 @@ def basket_to_order(request: Request, channel: str):
         raise HTTPException(404, "That basket is empty.")
     event(request, "basket.order", f"list #{answer['list_id']}", f"{len(answer['lines'])} line(s)")
     return {"list_id": answer["list_id"], "lines": len(answer["lines"]), "shop": answer["shop"]}
+
+
+# ---- the gate on what the bot buys ----------------------------------------
+
+class GateAsk(BaseModel):
+    channel: str | None = None
+    shop: str | None = None
+    site: str | None = None
+    work_item: str | None = None
+    supplier: str | None = None
+    lines: list[dict]
+
+
+class GateWord(BaseModel):
+    why: str | None = None
+
+
+@app.get("/api/gate")
+def read_gate():
+    """What is waiting on a person, what has been decided, and whether the log is whole."""
+    whole, broken, entries = gate.verify_chain(config.db_path)
+    return {
+        "waiting": gate.waiting(config.db_path),
+        "history": gate.history(config.db_path),
+        "words": gate.REASON_WORDS,
+        "rules": {"ceiling": gate.CEILING, "dear": gate.DEAR, "drift": gate.DRIFT},
+        "log": {"whole": whole, "broken_at": broken, "entries": entries},
+    }
+
+
+@app.get("/api/gate/{request_id}")
+def read_one_gate(request_id: int):
+    found = gate.one(config.db_path, request_id)
+    if found is None:
+        raise HTTPException(404, f"No request #{request_id}.")
+    return {"request": found, "log": gate.chain(config.db_path, request_id)}
+
+
+@app.post("/api/gate")
+def ask_gate(request: Request, body: GateAsk):
+    """Hold a basket. Nothing is held that nothing holds back."""
+    reading = gate.look(config.db_path, body.lines, supplier=body.supplier)
+    if not reading["held"]:
+        return {"held": False, "reading": reading}
+    request_id = gate.ask(config.db_path, reading, channel=body.channel, shop=body.shop,
+                          asked_by=who(request)[0], site=body.site, work_item=body.work_item)
+    event(request, "gate.ask", f"request #{request_id}", ",".join(reading["reasons"]))
+    return {"held": True, "request_id": request_id, "reading": reading}
+
+
+@app.post("/api/gate/{request_id}/check")
+async def check_gate(request: Request, request_id: int):
+    """The first factor: the verification agent reads the names, and nothing else."""
+    found = gate.one(config.db_path, request_id)
+    if found is None:
+        raise HTTPException(404, f"No request #{request_id}.")
+    answer = await verify.check(config.db_path, found["lines"])
+    gate.record_check(config.db_path, request_id, answer["verdict"], answer["note"],
+                      answer["lines"])
+    event(request, "gate.check", f"request #{request_id}", answer["verdict"])
+    return {"request": gate.one(config.db_path, request_id), "agent": answer}
+
+
+@app.post("/api/gate/{request_id}/approve")
+def approve_gate(request: Request, request_id: int):
+    """The second factor, and the only one that lets money out."""
+    try:
+        found = gate.approve(config.db_path, request_id, who(request)[0])
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    event(request, "gate.approve", f"request #{request_id}", f"{found['total']} EUR")
+    return {"request": found}
+
+
+@app.post("/api/gate/{request_id}/cancel")
+def cancel_gate(request: Request, request_id: int, body: GateWord | None = None):
+    try:
+        found = gate.cancel(config.db_path, request_id, who(request)[0],
+                            body.why if body else None)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    event(request, "gate.cancel", f"request #{request_id}", body.why if body else None)
+    return {"request": found}
+
+
+@app.get("/api/prices/{article}")
+def read_prices(article: str):
+    return {"article": article, "usual": prices.usual(config.db_path, article),
+            "seen": prices.sightings(config.db_path, article),
+            "suppliers": sorted(prices.suppliers(config.db_path, article))}
 
 
 @app.delete("/api/baskets/{channel}")

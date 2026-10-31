@@ -6,7 +6,7 @@
 
 <div class="titlebar">
   <img class="mark" src="/icon.png" alt="" width="256" height="256">
-  <span>Stock Manager &mdash; Inventory &amp; Procurement (Production)</span>
+  <span>Stock Manager</span>
   <span class="spacer"></span>
   <span class="who" id="who"></span>
 </div>
@@ -76,6 +76,11 @@
 <div id="global-notice" hidden></div>
 
 <section class="panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home">
+  <div class="card" id="gate-card" hidden>
+    <h2>Waiting for you</h2>
+    <p class="muted" id="gate-note"></p>
+    <div id="gate-list"></div>
+  </div>
   <div class="home">
     <div class="home-logo" role="img" aria-label="Logistics Manager"></div>
   </div>
@@ -3434,6 +3439,104 @@ for (const id of ["contact-person", "contact-company"]) {
   });
 }
 
+// ---- the gate on what the bot buys ----------------------------------------
+
+let gateWords = {};
+
+function gateLines(rows) {
+  const table = el("table", { className: "order-table" });
+  renderTable(table, [
+    { label: "Article", cell: (row) => {
+      const box = el("span", {}, [el("strong", { textContent: row.article ?? "?" })]);
+      const found = (row.found ?? []).map((one) => gateWords[one] ?? one).join(" · ");
+      if (found) box.append(el("div", { className: "desig", textContent: found }));
+      return box;
+    } },
+    { label: "Qty", numeric: true, cell: (row) => showNum(row.quantity) },
+    { label: "Supplier", cell: (row) => row.supplier ?? "—" },
+    { label: "Price", numeric: true, cell: (row) => (row.unit_price == null
+      ? el("span", { className: "muted", textContent: "no price" })
+      : document.createTextNode(`${Number(row.unit_price).toFixed(2)}`)) },
+    { label: "Usually", numeric: true, cell: (row) => (row.usual == null
+      ? "—" : `${Number(row.usual).toFixed(2)}`) },
+  ], rows, "Nothing on this one.");
+  return table;
+}
+
+const AGENT_WORDS = {
+  same: ["ok", "every article is one we know"],
+  new: ["warn", "at least one article is genuinely new"],
+  unsure: ["warn", "the agent is not sure"],
+};
+
+function gateRow(held) {
+  const title = el("div", { className: "sheet-title" }, [
+    el("strong", { textContent: `#${held.request_id}` }),
+    el("span", { className: "muted", textContent:
+      [held.shop, held.site, held.work_item, held.asked_by].filter(Boolean).join(" · ") }),
+    el("strong", { textContent: `${Number(held.total ?? 0).toFixed(2)} EUR` }),
+  ]);
+
+  const why = el("div", { className: "row tight" },
+    (held.reasons ?? []).map((one) => el("span", {
+      className: "pill backorder", textContent: gateWords[one] ?? one })));
+
+  // The agent settles the names. It never says whether to buy: that is the line below.
+  const [kind, plain] = AGENT_WORDS[held.agent_verdict] ?? ["", "not checked yet"];
+  const agent = el("p", { className: `legend ${kind}` },
+    [`First check: ${plain}${held.agent_said ? ` — ${held.agent_said}` : ""}`]);
+
+  const buttons = el("div", { className: "row tight" });
+  const approve = el("button", { className: "action", textContent: "Approve" });
+  approve.addEventListener("click", () => gateSay(held.request_id, "approve"));
+  const cancel = el("button", { className: "action ghost", textContent: "Cancel" });
+  cancel.addEventListener("click", () => gateSay(held.request_id, "cancel"));
+  const check = el("button", { className: "mini", textContent: "Ask the agent again" });
+  check.addEventListener("click", () => gateSay(held.request_id, "check"));
+  buttons.append(approve, cancel, el("span", { className: "grow" }), check);
+
+  return el("div", { className: "sheet" }, [
+    title, why, agent,
+    el("div", { className: "sheet-body" }, [el("div", { className: "scroll-x" },
+      [gateLines(held.lines ?? [])])]),
+    buttons,
+  ]);
+}
+
+async function gateSay(requestId, word) {
+  try {
+    say(word === "check" ? "Asking the agent..." : "...");
+    await api(`/api/gate/${requestId}/${word}`, { method: "POST" });
+    await loadGate();
+    say(word === "approve" ? `Request #${requestId} approved`
+      : word === "cancel" ? `Request #${requestId} cancelled` : "The agent has answered");
+  } catch (e) {
+    notice($("gate-note"), "bad", e.message);
+  }
+}
+
+async function loadGate() {
+  let data;
+  try {
+    data = await api("/api/gate");
+  } catch {
+    return;
+  }
+  gateWords = data.words ?? {};
+  const rows = data.waiting ?? [];
+  $("gate-card").hidden = !rows.length;
+  if (!rows.length) return;
+
+  // A broken seal is the one thing on this card that is not about a basket.
+  const log = data.log ?? {};
+  $("gate-note").textContent = `${rows.length} basket(s) held · nothing is bought until `
+    + "you say so · " + (log.whole
+      ? `the log is whole, ${log.entries} entries`
+      : `THE LOG IS BROKEN at entry ${log.broken_at}`);
+  $("gate-note").className = log.whole ? "muted" : "bad";
+  $("gate-list").replaceChildren(...rows.map(gateRow));
+}
+
 // ---- what a delivery note still owes --------------------------------------
 
 function renderWaiting(data) {
@@ -3645,7 +3748,7 @@ async function refresh() {
     renderExport();
     await Promise.all([
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
-      renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(),
+      renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
       loadQuotes(), loadRoute(), loadContacts(), loadWaiting(),
     ]);

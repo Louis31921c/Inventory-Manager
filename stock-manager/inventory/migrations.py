@@ -361,6 +361,58 @@ MIGRATIONS = [
         ALTER TABLE places ADD COLUMN IF NOT EXISTS open_to VARCHAR;
         """,
     ),
+    (
+        17,
+        "what a basket costs, what an article usually costs, and the gate on a first purchase",
+        """
+        ALTER TABLE baskets ADD COLUMN IF NOT EXISTS supplier VARCHAR;
+        ALTER TABLE baskets ADD COLUMN IF NOT EXISTS unit_price DOUBLE;
+        ALTER TABLE baskets ADD COLUMN IF NOT EXISTS shop_ref VARCHAR;
+
+        CREATE SEQUENCE IF NOT EXISTS price_seq START 1;
+        CREATE TABLE IF NOT EXISTS article_prices (
+            price_id   INTEGER PRIMARY KEY DEFAULT nextval('price_seq'),
+            article    VARCHAR NOT NULL,
+            supplier   VARCHAR,
+            unit_price DOUBLE NOT NULL,
+            source     VARCHAR NOT NULL,
+            seen_on    DATE NOT NULL DEFAULT current_date,
+            added_at   TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+
+        CREATE SEQUENCE IF NOT EXISTS gate_seq START 1;
+        CREATE TABLE IF NOT EXISTS gate_requests (
+            request_id    INTEGER PRIMARY KEY DEFAULT nextval('gate_seq'),
+            channel       VARCHAR,
+            shop          VARCHAR,
+            asked_by      VARCHAR,
+            site          VARCHAR,
+            work_item     VARCHAR,
+            reasons       VARCHAR NOT NULL,
+            basket        VARCHAR NOT NULL,
+            total         DOUBLE,
+            state         VARCHAR NOT NULL DEFAULT 'waiting',
+            agent_verdict VARCHAR,
+            agent_said    VARCHAR,
+            agent_at      TIMESTAMP,
+            decided_by    VARCHAR,
+            decided_at    TIMESTAMP,
+            asked_at      TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+
+        CREATE SEQUENCE IF NOT EXISTS seal_seq START 1;
+        CREATE TABLE IF NOT EXISTS gate_log (
+            entry_id   INTEGER PRIMARY KEY DEFAULT nextval('seal_seq'),
+            request_id INTEGER,
+            event      VARCHAR NOT NULL,
+            body       VARCHAR NOT NULL,
+            who        VARCHAR,
+            made_at    TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            prev_seal  VARCHAR NOT NULL,
+            seal       VARCHAR NOT NULL
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

@@ -211,13 +211,16 @@ section.panel {
 
 /* ---- landing screen ------------------------------------------------ */
 
-/* The logo takes the room the screen has and no more, so its foot is never cut off. */
-#panel-home { height: 100%; }
+/* The logo takes the room the screen has and no more, so its foot is never cut off.
+   What waits for approval sits over it and takes its own height first. */
+#panel-home { display: flex; flex-direction: column; height: 100%; }
+#gate-card { flex: 0 1 auto; margin-bottom: 8px; overflow-y: auto; }
 .home {
   align-items: center;
   display: flex;
-  height: 100%;
+  flex: 1 1 auto;
   justify-content: center;
+  min-height: 0;
 }
 .home-logo {
   background: url("/landing.png") center / contain no-repeat;
@@ -249,6 +252,10 @@ h2 {
 }
 p { margin: 0; }
 .muted, .legend, .desig { color: var(--ink-soft); }
+/* What the verification agent made of a held basket, and a seal that does not hold. */
+.legend.ok { color: var(--green); }
+.legend.warn { color: var(--amber); }
+p.bad { color: var(--red); font-weight: 700; }
 .legend, .desig { font-size: 11px; }
 .eyebrow { color: var(--ink-soft); font-size: 11px; text-transform: uppercase; }
 

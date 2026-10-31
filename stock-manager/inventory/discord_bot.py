@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 
-from . import baskets, quotes
+from . import baskets, gate, quotes, verify
 from .config import load_config
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,23 @@ def purchase_text(answer):
             f"the bot does not pay for anything.")
 
 
+def held_text(request_id, reading, answer):
+    """What the channel is told when the gate holds a basket."""
+    why = "\n".join(f"· {word}" for word in gate.said(reading["reasons"]))
+    lines = "\n".join(
+        f"· {show_number(row['quantity'])} × {row['article']}"
+        + (f" @ {row['unit_price']:.2f}" if row.get("unit_price") is not None else " (no price)")
+        for row in reading["lines"][:MAX_SHOWN])
+    agent = {"same": "the agent recognises every article",
+             "new": "the agent says at least one article is genuinely new",
+             "unsure": "the agent is not sure"}.get(answer["verdict"], answer["verdict"])
+    return (f"**Held for approval — request #{request_id}** "
+            f"({reading['total']:.2f} EUR)\n{lines}\n\nWhy:\n{why}\n\n"
+            f"First check: {agent}. {answer['note']}\n"
+            f"Nothing is bought until it is approved in Stock Manager. "
+            f"The basket stays as it is.")
+
+
 def quote_text(quote):
     """A quote asks for a price; it never says what the price is."""
     lines = "\n".join(f"· {quotes.show_quantity(row)} {row['article']}"
@@ -106,10 +123,12 @@ def build_client(config, channels):
 
     @tree.command(name="basket", description="Add what you need to this channel's basket")
     @app_commands.describe(shop="Where it should be ordered from",
-                           items="12 hex bolt m6x25, rondelle m8 x100",
+                           items="12 hex bolt m6x25 @ 0.42, rondelle m8 x100",
                            site="Job site the goods are for",
-                           work_item="Part of the job, if it matters")
-    async def basket(interaction, shop: str, items: str, site: str = "", work_item: str = ""):
+                           work_item="Part of the job, if it matters",
+                           supplier="Who it comes from, if the shop is not the supplier")
+    async def basket(interaction, shop: str, items: str, site: str = "", work_item: str = "",
+                     supplier: str = ""):
         if await refuse(interaction):
             return
         parsed = baskets.parse_items(items)
@@ -118,7 +137,8 @@ def build_client(config, channels):
             return
         await asyncio.to_thread(baskets.add, config.db_path, interaction.channel_id, parsed,
                                 shop.strip() or None, site.strip() or None,
-                                work_item.strip() or None, who(interaction))
+                                work_item.strip() or None, who(interaction),
+                                supplier.strip() or None)
         rows = await asyncio.to_thread(baskets.lines, config.db_path, interaction.channel_id)
         await interaction.response.send_message(basket_text(rows))
 
@@ -140,6 +160,27 @@ def build_client(config, channels):
     async def purchase(interaction):
         if await refuse(interaction):
             return
+        held = await asyncio.to_thread(baskets.lines, config.db_path, interaction.channel_id)
+        if not held:
+            await interaction.response.send_message(purchase_text(None))
+            return
+
+        reading = await asyncio.to_thread(gate.look, config.db_path, held)
+        if reading["held"]:
+            # Held: the agent reads the names, then it waits for a person. The basket stays
+            # where it is, so nothing is lost either way the answer goes.
+            await interaction.response.defer(thinking=True)
+            request_id = await asyncio.to_thread(
+                gate.ask, config.db_path, reading, interaction.channel_id,
+                next((row["shop"] for row in held if row["shop"]), None), who(interaction),
+                next((row["site"] for row in held if row["site"]), None),
+                next((row["work_item"] for row in held if row["work_item"]), None))
+            answer = await verify.check(config.db_path, reading["lines"])
+            await asyncio.to_thread(gate.record_check, config.db_path, request_id,
+                                    answer["verdict"], answer["note"], answer["lines"])
+            await interaction.followup.send(held_text(request_id, reading, answer))
+            return
+
         answer = await asyncio.to_thread(baskets.to_purchase_order, config.db_path,
                                          interaction.channel_id, who(interaction))
         await interaction.response.send_message(purchase_text(answer))
