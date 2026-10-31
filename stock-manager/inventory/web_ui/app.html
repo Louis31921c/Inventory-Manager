@@ -3848,23 +3848,13 @@ function showRun(run, plan, said) {
 }
 
 async function vanRoute(van, go, run) {
+  // Every address on the list is this lorry's round: picking a lorry says whose
+  // round it is and where it is drawn, nothing is kept back from it.
   go.disabled = true;
   run.replaceChildren(el("p", { className: "muted", textContent: "Measuring the roads..." }));
-  const loop = $("route-loop").checked;
   try {
-    let said = "";
-    let plan = null;
-    try {
-      plan = await api(`/api/route/plan?round_trip=${loop}&vehicle_id=${van.vehicle_id}`,
-                       postJson({}));
-    } catch (e) {
-      // Nothing has been given to this lorry yet, so show it the whole list instead
-      // of an error: the VAN column on the table below is what splits them up.
-      if (!/no delivery address/i.test(e.message)) throw e;
-      plan = await api(`/api/route/plan?round_trip=${loop}`, postJson({}));
-      said = "No stop is given to this lorry yet — this is every address on the list.";
-    }
-    showRun(run, plan, said);
+    const plan = await api(`/api/route/plan?round_trip=${$("route-loop").checked}`, postJson({}));
+    showRun(run, plan, "");
   } catch (e) {
     run.replaceChildren(el("p", { className: "notice bad", textContent: e.message }));
   } finally {
@@ -3955,8 +3945,8 @@ async function findRoute() {
   $("route-go").disabled = true;
   notice($("route-note"), "", "Measuring the roads...");
   try {
-    const plan = await api(
-      `/api/route/plan?round_trip=${loop}${van ? `&vehicle_id=${van}` : ""}`, postJson({}));
+    const plan = await api(`/api/route/plan?round_trip=${loop}`, postJson({}));
+    const named = vans.find((one) => String(one.vehicle_id) === van);
     renderTable($("table-route"), [
       { label: "Order", numeric: true,
         cell: (row) => document.createTextNode(String(row.position + 1)) },
@@ -3964,7 +3954,7 @@ async function findRoute() {
       { label: "Address", cell: (row) => document.createTextNode(short(row.address, 52)) },
     ], plan.stops, "Nothing to drive.");
     $("route-total").textContent =
-      `${plan.vehicle ? `${plan.vehicle.name}: ` : ""}${plan.km} km over ${plan.legs.length} leg(s), `
+      `${named ? `${named.name}: ` : ""}${plan.km} km over ${plan.legs.length} leg(s), `
       + (plan.source === "road" ? "measured by road" : "straight-line only, the road service was quiet");
     // A run asked for one lorry is drawn under that lorry as well.
     if (van && vanBoxes.has(Number(van))) showRun(vanBoxes.get(Number(van)), plan, "");
