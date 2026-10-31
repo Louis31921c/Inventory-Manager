@@ -3810,9 +3810,13 @@ function renderVans(data) {
         `${van.load.kilos} / ${showNum(van.kilos)} kg` }),
       bar(van.load.kilos, van.kilos),
     ]);
-    const list = el("ul", { className: "van-stops" }, mine.map((stop) =>
-      el("li", { textContent: [stop.label, stop.open_from && stop.open_to
-        ? `${stop.open_from}–${stop.open_to}` : ""].filter(Boolean).join(" · ") })));
+    const list = el("ul", { className: "van-stops" }, mine.map((stop) => {
+      const when = stop.open_from && stop.open_to ? `${stop.open_from}–${stop.open_to}` : "";
+      return el("li", {}, [
+        el("strong", { textContent: [stop.label, when].filter(Boolean).join(" · ") }),
+        el("div", { className: "stop-where", textContent: stop.address ?? "" }),
+      ]);
+    }));
     const box = el("div", { className: "van" }, [vanDrawing(van.shape), head, load, list]);
     for (const wrong of van.trouble ?? []) {
       box.append(el("p", { className: "notice warn", textContent: wrong }));
@@ -3832,8 +3836,10 @@ async function vanRoute(van, go, run) {
     const loop = $("route-loop").checked;
     const plan = await api(
       `/api/route/plan?round_trip=${loop}&vehicle_id=${van.vehicle_id}`, postJson({}));
-    const order = el("ol", { className: "van-run" }, plan.stops.map((stop) =>
-      el("li", { textContent: stop.label ?? stop.address })));
+    const order = el("ol", { className: "van-run" }, plan.stops.map((stop) => el("li", {}, [
+      el("strong", { textContent: stop.label ?? stop.address }),
+      el("div", { className: "stop-where", textContent: stop.address ?? "" }),
+    ])));
     const said = el("p", { className: "legend", textContent:
       `${plan.km} km over ${plan.legs.length} leg(s), `
       + (plan.source === "road" ? "measured by road" : "straight line, the road service was quiet") });

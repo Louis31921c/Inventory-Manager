@@ -427,7 +427,8 @@ input.cell:focus { border-color: var(--accent); outline: none; }
 .van-shape circle.wheel { fill: none; stroke: var(--ink); stroke-width: 3; }
 .van-load { display: grid; gap: 2px; grid-template-columns: 1fr; }
 .van-stops { font-size: 11px; list-style: none; margin: 0; padding: 0; }
-.van-stops li { color: var(--ink-soft); padding: 1px 0; }
+.van-stops li { color: var(--ink-soft); padding: 2px 0; }
+.stop-where { color: var(--ink-soft); font-size: 10px; line-height: 1.3; }
 .van-route:not(:empty) { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
 .van-run { font-size: 11px; margin: 0; padding-left: 18px; }
 .van-run li { padding: 1px 0; }
