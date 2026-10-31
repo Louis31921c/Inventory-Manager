@@ -261,37 +261,21 @@
     <div id="basket-note"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="contacts-card">
     <h2>Contacts</h2>
     <div class="row">
-      <label class="field grow"><span>company</span><input id="contact-company"></label>
-      <label class="field grow"><span>person</span><input id="contact-person"></label>
-      <label class="field narrow"><span>phone</span><input id="contact-phone"></label>
-      <label class="field grow"><span>e-mail</span><input id="contact-email" autocomplete="off"></label>
-    </div>
-    <div class="row">
-      <label class="field grow"><span>delivery address</span><input id="contact-address"></label>
-      <label class="field narrow"><span>incoterm</span><select id="contact-incoterm"></select></label>
-      <label class="field narrow"><span>site</span><input id="contact-site"></label>
+      <label class="field grow"><span>name</span><input id="contact-person" autocomplete="off"></label>
+      <label class="field grow"><span>company</span><input id="contact-company" autocomplete="off"></label>
       <label class="field narrow" style="justify-content: flex-end">
-        <button class="action" id="contact-save">SAVE</button>
+        <button class="action" id="contact-find">FIND</button>
       </label>
     </div>
-    <div class="row">
-      <label class="field grow"><span>find</span>
-        <input id="contact-find" list="contact-names" autocomplete="off"
-               placeholder="type a company or a person"></label>
-      <label class="field narrow" style="justify-content: flex-end">
-        <button class="action" id="contact-load">LOAD FILE</button>
-      </label>
-    </div>
-    <datalist id="contact-names"></datalist>
     <p class="muted" id="contact-file"></p>
     <div id="contact-note"></div>
-    <div id="contact-hits"></div>
+    <div class="scroll-x short-box"><table id="table-contacts"></table></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="stored-po">
     <h2>Stored purchase orders</h2>
     <div class="row">
       <label class="field grow"><span>Search</span><input id="o-search" placeholder="article, reference, work item..."></label>
@@ -844,16 +828,25 @@ function flatten() {
 const TABS = ["home", "capture", "inventory", "query", "orders", "quotes", "bills",
               "route", "settings", "ddmrp"];
 
+// One card of the Purchase orders screen at a time; the menu says which.
+const ORDER_CARDS = ["order-scan", "contacts-card", "stored-po"];
+let orderCard = "stored-po";
+
+function showCard(id) {
+  orderCard = ORDER_CARDS.includes(id) ? id : orderCard;
+  for (const other of ORDER_CARDS) $(other).hidden = other !== orderCard;
+}
+
 function openTab(name) {
   for (const other of TABS) {
     $(`panel-${other}`).hidden = other !== name;
   }
   // Browsing a site is reading, not scanning: the capture cards stay out of the way.
-  const browsing = Boolean(treePick);
-  $("order-scan").hidden = browsing;
-  if (browsing) {
+  if (treePick) {
+    orderCard = "stored-po";
     $("list-review").hidden = true;
   }
+  showCard(orderCard);
   for (const node of document.querySelectorAll(".tree button[data-goes]")) {
     node.setAttribute("aria-current", String(node.dataset.goes === name));
   }
@@ -1921,42 +1914,22 @@ $("list-save").addEventListener("click", async () => {
   }
 });
 
-function stockButtons(sheet, line) {
-  const choice = el("span", { className: "stock-choice" });
-  for (const [label, value] of [["in stock", true], ["to order", false]]) {
-    const button = el("button", { type: "button", textContent: label });
-    button.setAttribute("aria-pressed", String(line.in_stock === value));
-    button.addEventListener("click", async () => {
-      const next = line.in_stock === value ? null : value;
-      try {
-        await api(`/api/orders/${sheet.id}/lines/${line.line_no}`, patchJson({ in_stock: next }));
-        line.in_stock = next;
-        renderOrders();
-      } catch (e) {
-        notice($("global-notice"), "bad", e.message);
-      }
-    });
-    choice.append(button);
-  }
-  return choice;
+function stockWord(line) {
+  // Nothing to press: the delivery notes say what is standing there.
+  const have = line.have ?? 0;
+  const wanted = line.quantity ?? 0;
+  const enough = wanted > 0 && have >= wanted;
+  const word = el("span", { className: `stock-word ${enough ? "ok" : "short"}`,
+                            textContent: enough ? "in stock" : "to order" });
+  let said;
+  if (enough) said = `${showNum(have)} on the notes`;
+  else if (have > 0) said = `${showNum(have)} on the notes, ${showNum(wanted - have)} short`;
+  else if (have < 0) said = `nothing here, ${showNum(-have)} already promised elsewhere`;
+  else said = "nothing on the notes for this place";
+  word.title = said;
+  return el("span", {}, [word, el("div", { className: "desig", textContent: said })]);
 }
 
-function alignRail(table, rail) {
-  const head = table.tHead?.rows[0];
-  const rows = [...(table.tBodies[0]?.rows ?? [])];
-  const slots = [...rail.children];
-  if (!head || slots.length !== rows.length + 1) return;
-
-  slots[0].style.height = `${head.getBoundingClientRect().height}px`;
-  rows.forEach((row, index) => {
-    slots[index + 1].style.height = `${row.getBoundingClientRect().height}px`;
-  });
-}
-
-function alignLater(table, rail) {
-  requestAnimationFrame(() => alignRail(table, rail));
-  new ResizeObserver(() => alignRail(table, rail)).observe(table);
-}
 
 function refreshOrderSites() {
   const select = $("o-site");
@@ -2066,23 +2039,14 @@ function renderOrders() {
         },
       },
       { label: "Quantity", numeric: true, cell: (line) => showNum(line.quantity) },
+      { label: "On the notes", cell: stockWord },
     ], lines, "No line on this sheet.");
 
-    const rail = el("div", { className: "stock-rail" }, [el("div", { className: "rail-head" })]);
-    for (const line of lines) {
-      rail.append(el("div", { className: "rail-row" }, [stockButtons(sheet, line)]));
-    }
-
-    const block = el("div", { className: "sheet" }, [
+    return el("div", { className: "sheet" }, [
       title,
       terms,
-      el("div", { className: "sheet-body" }, [
-        el("div", { className: "scroll-x" }, [table]),
-        rail,
-      ]),
+      el("div", { className: "sheet-body" }, [el("div", { className: "scroll-x" }, [table])]),
     ]);
-    alignLater(table, rail);
-    return block;
   }));
 }
 
@@ -3567,73 +3531,6 @@ $("quote-drop").addEventListener("click", async () => {
 let contactRows = [];
 let incoterms = [];
 
-function contactLine(row) {
-  const fields = [["person", row.person], ["phone", row.phone], ["e-mail", row.email],
-                  ["address", row.address], ["incoterm", row.incoterm], ["site", row.site],
-                  ["note", row.note]];
-  const box = el("div", { className: "sheet" }, [
-    el("div", { className: "sheet-title" }, [el("strong", { textContent: row.company })]),
-    el("dl", { className: "contact-line" }, fields.flatMap(([name, value]) => [
-      el("dt", { textContent: name }),
-      el("dd", { textContent: value || "—" }),
-    ])),
-  ]);
-
-  const doing = el("div", { className: "row tight" });
-  if (row.address) {
-    const toRoute = el("button", { className: "mini", type: "button", textContent: "to route" });
-    toRoute.addEventListener("click", async () => {
-      try {
-        await api("/api/route/places", postJson({
-          address: row.address, label: row.company, kind: "stop" }));
-        notice($("contact-note"), "ok", `${row.company} added to today's deliveries.`);
-        await loadRoute();
-      } catch (e) {
-        notice($("contact-note"), "bad", e.message);
-      }
-    });
-    doing.append(toRoute);
-  }
-  doing.append(confirmButton("Delete", async () => {
-    await api(`/api/contacts/${row.contact_id}`, { method: "DELETE" });
-    await loadContacts();
-  }));
-  box.append(doing);
-  return box;
-}
-
-const CONTACT_HITS = 8;
-
-function renderContacts() {
-  $("contact-names").replaceChildren(...contactRows.flatMap((row) =>
-    [row.company, row.person].filter(Boolean).map((name) => el("option", { value: name }))));
-
-  const wanted = ($("contact-find").value ?? "").trim().toLowerCase();
-  if (!wanted) {
-    $("contact-hits").replaceChildren(el("p", { className: "muted", textContent:
-      contactRows.length
-        ? `${showNum(contactRows.length)} contact(s) in the book. Type a company or a person to see one.`
-        : "No contact yet. LOAD FILE reads the one on the disk." }));
-    return;
-  }
-
-  const found = contactRows.filter((row) =>
-    [row.company, row.person, row.site, row.email, row.address]
-      .filter(Boolean).join(" ").toLowerCase().includes(wanted));
-  if (!found.length) {
-    $("contact-hits").replaceChildren(el("p", { className: "muted",
-                                                textContent: `Nobody called "${wanted}".` }));
-    return;
-  }
-
-  const shown = found.slice(0, CONTACT_HITS).map(contactLine);
-  if (found.length > CONTACT_HITS) {
-    shown.push(el("p", { className: "muted", textContent:
-      `${found.length - CONTACT_HITS} more match that; type a little more.` }));
-  }
-  $("contact-hits").replaceChildren(...shown);
-}
-
 function contactChoices(select, chosen) {
   select.replaceChildren(
     el("option", { value: "", textContent: "no contact" }),
@@ -3656,62 +3553,49 @@ async function loadContacts() {
     const data = await api("/api/contacts");
     contactRows = data.contacts ?? [];
     incoterms = data.incoterms ?? [];
-    incotermChoices($("contact-incoterm"), "");
-    if ($("contact-file")) {
-      $("contact-file").textContent = data.file
-        ? `Contact file on the disk: ${data.file} — LOAD FILE reads it in.`
-        : "No supplier-contacts.csv found on the disk.";
-    }
-    renderContacts();
+    $("contact-file").textContent = data.file
+      ? `Asking ${data.file}`
+      : "No supplier-contacts.csv found on the disk.";
     renderOrders();
   } catch {
   }
 }
 
-$("contact-find")?.addEventListener("input", renderContacts);
-
-$("contact-load")?.addEventListener("click", async () => {
-  const button = $("contact-load");
+// The card asks the file on the disk, the way a query asks a table: a name, a
+// company, and the lines that answer to both.
+async function askContactFile() {
+  const name = $("contact-person").value.trim();
+  const company = $("contact-company").value.trim();
+  const button = $("contact-find");
   button.disabled = true;
   try {
-    const done = await api("/api/contacts/load", postJson({}));
-    await loadContacts();
-    notice($("contact-note"), "ok",
-           `${done.read} line(s) read from ${done.file}: ${done.added} added, ` +
-           `${done.updated} changed, ${done.same} already as the file says.`);
+    const asked = new URLSearchParams();
+    if (name) asked.set("name", name);
+    if (company) asked.set("company", company);
+    const answer = await api(`/api/contacts/file?${asked}`);
+    renderTable($("table-contacts"),
+                answer.columns.map((field) => ({
+                  label: field === "email" ? "e-mail" : field,
+                  cell: (row) => document.createTextNode(row[field] || "—"),
+                })),
+                answer.rows, "No line answers to that.");
+    const held = answer.found > answer.rows.length
+      ? `${answer.found} line(s) found, the first ${answer.rows.length} are shown.`
+      : `${answer.found} line(s) found.`;
+    notice($("contact-note"), answer.found ? "ok" : "warn", held);
   } catch (e) {
     notice($("contact-note"), "bad", e.message);
   } finally {
     button.disabled = false;
   }
-});
+}
 
-$("contact-save").addEventListener("click", async () => {
-  const body = {
-    company: $("contact-company").value.trim(),
-    person: $("contact-person").value.trim() || null,
-    phone: $("contact-phone").value.trim() || null,
-    email: $("contact-email").value.trim() || null,
-    address: $("contact-address").value.trim() || null,
-    incoterm: $("contact-incoterm").value || null,
-    site: $("contact-site").value.trim() || null,
-  };
-  if (!body.company) {
-    notice($("contact-note"), "warn", "A contact needs a company name.");
-    return;
-  }
-  try {
-    await api("/api/contacts", postJson(body));
-    for (const id of ["contact-company", "contact-person", "contact-phone", "contact-email",
-                      "contact-address", "contact-site"]) {
-      $(id).value = "";
-    }
-    notice($("contact-note"), "ok", `${body.company} saved.`);
-    await loadContacts();
-  } catch (e) {
-    notice($("contact-note"), "bad", e.message);
-  }
-});
+$("contact-find").addEventListener("click", askContactFile);
+for (const id of ["contact-person", "contact-company"]) {
+  $(id).addEventListener("keydown", (event) => {
+    if (event.key === "Enter") askContactFile();
+  });
+}
 
 // ---- what a delivery note still owes --------------------------------------
 
@@ -3953,6 +3837,9 @@ const SCREEN_MENUS = [
 const LINK_MENUS = [
   { menu: "orders-menu", drop: "orders-drop", button: "menu-orders", title: "Purchase orders",
     links: [["Purchase orders", "orders"], ["Quotes", "quotes"], ["Bills", "bills"]],
+    // Each of these gets a line of its own and opens that card by itself.
+    cards: [["Scan a purchase order", "order-scan"], ["Contacts", "contacts-card"],
+            ["Stored PO", "stored-po"]],
     sites: true, holdStill: true },
 ];
 
@@ -4047,6 +3934,7 @@ function buildLinkMenu(spec) {
 
 function pickFromMenu(spec, site, work, lines) {
   treePick = { site, work, lines };
+  orderCard = "stored-po";
   closeMenu(spec);
   renderSiteTree();
   renderDeliveries();
@@ -4103,7 +3991,10 @@ function renderLinkMenu(spec) {
   const entries = spec.links.map(([label, tab]) => {
     const entry = el("button", { type: "button", textContent: label, role: "menuitem" });
     entry.addEventListener("click", () => {
-      if (tab === "orders") treePick = null;
+      if (tab === "orders") {
+        treePick = null;
+        orderCard = "stored-po";
+      }
       openTab(tab);
       closeMenu(spec);
       renderSiteTree();
@@ -4121,6 +4012,7 @@ function renderLinkMenu(spec) {
                                textContent: "All purchase orders" });
     all.addEventListener("click", () => {
       treePick = null;
+      orderCard = "stored-po";
       closeMenu(spec);
       renderSiteTree();
       renderDeliveries();
@@ -4131,7 +4023,21 @@ function renderLinkMenu(spec) {
     return el("span", { className: "sub" },
               [entry, el("div", { className: "menu-drop", role: "menu" }, [all, ...sites])]);
   });
-  $(spec.drop).replaceChildren(...entries);
+  $(spec.drop).replaceChildren(...entries, ...cardEntries(spec));
+}
+
+function cardEntries(spec) {
+  return (spec.cards ?? []).map(([label, id]) => {
+    const entry = el("button", { type: "button", textContent: label, role: "menuitem" });
+    entry.addEventListener("click", () => {
+      closeMenu(spec);
+      treePick = null;
+      orderCard = id;
+      openTab("orders");
+      say(`${spec.title} · ${label}`);
+    });
+    return entry;
+  });
 }
 
 function buildScreenMenus() {

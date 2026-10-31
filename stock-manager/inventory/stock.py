@@ -95,3 +95,63 @@ def summary(db_path):
         "shipping_days": SHIPPING_DAYS,
         "rows": lines,
     }
+
+
+
+def by_place(db_path):
+    """What the paperwork says is standing at each place, article by article.
+
+    A delivery note names the site and the work item the goods went to, so a line on an
+    order can be answered with the pile that was actually delivered for it rather than
+    with the whole warehouse. "in" is what the notes brought, "out" is what the other
+    orders already took from it.
+    """
+    came = db.read(db_path, """
+            SELECT article, site, work_item, sum(quantity)
+            FROM inventory_lines
+            WHERE quantity IS NOT NULL
+            GROUP BY article, site, work_item
+            """)
+    went = db.read(db_path, """
+            SELECT l.article, h.site, h.work_item, l.list_id, sum(l.quantity)
+            FROM purchase_order_lines l JOIN purchase_orders h USING (list_id)
+            WHERE l.quantity IS NOT NULL
+            GROUP BY l.article, h.site, h.work_item, l.list_id
+            """)
+    held = {}
+    for article, site, work_item, quantity in came:
+        held.setdefault(article, {"in": [], "out": []})["in"].append(
+            {"site": site, "work_item": work_item, "quantity": float(quantity or 0)})
+    for article, site, work_item, list_id, quantity in went:
+        held.setdefault(article, {"in": [], "out": []})["out"].append(
+            {"site": site, "work_item": work_item, "list_id": list_id,
+             "quantity": float(quantity or 0)})
+    return held
+
+
+def _closest(piles, site, work_item):
+    """The same work item on the same site, else the site, else what names no site.
+
+    Goods are never borrowed from another site: if nothing was delivered for this one,
+    only what came in with no site on the note can answer for it.
+    """
+    if not site:
+        return piles
+    for sift in (lambda pile: pile["site"] == site and pile["work_item"] == work_item,
+                 lambda pile: pile["site"] == site,
+                 lambda pile: not pile["site"]):
+        picked = [pile for pile in piles if sift(pile)]
+        if picked:
+            return picked
+    return []
+
+
+def cover(held, article, site=None, work_item=None, besides=None):
+    """What is standing for this article at this place, the asking order left out."""
+    piles = held.get(article)
+    if not piles:
+        return 0.0
+    came = sum(pile["quantity"] for pile in _closest(piles["in"], site, work_item))
+    went = sum(pile["quantity"] for pile in _closest(piles["out"], site, work_item)
+               if pile["list_id"] != besides)
+    return round(came - went, 2)

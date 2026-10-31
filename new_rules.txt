@@ -45,3 +45,12 @@ functionnalities to developp :
         chosen truck and nowhere else
 
 - DONE: no load and no window column on the destination table
+
+- DONE: Scan a purchase order, Contacts and Stored PO each have their own line on the
+        Purchase orders menu, and each opens that card by itself
+
+- DONE: nothing to click: every order line is answered from the delivery notes, matched on
+        the site and the work item the note names
+
+- DONE: contacts = name and company, asked straight of supplier-contacts.csv, answered like
+        a query

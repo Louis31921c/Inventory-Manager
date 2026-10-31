@@ -206,3 +206,16 @@ def load_file(db_path, path=None, user=None):
             changed += 1
     return {"file": str(where), "read": len(rows), "added": added, "updated": changed,
             "same": same}
+
+
+def look_up(name=None, company=None, path=None, limit=50):
+    """Ask the file itself, the way a query asks a table: two words, the lines that match."""
+    where, rows = read_file(path)
+    name = str(name or "").strip().lower()
+    company = str(company or "").strip().lower()
+    found = [row for row in rows
+             if (not name or name in (row.get("person") or "").lower())
+             and (not company or company in (row.get("company") or "").lower())]
+    return {"file": str(where), "columns": list(FIELDS), "found": len(found),
+            "rows": [{field: row.get(field) for field in FIELDS} for row in found[:limit]],
+            "limit": limit}

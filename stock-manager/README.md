@@ -6,7 +6,10 @@ Custom built to answer a real company's needs on inventory tracking.
 
 each article stored in [inventory] database has its own line with indicators such as : name, quantity, supplier name, delivery date, order date, order reference and additional information.
 
-for those stored in [Purchase order] "in stock" or "to order" clickable option are available: You can then export them as, regardless of the purchase order #, to bulk order them. 
+for those stored in [Purchase order] nothing is ticked by hand: each line says "in stock" or
+"to order" on its own, counted from the delivery notes. A note names the site and the work item
+the goods went to, so a line is answered with the pile delivered for that place, less what other
+orders have already taken from it. Nothing is borrowed from another site.
 
 
 
@@ -214,8 +217,10 @@ up to date by company and person, lines without a company name are skipped. The 
 for in the app folder, in `~/.local/share/stock-manager`, and in Documents, Desktop and Downloads;
 `STOCK_CONTACTS_FILE` points at it anywhere else. Reading it twice does not double the book.
 
-The book is not listed as a table: type a company or a person in the find box and that whole
-line appears, every field of it, with "to route" and "delete" beside it.
+The book is not listed as a table. The Contacts card has two boxes, name and company, and asks
+the file itself the way a query asks a table: the lines that answer to both come back with every
+column on them. The book inside the database fills itself from the same file the first time it is
+asked for, so the picker on an order is never empty.
 
 ## Partly delivered
 

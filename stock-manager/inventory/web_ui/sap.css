@@ -435,6 +435,9 @@ input.cell:focus { border-color: var(--accent); outline: none; }
 .contact-line { display: grid; gap: 2px 10px; grid-template-columns: 90px 1fr; margin: 4px 0 0; }
 .contact-line dt { color: var(--ink-soft); font-size: 11px; text-transform: uppercase; }
 .contact-line dd { margin: 0; }
+.stock-word { font-weight: 700; }
+.stock-word.ok { color: var(--good, #1a7f37); }
+.stock-word.short { color: var(--bad, #b42318); }
 .meter { background: var(--panel); border: 1px solid var(--line-soft); display: block; height: 7px; }
 .meter .fill { background: var(--accent); display: block; height: 100%; }
 .meter.over .fill { background: var(--red); }

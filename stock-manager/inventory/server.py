@@ -355,11 +355,23 @@ def data(request: Request):
                   in notes],
         "catalog": [{"supplier": s, "designation": d, "reference": r, "article": a, "seen": n}
                     for s, d, r, a, n in catalog_rows],
-        "lists": db.purchase_orders(config.db_path),
+        "lists": _orders_with_cover(),
         "inventory": db.stock_by_article(config.db_path),
         "backend": config.backend,
         "user": who(request)[0],
     }
+
+
+def _orders_with_cover():
+    """Each order line carries what the delivery notes hold for it, so nobody has to
+    tick a box: the paperwork says whether it is standing there or has to be ordered."""
+    held = stock.by_place(config.db_path)
+    sheets = db.purchase_orders(config.db_path)
+    for sheet in sheets:
+        for line in sheet.get("lines", []):
+            line["have"] = stock.cover(held, line["article"], sheet.get("site"),
+                                       sheet.get("work_item"), besides=sheet.get("id"))
+    return sheets
 
 
 async def _photo_bytes(photo):
@@ -930,8 +942,24 @@ class OrderTerms(BaseModel):
 @app.get("/api/contacts")
 def read_contacts():
     found = contacts.find_file()
-    return {"contacts": contacts.all_of(config.db_path), "incoterms": contacts.terms(),
+    book = contacts.all_of(config.db_path)
+    if not book and found:
+        # Nobody has to press anything: an empty book fills itself from the file.
+        contacts.load_file(config.db_path, found, "file")
+        book = contacts.all_of(config.db_path)
+    return {"contacts": book, "incoterms": contacts.terms(),
             "file": str(found) if found else None}
+
+
+@app.get("/api/contacts/file")
+def search_contact_file(name: str | None = None, company: str | None = None):
+    """Straight from the csv on the disk, not from the book in the database."""
+    try:
+        return contacts.look_up(name, company)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except (OSError, UnicodeDecodeError) as e:
+        raise HTTPException(422, f"That file could not be read ({e}).") from e
 
 
 @app.post("/api/contacts/load")

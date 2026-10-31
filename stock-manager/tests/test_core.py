@@ -2281,6 +2281,53 @@ def test_the_contact_file_on_the_disk_fills_the_book(db_path, tmp_path):
         contacts.read_file(tmp_path / "nothing.csv")
 
 
+def test_the_notes_say_what_is_standing_at_each_place(db_path):
+    from inventory import stock
+
+    db.save_note(db_path, make_note(site="LA GENETTE", work_item="PHASE 3",
+                                    lines=[Line(article="SPIT FIX", quantity=100)]),
+                 "sha-place-1", "", "ALEX")
+    db.save_note(db_path, make_note(site="OSTREA", work_item="PORTAIL",
+                                    lines=[Line(article="SPIT FIX", quantity=40)]),
+                 "sha-place-2", "", "ALEX")
+    mine = db.save_purchase_order(db_path, {"site": "LA GENETTE", "work_item": "PHASE 3",
+                                            "lines": [{"article": "SPIT FIX", "quantity": 60}]},
+                                  "sha-place-3", "", "ALEX")
+    other = db.save_purchase_order(db_path, {"site": "LA GENETTE", "work_item": "PHASE 3",
+                                             "lines": [{"article": "SPIT FIX", "quantity": 25}]},
+                                   "sha-place-4", "", "ALEX")
+
+    held = stock.by_place(db_path)
+    # The order being judged is left out, the other one has already taken its share.
+    assert stock.cover(held, "SPIT FIX", "LA GENETTE", "PHASE 3", besides=mine) == 75
+    assert stock.cover(held, "SPIT FIX", "OSTREA", "PORTAIL", besides=mine) == 40
+    # Nothing was delivered for TASSIGNY and no note left the site blank, so it holds none.
+    assert stock.cover(held, "SPIT FIX", "TASSIGNY", None, besides=mine) == 0
+    assert stock.cover(held, "NOTHING LIKE IT", "LA GENETTE", None) == 0.0
+    assert stock.cover(held, "SPIT FIX", "LA GENETTE", "PHASE 3", besides=other) == 40
+
+
+def test_the_contact_file_answers_a_name_and_a_company(db_path, tmp_path):
+    from inventory import contacts
+
+    paper = tmp_path / "supplier-contacts.csv"
+    paper.write_text("company,person,phone,site\n"
+                     "FOUSSIER,Marc Bernard,05 99 00 00 01,LA GENETTE\n"
+                     "FOUSSIER,Claire Roux,05 99 00 00 02,OSTREA\n"
+                     "WURTH,Marc Dubois,05 99 00 00 03,\n", encoding="utf-8")
+
+    whole = contacts.look_up(path=paper)
+    assert whole["found"] == 3 and whole["columns"][0] == "company"
+
+    assert [row["person"] for row in contacts.look_up(company="foussier", path=paper)["rows"]] \
+        == ["Marc Bernard", "Claire Roux"]
+    assert [row["company"] for row in contacts.look_up(name="marc", path=paper)["rows"]] \
+        == ["FOUSSIER", "WURTH"]
+    assert contacts.look_up(name="marc", company="wurth", path=paper)["found"] == 1
+    assert contacts.look_up(name="nobody", path=paper)["rows"] == []
+    assert contacts.look_up(path=paper, limit=2)["rows"].__len__() == 2
+
+
 def test_the_missing_lines_are_listed_by_note(db_path):
     from inventory import backorders
 
