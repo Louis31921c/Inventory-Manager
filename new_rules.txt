@@ -40,3 +40,8 @@ functionnalities to developp :
 - DONE: Partly delivered = supplier, article, site / work item
 
 - DONE: each truck's own route is drawn under its shape
+
+- DONE: no distances, no load bars, no "its route", no table: the round is drawn under the
+        chosen truck and nowhere else
+
+- DONE: no load and no window column on the destination table

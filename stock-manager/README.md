@@ -240,14 +240,12 @@ PostgreSQL script keyed on `quote_id, line_no`. In the chat: `/quote supplier:fo
 
 ## Route wrangler
 
-Save the yard the truck leaves from, type the day's delivery addresses, and the app orders them
-into the shortest run (nearest neighbour, then 2-opt) and says how many kilometres that is.
+Save the yard the truck leaves from and type the day's delivery addresses. Pick which lorry the
+round is for, press FIND THE SHORTEST RUN, and the app orders the addresses (nearest neighbour,
+then 2-opt) and draws them in order, each with its street, under that lorry's shape. Nowhere
+else: there is no table of the run and no kilometre count on the screen.
 
-Three vans are set up: two Renault Partner (3.3 m3, 650 kg) and an Iveco Daily (19.6 m3,
-1800 kg). A stop carries its load and the hours it can be served; you drop it on a van and the
-card adds the load up against what that van takes, turns the bar red when it will not fit, and
-says so in words. "its route" draws that lorry's own run, in order, under its shape,
-with the distance by road.
+Three lorries are drawn: two Renault Partner and an Iveco Daily.
 
 Addresses are placed on the map by **Nominatim** and measured by road by **OSRM**, both run by
 OpenStreetMap. No account, no key, no cost; one lookup a second. That call is the only thing the

@@ -392,9 +392,7 @@
         <input type="checkbox" id="route-loop" checked>
       </label>
       <span class="grow"></span>
-      <span class="muted" id="route-total"></span>
     </div>
-    <div class="scroll-x"><table id="table-route"></table></div>
   </div>
 </section>
 
@@ -3776,14 +3774,6 @@ function vanDrawing(shape) {
   ]);
 }
 
-function bar(used, most) {
-  const share = most ? Math.min(used / most, 1.4) : 0;
-  const wide = Math.min(share, 1) * 100;
-  const over = share > 1;
-  return el("span", { className: `meter${over ? " over" : ""}` },
-            [el("span", { className: "fill", style: `width:${wide}%` })]);
-}
-
 const vanBoxes = new Map();
 
 function renderVans(data) {
@@ -3799,67 +3789,21 @@ function renderVans(data) {
   select.value = vans.some((van) => String(van.vehicle_id) === chosen) ? chosen : "";
 
   $("vans").replaceChildren(...vans.map((van) => {
-    const mine = stops.filter((stop) => stop.vehicle_id === van.vehicle_id && !stop.done);
-    const head = el("div", { className: "row tight" }, [
-      el("strong", { textContent: van.name }),
-      el("span", { className: "muted", textContent: `${mine.length} stop(s)` }),
-    ]);
-    const load = el("div", { className: "van-load" }, [
-      el("span", { className: "legend", textContent:
-        `${van.load.cubic} / ${showNum(van.cubic)} m3` }),
-      bar(van.load.cubic, van.cubic),
-      el("span", { className: "legend", textContent:
-        `${van.load.kilos} / ${showNum(van.kilos)} kg` }),
-      bar(van.load.kilos, van.kilos),
-    ]);
-    const list = el("ul", { className: "van-stops" }, mine.map((stop) => {
-      const when = stop.open_from && stop.open_to ? `${stop.open_from}–${stop.open_to}` : "";
-      return el("li", {}, [
-        el("strong", { textContent: [stop.label, when].filter(Boolean).join(" · ") }),
-        el("div", { className: "stop-where", textContent: stop.address ?? "" }),
-      ]);
-    }));
-    const box = el("div", { className: "van" }, [vanDrawing(van.shape), head, load, list]);
-    for (const wrong of van.trouble ?? []) {
-      box.append(el("p", { className: "notice warn", textContent: wrong }));
-    }
-    const go = el("button", { className: "mini", type: "button", textContent: "its route" });
     const run = el("div", { className: "van-route" });
     vanBoxes.set(van.vehicle_id, run);
-    go.addEventListener("click", () => vanRoute(van, go, run));
-    box.append(go, run);
-    return box;
+    return el("div", { className: "van" }, [
+      vanDrawing(van.shape),
+      el("div", { className: "row tight" }, [el("strong", { textContent: van.name })]),
+      run,
+    ]);
   }));
 }
 
-function showRun(run, plan, said) {
-  const order = el("ol", { className: "van-run" }, plan.stops.map((stop) => el("li", {}, [
+function showRun(run, plan) {
+  run.replaceChildren(el("ol", { className: "van-run" }, plan.stops.map((stop) => el("li", {}, [
     el("strong", { textContent: stop.label ?? stop.address }),
     el("div", { className: "stop-where", textContent: stop.address ?? "" }),
-  ])));
-  const how = plan.source === "road" ? "measured by road"
-                                     : "straight line, the road service was quiet";
-  run.replaceChildren(order, el("p", { className: "legend",
-                                       textContent: `${plan.km} km over ${plan.legs.length} leg(s), ${how}` }));
-  if (said) run.append(el("p", { className: "legend", textContent: said }));
-  for (const wrong of plan.trouble ?? []) {
-    run.append(el("p", { className: "notice warn", textContent: wrong }));
-  }
-}
-
-async function vanRoute(van, go, run) {
-  // Every address on the list is this lorry's round: picking a lorry says whose
-  // round it is and where it is drawn, nothing is kept back from it.
-  go.disabled = true;
-  run.replaceChildren(el("p", { className: "muted", textContent: "Measuring the roads..." }));
-  try {
-    const plan = await api(`/api/route/plan?round_trip=${$("route-loop").checked}`, postJson({}));
-    showRun(run, plan, "");
-  } catch (e) {
-    run.replaceChildren(el("p", { className: "notice bad", textContent: e.message }));
-  } finally {
-    go.disabled = false;
-  }
+  ]))));
 }
 
 // ---- route wrangler -------------------------------------------------------
@@ -3870,11 +3814,6 @@ function renderStops() {
   renderTable($("table-stops"), [
     { label: "Stop", cell: (row) => document.createTextNode(row.label ?? "—") },
     { label: "Address", cell: (row) => document.createTextNode(short(row.address, 46)) },
-    { label: "Load", numeric: true, cell: (row) => document.createTextNode(
-      [row.cubic ? `${row.cubic} m3` : "", row.kilos ? `${row.kilos} kg` : ""]
-        .filter(Boolean).join(" · ") || "—") },
-    { label: "Window", cell: (row) => document.createTextNode(
-      row.open_from && row.open_to ? `${row.open_from}–${row.open_to}` : "—") },
     { label: "Done", cell: (row) => {
       const box = el("input", { type: "checkbox", checked: row.done });
       box.addEventListener("change", async () => {
@@ -3934,33 +3873,25 @@ $("stop-add").addEventListener("click", () => addPlace("stop"));
 $("stops-clear").addEventListener("click", async () => {
   if (!confirm("Clear every delivery address?")) return;
   await api("/api/route/stops", { method: "DELETE" });
-  $("table-route").replaceChildren();
-  $("route-total").textContent = "";
   await loadRoute();
 });
 
 async function findRoute() {
-  const loop = $("route-loop").checked;
   const van = $("route-van").value;
+  const run = vanBoxes.get(Number(van));
+  if (!run) {
+    notice($("route-note"), "warn", "Pick the lorry the round is for first.");
+    return;
+  }
   $("route-go").disabled = true;
   notice($("route-note"), "", "Measuring the roads...");
+  run.replaceChildren(el("p", { className: "muted", textContent: "Measuring the roads..." }));
   try {
-    const plan = await api(`/api/route/plan?round_trip=${loop}`, postJson({}));
-    const named = vans.find((one) => String(one.vehicle_id) === van);
-    renderTable($("table-route"), [
-      { label: "Order", numeric: true,
-        cell: (row) => document.createTextNode(String(row.position + 1)) },
-      { label: "Stop", cell: (row) => document.createTextNode(row.label ?? "—") },
-      { label: "Address", cell: (row) => document.createTextNode(short(row.address, 52)) },
-    ], plan.stops, "Nothing to drive.");
-    $("route-total").textContent =
-      `${named ? `${named.name}: ` : ""}${plan.km} km over ${plan.legs.length} leg(s), `
-      + (plan.source === "road" ? "measured by road" : "straight-line only, the road service was quiet");
-    // A run asked for one lorry is drawn under that lorry as well.
-    if (van && vanBoxes.has(Number(van))) showRun(vanBoxes.get(Number(van)), plan, "");
-    notice($("route-note"), (plan.trouble ?? []).length ? "warn" : "ok",
-           (plan.trouble ?? []).length ? plan.trouble.join(" ; ") : "Route worked out.");
+    const plan = await api(`/api/route/plan?round_trip=${$("route-loop").checked}`, postJson({}));
+    showRun(run, plan);
+    notice($("route-note"), "ok", "Route worked out.");
   } catch (e) {
+    run.replaceChildren();
     notice($("route-note"), "bad", e.message);
   } finally {
     $("route-go").disabled = false;
