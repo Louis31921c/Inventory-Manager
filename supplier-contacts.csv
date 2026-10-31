@@ -1,0 +1,201 @@
+company,person,phone,email,address,incoterm,site,note
+FOUSSIER,Aurelie Fournier,05 99 00 00 01,contact@foussier.example.com,"80 zone Artisanale, 33450 SAINT-LOUBES",CPT,LA GENETTE,on your delivery notes - check the details
+BATI FORMES,Celine Guerin,05 99 00 00 02,contact@bati-formes.example.com,"153 rue Gutenberg, 33270 FLOIRAC",DDP,LA GENETTE,on your delivery notes - check the details
+METALECO,Sandrine Guerin,05 99 00 00 03,contact@metaleco.example.com,"4 boulevard Technologique, 33270 FLOIRAC",DAP,ARTIGUES,on your delivery notes - check the details
+VACO,Aurelie Dupont,05 99 00 00 04,contact@vaco.example.com,"80 boulevard Technologique, 33520 BRUGES",FCA,1003,on your delivery notes - check the details
+PROLIANS,Karine Fournier,05 99 00 00 05,contact@prolians.example.com,"116 rue des Ateliers, 33270 FLOIRAC",FCA,1003,on your delivery notes - check the details
+BATIFORMES,Sandrine Bonnet,05 99 00 00 06,contact@batiformes.example.com,"112 impasse des Forges, 40000 MONT-DE-MARSAN",DAP,LA GENETTE,on your delivery notes - check the details
+LR ETANCO,Camille Morel,05 99 00 00 07,contact@lr-etanco.example.com,"51 rue des Ateliers, 33130 BEGLES",EXW,ARIANE,on your delivery notes - check the details
+WURTH,Fabien Girard,05 99 00 00 08,contact@wurth.example.com,"72 rue de la Fonderie, 33450 SAINT-LOUBES",FCA,1003,on your delivery notes - check the details
+PLASTEM,Franck Leroy,05 99 00 00 09,contact@plastem.example.com,"152 allee des Metiers, 40000 MONT-DE-MARSAN",FCA,ARIANE,on your delivery notes - check the details
+BOUCHILLOU ALKYA,Franck Bonnet,05 99 00 00 10,contact@bouchillou-alkya.example.com,"8 boulevard Technologique, 33000 BORDEAUX",FCA,1003,on your delivery notes - check the details
+ETANCO,Nathalie Roux,05 99 00 00 11,contact@etanco.example.com,"53 rue des Ateliers, 33450 SAINT-LOUBES",FCA,ARIANE,on your delivery notes - check the details
+SAINT-GOBAIN VITRAGE,Vincent Dupont,05 99 00 00 12,contact@saint-gobain-vitrage.example.com,"107 impasse des Forges, 33520 BRUGES",DAP,OSTREA,on your delivery notes - check the details
+DECOUP'ACIER,Fabien Lefevre,05 99 00 00 13,contact@decoup-acier.example.com,"131 rue de la Fonderie, 33185 LE HAILLAN",DAP,1001 VIES,on your delivery notes - check the details
+EUROTHERM,Thierry Mercier,05 99 00 00 14,contact@eurotherm.example.com,"16 quai de Brazza, 33310 LORMONT",DAP,1003,on your delivery notes - check the details
+TIGER,Celine Chevalier,05 99 00 00 15,contact@tiger.example.com,"172 avenue de l'Industrie, 33610 CESTAS",DAP,,on your delivery notes - check the details
+AKZO NOBEL,Bruno Dupont,05 99 00 00 16,contact@akzo-nobel.example.com,"84 route de Toulouse, 33130 BEGLES",CPT,1003,on your delivery notes - check the details
+ARCELORMITTAL,Fabien Leroy,05 99 00 00 17,contact@arcelormittal.example.com,"100 zone Artisanale, 33700 MERIGNAC",DDP,OSTREA,on your delivery notes - check the details
+DIAMOND,Valerie Garcia,05 99 00 00 18,contact@diamond.example.com,"46 rue Gutenberg, 64100 BAYONNE",FCA,ARIANE,on your delivery notes - check the details
+NOVOFERM,Camille Mercier,05 99 00 00 19,contact@novoferm.example.com,"76 boulevard Technologique, 33270 FLOIRAC",DAP,PULSATION,on your delivery notes - check the details
+SAINT-GOBAIN,Helene Robin,05 99 00 00 20,contact@saint-gobain.example.com,"80 zone Artisanale, 33520 BRUGES",CPT,PULSATION,on your delivery notes - check the details
+ZINQ,Julien Guerin,05 99 00 00 21,contact@zinq.example.com,"150 allee des Metiers, 33450 SAINT-LOUBES",DAP,GENETTE,on your delivery notes - check the details
+DELTECH,Pierre Rousseau,05 99 00 00 22,contact@deltech.example.com,"33 route de Toulouse, 47000 AGEN",DAP,,on your delivery notes - check the details
+JOINT DUAL,Claire Gauthier,05 99 00 00 23,contact@joint-dual.example.com,"152 zone Artisanale, 33270 FLOIRAC",EXW,OSTREA,on your delivery notes - check the details
+LYRECO,Celine Fournier,05 99 00 00 24,contact@lyreco.example.com,"164 rue Gutenberg, 47000 AGEN",FCA,,on your delivery notes - check the details
+MOTTEZ,Nathalie Bernard,05 99 00 00 25,contact@mottez.example.com,"162 quai de Brazza, 40000 MONT-DE-MARSAN",DAP,ILOT N,on your delivery notes - check the details
+PORTALET,Claire Lambert,05 99 00 00 26,contact@portalet.example.com,"72 quai de Brazza, 33450 SAINT-LOUBES",DAP,MATHIEU,on your delivery notes - check the details
+NORD NEGOCE,Aurelie Leroy,05 99 00 00 27,contact@nord-negoce.example.com,"44 boulevard Technologique, 33000 BORDEAUX",DAP,,placeholder - galvanising
+OUTILLAGE PRO,Helene Moreau,05 99 00 00 28,contact@outillage-pro.example.com,"144 avenue de l'Industrie, 33130 BEGLES",DDP,,placeholder - fixings
+VERRE SOUTH WEST,Claire Garcia,05 99 00 00 29,contact@verre-south-west.example.com,"171 route de Toulouse, 33450 SAINT-LOUBES",CPT,,placeholder - hardware
+DIFFUSION TECHNIQUE,Nathalie Gauthier,05 99 00 00 30,contact@diffusion-technique.example.com,"157 rue du Commerce, 33610 CESTAS",DDP,,placeholder - fixings
+OUTILLAGE DEPOT,Karine Masson,05 99 00 00 31,contact@outillage-depot.example.com,"143 avenue du Perigord, 40000 MONT-DE-MARSAN",EXW,,placeholder - insulation
+ZINC SA,Marc Chevalier,05 99 00 00 32,contact@zinc-sa.example.com,"6 rue Gutenberg, 33000 BORDEAUX",DAP,,placeholder - consumables
+LEVAGE SA,Olivier Garcia,05 99 00 00 33,contact@levage-sa.example.com,"40 rue Gutenberg, 64100 BAYONNE",DDP,,placeholder - paint and coating
+BORDEAUX CONCEPT,Franck Lambert,05 99 00 00 34,contact@bordeaux-concept.example.com,"54 impasse des Forges, 33000 BORDEAUX",FCA,,placeholder - hardware
+ZINC SARL,Pierre Fournier,05 99 00 00 35,contact@zinc-sarl.example.com,"36 rue du Commerce, 40000 MONT-DE-MARSAN",DAP,,placeholder - sealant
+MENUISERIE ET FILS,Celine Girard,05 99 00 00 36,contact@menuiserie-et-fils.example.com,"12 avenue de l'Industrie, 33700 MERIGNAC",DAP,,placeholder - glazing
+PEINTURE SA,Celine Blanc,05 99 00 00 37,contact@peinture-sa.example.com,"127 avenue de l'Industrie, 33610 CESTAS",DDP,,placeholder - packaging
+MATERIAUX TECHNIQUE,Camille Bonnet,05 99 00 00 38,contact@materiaux-technique.example.com,"87 impasse des Forges, 33185 LE HAILLAN",CPT,,placeholder - fixings
+EURO CONCEPT,Julien Fournier,05 99 00 00 39,contact@euro-concept.example.com,"40 rue de la Fonderie, 33000 BORDEAUX",DAP,,placeholder - glazing
+OUTILLAGE DISTRIBUTION,Sandrine Lefevre,05 99 00 00 40,contact@outillage-distribution.example.com,"167 allee des Metiers, 33130 BEGLES",EXW,,placeholder - aluminium
+EURO INDUSTRIE,Celine Morel,05 99 00 00 41,contact@euro-industrie.example.com,"144 rue de la Fonderie, 33520 BRUGES",CPT,,placeholder - galvanising
+EURO SA,Nathalie Bernard,05 99 00 00 42,contact@euro-sa.example.com,"141 route de Toulouse, 33185 LE HAILLAN",DAP,,placeholder - paint and coating
+MATERIAUX DEPOT,Camille Blanc,05 99 00 00 43,contact@materiaux-depot.example.com,"57 impasse des Forges, 33000 BORDEAUX",DAP,,placeholder - safety wear
+ALU SOLUTIONS,Fabien Blanc,05 99 00 00 44,contact@alu-solutions.example.com,"26 rue des Ateliers, 33700 MERIGNAC",DDP,,placeholder - consumables
+OCEAN SOUTH WEST,Valerie Chevalier,05 99 00 00 45,contact@ocean-south-west.example.com,"7 avenue du Perigord, 33270 FLOIRAC",CPT,,placeholder - door gear
+QUINCAILLERIE CONCEPT,Claire Robin,05 99 00 00 46,contact@quincaillerie-concept.example.com,"110 rue Gutenberg, 33610 CESTAS",EXW,,placeholder - paint and coating
+GIRONDE SOUTH WEST,Aurelie Morel,05 99 00 00 47,contact@gironde-south-west.example.com,"51 route de Toulouse, 33130 BEGLES",FCA,,placeholder - packaging
+VISSERIE EXPRESS,Karine Legrand,05 99 00 00 48,contact@visserie-express.example.com,"98 zone Artisanale, 33185 LE HAILLAN",DDP,,placeholder - sealant
+LEVAGE ET FILS,Sophie Leroy,05 99 00 00 49,contact@levage-et-fils.example.com,"137 allee des Metiers, 33700 MERIGNAC",DAP,,placeholder - insulation
+METAL FRANCE,Fabien Masson,05 99 00 00 50,contact@metal-france.example.com,"31 boulevard Technologique, 33270 FLOIRAC",DAP,,placeholder - sealant
+PEINTURE PRO,Camille Fournier,05 99 00 00 51,contact@peinture-pro.example.com,"168 boulevard Technologique, 33700 MERIGNAC",CPT,,placeholder - fixings
+AQUITAINE SOUTH WEST,Laurent Legrand,05 99 00 00 52,contact@aquitaine-south-west.example.com,"58 impasse des Forges, 33310 LORMONT",DDP,,placeholder - safety wear
+ALU ET FILS,Julien Girard,05 99 00 00 53,contact@alu-et-fils.example.com,"43 rue de la Fonderie, 33450 SAINT-LOUBES",CPT,,placeholder - safety wear
+ZINC EXPRESS,Stephane Bonnet,05 99 00 00 54,contact@zinc-express.example.com,"76 quai de Brazza, 47000 AGEN",FCA,,placeholder - glazing
+CHANTIER DEPOT,Claire Bernard,05 99 00 00 55,contact@chantier-depot.example.com,"101 quai de Brazza, 47000 AGEN",FCA,,placeholder - sealant
+ATLANTIQUE SOLUTIONS,Laurent Masson,05 99 00 00 56,contact@atlantique-solutions.example.com,"159 route de Toulouse, 33700 MERIGNAC",FCA,,placeholder - consumables
+FIXATION DISTRIBUTION,Camille Bernard,05 99 00 00 57,contact@fixation-distribution.example.com,"2 rue Gutenberg, 47000 AGEN",CPT,,placeholder - consumables
+OUTILLAGE ET FILS,Pierre Mercier,05 99 00 00 58,contact@outillage-et-fils.example.com,"93 rue du Commerce, 33130 BEGLES",DDP,,placeholder - sheet metal
+SUD PRO,Claire Faure,05 99 00 00 59,contact@sud-pro.example.com,"82 rue des Ateliers, 40000 MONT-DE-MARSAN",CPT,,placeholder - fixings
+MENUISERIE EXPRESS,Aurelie Lambert,05 99 00 00 60,contact@menuiserie-express.example.com,"66 zone Artisanale, 64100 BAYONNE",DAP,,placeholder - safety wear
+FERRO SERVICES,Camille Morel,05 99 00 00 61,contact@ferro-services.example.com,"115 route de Toulouse, 33700 MERIGNAC",FCA,,placeholder - galvanising
+FIXATION SA,Claire Dubois,05 99 00 00 62,contact@fixation-sa.example.com,"6 boulevard Technologique, 33610 CESTAS",DDP,,placeholder - consumables
+PEINTURE EXPRESS,Pierre Mercier,05 99 00 00 63,contact@peinture-express.example.com,"123 avenue de l'Industrie, 33130 BEGLES",DAP,,placeholder - glazing
+METAL INDUSTRIE,Nicolas Lefevre,05 99 00 00 64,contact@metal-industrie.example.com,"42 avenue de l'Industrie, 64100 BAYONNE",DAP,,placeholder - tooling
+GARONNE NEGOCE,Karine Lefevre,05 99 00 00 65,contact@garonne-negoce.example.com,"85 zone Artisanale, 64100 BAYONNE",DDP,,placeholder - sealant
+PEINTURE DISTRIBUTION,Sophie Faure,05 99 00 00 66,contact@peinture-distribution.example.com,"118 quai de Brazza, 33700 MERIGNAC",DDP,,placeholder - consumables
+ZINC SERVICES,Sophie Bernard,05 99 00 00 67,contact@zinc-services.example.com,"159 rue de la Fonderie, 33700 MERIGNAC",DAP,,placeholder - sheet metal
+FIXATION SOUTH WEST,Karine Legrand,05 99 00 00 68,contact@fixation-south-west.example.com,"101 rue de la Fonderie, 64100 BAYONNE",CPT,,placeholder - aluminium
+OUTILLAGE SOLUTIONS,Isabelle Moreau,05 99 00 00 69,contact@outillage-solutions.example.com,"131 rue Gutenberg, 33270 FLOIRAC",DAP,,placeholder - sheet metal
+VISSERIE DISTRIBUTION,Bruno Faure,05 99 00 00 70,contact@visserie-distribution.example.com,"107 avenue du Perigord, 40000 MONT-DE-MARSAN",FCA,,placeholder - sealant
+ATLANTIQUE NEGOCE,Celine Rousseau,05 99 00 00 71,contact@atlantique-negoce.example.com,"173 avenue du Perigord, 33185 LE HAILLAN",DAP,,placeholder - galvanising
+ATLANTIQUE DISTRIBUTION,Bruno Garcia,05 99 00 00 72,contact@atlantique-distribution.example.com,"170 rue de la Fonderie, 40000 MONT-DE-MARSAN",DAP,,placeholder - consumables
+TOLE ET FILS,Elodie Mercier,05 99 00 00 73,contact@tole-et-fils.example.com,"133 avenue du Perigord, 33270 FLOIRAC",EXW,,placeholder - glazing
+ACIER SERVICES,Celine Roux,05 99 00 00 74,contact@acier-services.example.com,"140 rue de la Fonderie, 33000 BORDEAUX",DAP,,placeholder - fixings
+GIRONDE EXPRESS,Laurent Mercier,05 99 00 00 75,contact@gironde-express.example.com,"3 rue des Ateliers, 40000 MONT-DE-MARSAN",DAP,,placeholder - hardware
+FIXATION PRO,Fabien Lefevre,05 99 00 00 76,contact@fixation-pro.example.com,"40 route de Toulouse, 33270 FLOIRAC",EXW,,placeholder - packaging
+VISSERIE PRO,Aurelie Bonnet,05 99 00 00 77,contact@visserie-pro.example.com,"51 rue des Ateliers, 33000 BORDEAUX",FCA,,placeholder - sealant
+PEINTURE CONCEPT,Nathalie Mercier,05 99 00 00 78,contact@peinture-concept.example.com,"49 avenue du Perigord, 33130 BEGLES",EXW,,placeholder - sealant
+GARONNE TECHNIQUE,Laurent Lefevre,05 99 00 00 79,contact@garonne-technique.example.com,"24 allee des Metiers, 33185 LE HAILLAN",DAP,,placeholder - steel
+OCEAN TECHNIQUE,Valerie Perrin,05 99 00 00 80,contact@ocean-technique.example.com,"44 rue des Ateliers, 33185 LE HAILLAN",FCA,,placeholder - sealant
+NORD SA,Isabelle Perrin,05 99 00 00 81,contact@nord-sa.example.com,"74 zone Artisanale, 33520 BRUGES",DAP,,placeholder - galvanising
+INOX FRANCE,Elodie Robin,05 99 00 00 82,contact@inox-france.example.com,"134 rue des Ateliers, 33185 LE HAILLAN",FCA,,placeholder - aluminium
+MATERIAUX DISTRIBUTION,Franck Rousseau,05 99 00 00 83,contact@materiaux-distribution.example.com,"34 rue des Ateliers, 64100 BAYONNE",EXW,,placeholder - aluminium
+ACIER TECHNIQUE,Camille Bonnet,05 99 00 00 84,contact@acier-technique.example.com,"111 rue du Commerce, 47000 AGEN",DAP,,placeholder - hardware
+GARONNE INDUSTRIE,Isabelle Roux,05 99 00 00 85,contact@garonne-industrie.example.com,"106 rue des Ateliers, 33520 BRUGES",DDP,,placeholder - sealant
+SUD FRANCE,Aurelie Mercier,05 99 00 00 86,contact@sud-france.example.com,"36 rue de la Fonderie, 33310 LORMONT",CPT,,placeholder - safety wear
+PEINTURE SOUTH WEST,Sandrine Blanc,05 99 00 00 87,contact@peinture-south-west.example.com,"73 boulevard Technologique, 64100 BAYONNE",DAP,,placeholder - paint and coating
+COMPTOIR SERVICES,Camille Blanc,05 99 00 00 88,contact@comptoir-services.example.com,"106 rue du Commerce, 33130 BEGLES",DAP,,placeholder - packaging
+OUTILLAGE TECHNIQUE,Sandrine Girard,05 99 00 00 89,contact@outillage-technique.example.com,"25 rue Gutenberg, 33270 FLOIRAC",DAP,,placeholder - consumables
+QUINCAILLERIE ET FILS,Thierry Lefevre,05 99 00 00 90,contact@quincaillerie-et-fils.example.com,"150 rue Gutenberg, 33700 MERIGNAC",DAP,,placeholder - consumables
+VISSERIE DEPOT,Celine Fournier,05 99 00 00 91,contact@visserie-depot.example.com,"62 avenue du Perigord, 47000 AGEN",FCA,,placeholder - hardware
+VERRE SOLUTIONS,Camille Moreau,05 99 00 00 92,contact@verre-solutions.example.com,"63 avenue du Perigord, 47000 AGEN",DAP,,placeholder - paint and coating
+VISSERIE NEGOCE,Fabien Dupont,05 99 00 00 93,contact@visserie-negoce.example.com,"150 route de Toulouse, 33130 BEGLES",CPT,,placeholder - insulation
+LEVAGE TECHNIQUE,Vincent Moreau,05 99 00 00 94,contact@levage-technique.example.com,"44 rue des Ateliers, 33130 BEGLES",FCA,,placeholder - safety wear
+QUINCAILLERIE SARL,Claire Robin,05 99 00 00 95,contact@quincaillerie-sarl.example.com,"117 boulevard Technologique, 33520 BRUGES",DDP,,placeholder - steel
+MATERIAUX SERVICES,Franck Lefevre,05 99 00 00 96,contact@materiaux-services.example.com,"98 avenue de l'Industrie, 33610 CESTAS",DAP,,placeholder - insulation
+PROFIL DISTRIBUTION,Sandrine Guerin,05 99 00 00 97,contact@profil-distribution.example.com,"5 zone Artisanale, 47000 AGEN",EXW,,placeholder - insulation
+LEVAGE SOLUTIONS,Bruno Lambert,05 99 00 00 98,contact@levage-solutions.example.com,"32 rue du Commerce, 33610 CESTAS",DAP,,placeholder - paint and coating
+EURO TECHNIQUE,Sophie Roux,05 99 00 00 99,contact@euro-technique.example.com,"144 boulevard Technologique, 33520 BRUGES",DAP,,placeholder - hardware
+DIFFUSION INDUSTRIE,Olivier Perrin,05 99 00 01 00,contact@diffusion-industrie.example.com,"23 rue des Ateliers, 33310 LORMONT",EXW,,placeholder - hardware
+MENUISERIE INDUSTRIE,Marc Leroy,05 99 00 01 01,contact@menuiserie-industrie.example.com,"44 route de Toulouse, 40000 MONT-DE-MARSAN",DAP,,placeholder - packaging
+SUD TECHNIQUE,Olivier Bernard,05 99 00 01 02,contact@sud-technique.example.com,"40 route de Toulouse, 33610 CESTAS",CPT,,placeholder - aluminium
+GARONNE SERVICES,Aurelie Dupont,05 99 00 01 03,contact@garonne-services.example.com,"9 avenue du Perigord, 33520 BRUGES",EXW,,placeholder - consumables
+SUD INDUSTRIE,Pierre Morel,05 99 00 01 04,contact@sud-industrie.example.com,"56 avenue du Perigord, 33185 LE HAILLAN",DAP,,placeholder - paint and coating
+FERRO FRANCE,Nicolas Lambert,05 99 00 01 05,contact@ferro-france.example.com,"69 allee des Metiers, 33130 BEGLES",DAP,,placeholder - door gear
+FERRO NEGOCE,Valerie Faure,05 99 00 01 06,contact@ferro-negoce.example.com,"39 avenue du Perigord, 33520 BRUGES",DAP,,placeholder - galvanising
+AQUITAINE NEGOCE,Olivier Bernard,05 99 00 01 07,contact@aquitaine-negoce.example.com,"86 avenue du Perigord, 33130 BEGLES",EXW,,placeholder - door gear
+FERRO SARL,Elodie Bernard,05 99 00 01 08,contact@ferro-sarl.example.com,"147 quai de Brazza, 33310 LORMONT",DAP,,placeholder - aluminium
+EURO DEPOT,Olivier Mercier,05 99 00 01 09,contact@euro-depot.example.com,"138 rue du Commerce, 33450 SAINT-LOUBES",DAP,,placeholder - aluminium
+OCEAN NEGOCE,Stephane Dupont,05 99 00 01 10,contact@ocean-negoce.example.com,"67 avenue du Perigord, 47000 AGEN",CPT,,placeholder - aluminium
+SUD SOLUTIONS,Nathalie Robin,05 99 00 01 11,contact@sud-solutions.example.com,"105 quai de Brazza, 64100 BAYONNE",FCA,,placeholder - tooling
+GIRONDE INDUSTRIE,Julien Lefevre,05 99 00 01 12,contact@gironde-industrie.example.com,"63 rue de la Fonderie, 33185 LE HAILLAN",EXW,,placeholder - hardware
+LEVAGE FRANCE,Karine Mercier,05 99 00 01 13,contact@levage-france.example.com,"83 rue Gutenberg, 47000 AGEN",DAP,,placeholder - packaging
+FERRO DEPOT,Bruno Blanc,05 99 00 01 14,contact@ferro-depot.example.com,"157 avenue de l'Industrie, 33450 SAINT-LOUBES",DDP,,placeholder - safety wear
+OUTILLAGE SOUTH WEST,Laurent Bonnet,05 99 00 01 15,contact@outillage-south-west.example.com,"111 rue Gutenberg, 33700 MERIGNAC",DDP,,placeholder - paint and coating
+FIXATION FRANCE,Aurelie Moreau,05 99 00 01 16,contact@fixation-france.example.com,"134 impasse des Forges, 33310 LORMONT",DAP,,placeholder - fixings
+VISSERIE SARL,Valerie Legrand,05 99 00 01 17,contact@visserie-sarl.example.com,"128 rue de la Fonderie, 47000 AGEN",CPT,,placeholder - packaging
+ALU SOUTH WEST,Isabelle Lefevre,05 99 00 01 18,contact@alu-south-west.example.com,"129 rue de la Fonderie, 33270 FLOIRAC",EXW,,placeholder - fixings
+ZINC SOLUTIONS,Camille Girard,05 99 00 01 19,contact@zinc-solutions.example.com,"125 route de Toulouse, 33700 MERIGNAC",DAP,,placeholder - hardware
+ACIER PRO,Aurelie Garcia,05 99 00 01 20,contact@acier-pro.example.com,"41 boulevard Technologique, 33700 MERIGNAC",CPT,,placeholder - paint and coating
+TOLE EXPRESS,Helene Guerin,05 99 00 01 21,contact@tole-express.example.com,"81 avenue du Perigord, 33610 CESTAS",DAP,,placeholder - galvanising
+ATLANTIQUE SARL,Julien Lefevre,05 99 00 01 22,contact@atlantique-sarl.example.com,"127 zone Artisanale, 33185 LE HAILLAN",FCA,,placeholder - fixings
+AQUITAINE PRO,Vincent Lambert,05 99 00 01 23,contact@aquitaine-pro.example.com,"64 rue des Ateliers, 40000 MONT-DE-MARSAN",DDP,,placeholder - safety wear
+CHANTIER SARL,Camille Masson,05 99 00 01 24,contact@chantier-sarl.example.com,"89 zone Artisanale, 33450 SAINT-LOUBES",DDP,,placeholder - paint and coating
+LEVAGE CONCEPT,Thierry Bernard,05 99 00 01 25,contact@levage-concept.example.com,"39 rue des Ateliers, 33520 BRUGES",CPT,,placeholder - sealant
+SUD SERVICES,Marc Mercier,05 99 00 01 26,contact@sud-services.example.com,"140 quai de Brazza, 33185 LE HAILLAN",EXW,,placeholder - sheet metal
+NORD INDUSTRIE,Stephane Morel,05 99 00 01 27,contact@nord-industrie.example.com,"47 avenue du Perigord, 47000 AGEN",FCA,,placeholder - glazing
+MENUISERIE CONCEPT,Helene Rousseau,05 99 00 01 28,contact@menuiserie-concept.example.com,"145 allee des Metiers, 33450 SAINT-LOUBES",CPT,,placeholder - insulation
+FIXATION SERVICES,Sandrine Perrin,05 99 00 01 29,contact@fixation-services.example.com,"69 avenue du Perigord, 33270 FLOIRAC",FCA,,placeholder - glazing
+GIRONDE SERVICES,Celine Bonnet,05 99 00 01 30,contact@gironde-services.example.com,"160 rue Gutenberg, 33310 LORMONT",CPT,,placeholder - aluminium
+LEVAGE DISTRIBUTION,Isabelle Lambert,05 99 00 01 31,contact@levage-distribution.example.com,"50 allee des Metiers, 33520 BRUGES",EXW,,placeholder - sealant
+BATI TECHNIQUE,Julien Bonnet,05 99 00 01 32,contact@bati-technique.example.com,"38 rue du Commerce, 33130 BEGLES",DDP,,placeholder - steel
+ALU FRANCE,Claire Gauthier,05 99 00 01 33,contact@alu-france.example.com,"37 rue Gutenberg, 40000 MONT-DE-MARSAN",DAP,,placeholder - consumables
+ACIER SARL,Vincent Perrin,05 99 00 01 34,contact@acier-sarl.example.com,"86 boulevard Technologique, 33610 CESTAS",CPT,,placeholder - sealant
+TOLE SA,Helene Rousseau,05 99 00 01 35,contact@tole-sa.example.com,"148 rue du Commerce, 33000 BORDEAUX",DAP,,placeholder - door gear
+COMPTOIR CONCEPT,Nicolas Leroy,05 99 00 01 36,contact@comptoir-concept.example.com,"17 rue Gutenberg, 33520 BRUGES",DDP,,placeholder - paint and coating
+AQUITAINE ET FILS,Sophie Legrand,05 99 00 01 37,contact@aquitaine-et-fils.example.com,"119 impasse des Forges, 40000 MONT-DE-MARSAN",DAP,,placeholder - safety wear
+TOLE DEPOT,Sophie Gauthier,05 99 00 01 38,contact@tole-depot.example.com,"102 quai de Brazza, 33270 FLOIRAC",CPT,,placeholder - fixings
+QUINCAILLERIE TECHNIQUE,Stephane Robin,05 99 00 01 39,contact@quincaillerie-technique.example.com,"121 rue des Ateliers, 33000 BORDEAUX",CPT,,placeholder - packaging
+ACIER FRANCE,Nathalie Girard,05 99 00 01 40,contact@acier-france.example.com,"68 rue des Ateliers, 33130 BEGLES",DAP,,placeholder - packaging
+TOLE SERVICES,Isabelle Faure,05 99 00 01 41,contact@tole-services.example.com,"61 impasse des Forges, 40000 MONT-DE-MARSAN",CPT,,placeholder - packaging
+MATERIAUX SOUTH WEST,Celine Mercier,05 99 00 01 42,contact@materiaux-south-west.example.com,"67 rue du Commerce, 33000 BORDEAUX",FCA,,placeholder - sealant
+EURO SARL,Karine Garcia,05 99 00 01 43,contact@euro-sarl.example.com,"37 boulevard Technologique, 33450 SAINT-LOUBES",DAP,,placeholder - consumables
+FERRO ET FILS,Franck Dupont,05 99 00 01 44,contact@ferro-et-fils.example.com,"58 avenue de l'Industrie, 47000 AGEN",EXW,,placeholder - paint and coating
+MENUISERIE NEGOCE,Stephane Dupont,05 99 00 01 45,contact@menuiserie-negoce.example.com,"82 quai de Brazza, 47000 AGEN",EXW,,placeholder - packaging
+DIFFUSION PRO,Nathalie Dupont,05 99 00 01 46,contact@diffusion-pro.example.com,"179 impasse des Forges, 33310 LORMONT",CPT,,placeholder - aluminium
+MENUISERIE PRO,Fabien Bonnet,05 99 00 01 47,contact@menuiserie-pro.example.com,"56 impasse des Forges, 64100 BAYONNE",DAP,,placeholder - door gear
+VERRE NEGOCE,Fabien Morel,05 99 00 01 48,contact@verre-negoce.example.com,"89 impasse des Forges, 33000 BORDEAUX",EXW,,placeholder - insulation
+DIFFUSION DISTRIBUTION,Elodie Lefevre,05 99 00 01 49,contact@diffusion-distribution.example.com,"161 avenue du Perigord, 40000 MONT-DE-MARSAN",DDP,,placeholder - glazing
+BORDEAUX INDUSTRIE,Valerie Garcia,05 99 00 01 50,contact@bordeaux-industrie.example.com,"68 zone Artisanale, 33520 BRUGES",CPT,,placeholder - door gear
+BATI FRANCE,Isabelle Gauthier,05 99 00 01 51,contact@bati-france.example.com,"147 zone Artisanale, 33520 BRUGES",CPT,,placeholder - paint and coating
+MATERIAUX SA,Marc Fournier,05 99 00 01 52,contact@materiaux-sa.example.com,"126 rue des Ateliers, 33130 BEGLES",CPT,,placeholder - sealant
+INOX TECHNIQUE,Julien Bernard,05 99 00 01 53,contact@inox-technique.example.com,"64 zone Artisanale, 47000 AGEN",DAP,,placeholder - door gear
+FERRO CONCEPT,Isabelle Lefevre,05 99 00 01 54,contact@ferro-concept.example.com,"113 avenue de l'Industrie, 33700 MERIGNAC",FCA,,placeholder - paint and coating
+QUINCAILLERIE PRO,Claire Bernard,05 99 00 01 55,contact@quincaillerie-pro.example.com,"146 rue de la Fonderie, 33450 SAINT-LOUBES",EXW,,placeholder - aluminium
+ACIER DISTRIBUTION,Stephane Lefevre,05 99 00 01 56,contact@acier-distribution.example.com,"26 allee des Metiers, 47000 AGEN",CPT,,placeholder - sealant
+BATI ET FILS,Julien Lefevre,05 99 00 01 57,contact@bati-et-fils.example.com,"50 rue des Ateliers, 33185 LE HAILLAN",CPT,,placeholder - hardware
+BORDEAUX ET FILS,Vincent Dupont,05 99 00 01 58,contact@bordeaux-et-fils.example.com,"179 boulevard Technologique, 40000 MONT-DE-MARSAN",DAP,,placeholder - steel
+QUINCAILLERIE EXPRESS,Helene Garcia,05 99 00 01 59,contact@quincaillerie-express.example.com,"167 rue Gutenberg, 33310 LORMONT",CPT,,placeholder - galvanising
+COMPTOIR EXPRESS,Nathalie Perrin,05 99 00 01 60,contact@comptoir-express.example.com,"4 rue du Commerce, 33130 BEGLES",DAP,,placeholder - consumables
+VERRE SERVICES,Olivier Legrand,05 99 00 01 61,contact@verre-services.example.com,"59 allee des Metiers, 64100 BAYONNE",DAP,,placeholder - insulation
+OCEAN INDUSTRIE,Elodie Legrand,05 99 00 01 62,contact@ocean-industrie.example.com,"73 boulevard Technologique, 47000 AGEN",FCA,,placeholder - safety wear
+NORD EXPRESS,Sophie Dupont,05 99 00 01 63,contact@nord-express.example.com,"168 rue Gutenberg, 33700 MERIGNAC",DAP,,placeholder - paint and coating
+COMPTOIR FRANCE,Aurelie Legrand,05 99 00 01 64,contact@comptoir-france.example.com,"8 rue du Commerce, 33520 BRUGES",DAP,,placeholder - galvanising
+ALU EXPRESS,Isabelle Morel,05 99 00 01 65,contact@alu-express.example.com,"169 rue du Commerce, 47000 AGEN",DAP,,placeholder - fixings
+ACIER ET FILS,Sandrine Bernard,05 99 00 01 66,contact@acier-et-fils.example.com,"90 rue Gutenberg, 33610 CESTAS",DAP,,placeholder - tooling
+VERRE PRO,Karine Masson,05 99 00 01 67,contact@verre-pro.example.com,"169 avenue du Perigord, 33520 BRUGES",CPT,,placeholder - door gear
+OUTILLAGE INDUSTRIE,Vincent Garcia,05 99 00 01 68,contact@outillage-industrie.example.com,"128 rue des Ateliers, 33185 LE HAILLAN",DDP,,placeholder - galvanising
+FERRO PRO,Marc Mercier,05 99 00 01 69,contact@ferro-pro.example.com,"13 avenue de l'Industrie, 33130 BEGLES",EXW,,placeholder - hardware
+TOLE INDUSTRIE,Celine Masson,05 99 00 01 70,contact@tole-industrie.example.com,"180 boulevard Technologique, 33000 BORDEAUX",EXW,,placeholder - tooling
+TOLE NEGOCE,Claire Lambert,05 99 00 01 71,contact@tole-negoce.example.com,"132 allee des Metiers, 33000 BORDEAUX",DDP,,placeholder - packaging
+GARONNE SARL,Julien Roux,05 99 00 01 72,contact@garonne-sarl.example.com,"60 rue Gutenberg, 33700 MERIGNAC",DAP,,placeholder - glazing
+ZINC FRANCE,Marc Moreau,05 99 00 01 73,contact@zinc-france.example.com,"101 rue des Ateliers, 33000 BORDEAUX",FCA,,placeholder - steel
+ATLANTIQUE SOUTH WEST,Julien Faure,05 99 00 01 74,contact@atlantique-south-west.example.com,"83 impasse des Forges, 40000 MONT-DE-MARSAN",EXW,,placeholder - aluminium
+CHANTIER FRANCE,Marc Legrand,05 99 00 01 75,contact@chantier-france.example.com,"28 rue du Commerce, 33700 MERIGNAC",DAP,,placeholder - galvanising
+CHANTIER SOUTH WEST,Thierry Gauthier,05 99 00 01 76,contact@chantier-south-west.example.com,"166 avenue du Perigord, 33130 BEGLES",CPT,,placeholder - sheet metal
+ZINC SOUTH WEST,Helene Leroy,05 99 00 01 77,contact@zinc-south-west.example.com,"19 avenue de l'Industrie, 33310 LORMONT",CPT,,placeholder - paint and coating
+EURO EXPRESS,Nicolas Perrin,05 99 00 01 78,contact@euro-express.example.com,"31 boulevard Technologique, 47000 AGEN",DAP,,placeholder - glazing
+QUINCAILLERIE INDUSTRIE,Isabelle Girard,05 99 00 01 79,contact@quincaillerie-industrie.example.com,"44 impasse des Forges, 33185 LE HAILLAN",DAP,,placeholder - paint and coating
+LEVAGE EXPRESS,Thierry Perrin,05 99 00 01 80,contact@levage-express.example.com,"112 route de Toulouse, 33185 LE HAILLAN",DAP,,placeholder - hardware
+COMPTOIR SARL,Nicolas Perrin,05 99 00 01 81,contact@comptoir-sarl.example.com,"23 boulevard Technologique, 33185 LE HAILLAN",FCA,,placeholder - tooling
+PEINTURE SOLUTIONS,Fabien Blanc,05 99 00 01 82,contact@peinture-solutions.example.com,"103 rue Gutenberg, 33185 LE HAILLAN",DAP,,placeholder - sealant
+GARONNE FRANCE,Stephane Leroy,05 99 00 01 83,contact@garonne-france.example.com,"69 rue du Commerce, 33520 BRUGES",EXW,,placeholder - door gear
+BORDEAUX EXPRESS,Elodie Bonnet,05 99 00 01 84,contact@bordeaux-express.example.com,"15 rue de la Fonderie, 33610 CESTAS",DAP,,placeholder - tooling
+ALU DISTRIBUTION,Nathalie Robin,05 99 00 01 85,contact@alu-distribution.example.com,"88 avenue du Perigord, 47000 AGEN",DAP,,placeholder - packaging
+BORDEAUX NEGOCE,Laurent Faure,05 99 00 01 86,contact@bordeaux-negoce.example.com,"9 rue de la Fonderie, 40000 MONT-DE-MARSAN",DDP,,placeholder - glazing
+GARONNE ET FILS,Julien Gauthier,05 99 00 01 87,contact@garonne-et-fils.example.com,"79 zone Artisanale, 33610 CESTAS",DAP,,placeholder - insulation
+BORDEAUX SOUTH WEST,Isabelle Bernard,05 99 00 01 88,contact@bordeaux-south-west.example.com,"114 boulevard Technologique, 33520 BRUGES",DDP,,placeholder - sheet metal
+GIRONDE NEGOCE,Stephane Perrin,05 99 00 01 89,contact@gironde-negoce.example.com,"123 route de Toulouse, 33450 SAINT-LOUBES",FCA,,placeholder - sheet metal
+AQUITAINE FRANCE,Claire Faure,05 99 00 01 90,contact@aquitaine-france.example.com,"131 rue Gutenberg, 40000 MONT-DE-MARSAN",DAP,,placeholder - packaging
+BATI SA,Elodie Lambert,05 99 00 01 91,contact@bati-sa.example.com,"130 allee des Metiers, 33520 BRUGES",DAP,,placeholder - sealant
+GIRONDE DEPOT,Camille Gauthier,05 99 00 01 92,contact@gironde-depot.example.com,"162 rue des Ateliers, 33185 LE HAILLAN",DAP,,placeholder - sheet metal
+BATI DEPOT,Pierre Fournier,05 99 00 01 93,contact@bati-depot.example.com,"145 rue des Ateliers, 64100 BAYONNE",DAP,,placeholder - hardware
+LEVAGE SARL,Elodie Robin,05 99 00 01 94,contact@levage-sarl.example.com,"147 boulevard Technologique, 33185 LE HAILLAN",FCA,,placeholder - insulation
+MENUISERIE DISTRIBUTION,Valerie Gauthier,05 99 00 01 95,contact@menuiserie-distribution.example.com,"101 rue du Commerce, 64100 BAYONNE",DAP,,placeholder - galvanising
+TOLE SOUTH WEST,Franck Rousseau,05 99 00 01 96,contact@tole-south-west.example.com,"123 allee des Metiers, 33270 FLOIRAC",DAP,,placeholder - aluminium
+GARONNE DISTRIBUTION,Aurelie Faure,05 99 00 01 97,contact@garonne-distribution.example.com,"159 allee des Metiers, 33310 LORMONT",DAP,,placeholder - paint and coating
+MENUISERIE TECHNIQUE,Celine Girard,05 99 00 01 98,contact@menuiserie-technique.example.com,"64 rue Gutenberg, 33610 CESTAS",DAP,,placeholder - steel
+NORD DISTRIBUTION,Aurelie Robin,05 99 00 01 99,contact@nord-distribution.example.com,"149 route de Toulouse, 33610 CESTAS",FCA,,placeholder - paint and coating
+TOLE TECHNIQUE,Elodie Morel,05 99 00 02 00,contact@tole-technique.example.com,"95 boulevard Technologique, 33270 FLOIRAC",EXW,,placeholder - insulation

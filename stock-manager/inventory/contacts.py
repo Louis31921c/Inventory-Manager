@@ -1,5 +1,9 @@
 """Who an outbound order goes to: the company, the person to ring, and the terms."""
-from . import db
+import csv
+import os
+from pathlib import Path
+
+from . import config, db
 from .models import normalize_name
 
 INCOTERMS = {
@@ -116,3 +120,89 @@ def put_on_order(db_path, list_id, contact_id=None, incoterm=None, ship_by=None)
     db.write(db_path, f"UPDATE purchase_orders SET {', '.join(sets)} WHERE list_id = ?",
              args + [list_id])
     return True
+
+
+# ---- the contact file on the disk -----------------------------------------
+
+FILE_NAME = "supplier-contacts.csv"
+COLUMNS = {"company": "company", "societe": "company", "name": "company",
+           "person": "person", "contact": "person", "nom": "person",
+           "phone": "phone", "tel": "phone", "telephone": "phone",
+           "email": "email", "mail": "email", "e-mail": "email",
+           "address": "address", "adresse": "address",
+           "incoterm": "incoterm", "terms": "incoterm",
+           "site": "site", "chantier": "site",
+           "note": "note", "remarque": "note"}
+
+
+def candidates():
+    """Where a supplier contact file is looked for, best place first."""
+    told = os.environ.get("STOCK_CONTACTS_FILE")
+    here = Path(__file__).resolve().parent.parent.parent
+    places = [Path(told)] if told else []
+    places += [here / FILE_NAME, here.parent / FILE_NAME,
+               config.default_data_dir() / FILE_NAME]
+    home = Path.home()
+    for folder in ("Documents", "Desktop", "Downloads"):
+        places.append(home / folder / FILE_NAME)
+    # Installed in a venv the package sits far from the file, so look a little way down
+    # the usual folders too rather than make somebody type a path.
+    for folder in ("Documents", "Desktop"):
+        for depth in ("*", "*/*"):
+            places += sorted((home / folder).glob(f"{depth}/{FILE_NAME}"))
+    return places
+
+
+def find_file():
+    for place in candidates():
+        if place.is_file():
+            return place
+    return None
+
+
+def read_file(path=None):
+    """The file as rows this module understands. Unknown columns are left alone."""
+    path = Path(path) if path else find_file()
+    if path is None:
+        raise FileNotFoundError(f"No {FILE_NAME} found. Looked in: "
+                                + ", ".join(str(one.parent) for one in candidates()))
+    with open(path, newline="", encoding="utf-8-sig") as handle:
+        sample = handle.read(4096)
+        handle.seek(0)
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+        except csv.Error:
+            dialect = csv.excel
+        rows = []
+        for raw in csv.DictReader(handle, dialect=dialect):
+            row = {}
+            for key, value in raw.items():
+                named = COLUMNS.get(str(key or "").strip().lower())
+                if named and value:
+                    row[named] = value.strip()
+            if row.get("company"):
+                rows.append(row)
+    return path, rows
+
+
+def load_file(db_path, path=None, user=None):
+    """Put the file in the contact book: new companies added, known ones updated."""
+    where, rows = read_file(path)
+    known = {(one["company"], one["person"] or ""): one for one in all_of(db_path)}
+    added = changed = same = 0
+    for row in rows:
+        shaped = _shape(row)
+        key = (shaped["company"], shaped["person"] or "")
+        held = known.get(key)
+        if held is None:
+            contact_id = save(db_path, row, user=user)
+            known[key] = one(db_path, contact_id)
+            added += 1
+        elif all(shaped[name] == held.get(name) for name in row if name in FIELDS):
+            same += 1                            # nothing on the line has moved
+        else:
+            update(db_path, held["contact_id"], row)
+            known[key] = one(db_path, held["contact_id"])
+            changed += 1
+    return {"file": str(where), "read": len(rows), "added": added, "updated": changed,
+            "same": same}

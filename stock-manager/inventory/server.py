@@ -929,7 +929,23 @@ class OrderTerms(BaseModel):
 
 @app.get("/api/contacts")
 def read_contacts():
-    return {"contacts": contacts.all_of(config.db_path), "incoterms": contacts.terms()}
+    found = contacts.find_file()
+    return {"contacts": contacts.all_of(config.db_path), "incoterms": contacts.terms(),
+            "file": str(found) if found else None}
+
+
+@app.post("/api/contacts/load")
+def load_contact_file(request: Request, path: str | None = None):
+    """Read the supplier contact file on the disk into the contact book."""
+    try:
+        done = contacts.load_file(config.db_path, path, who(request)[0])
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except (OSError, UnicodeDecodeError) as e:
+        raise HTTPException(422, f"That file could not be read ({e}).") from e
+    event(request, "contact.load", done["file"],
+          f"{done['added']} added, {done['updated']} updated")
+    return {**done, "contacts": contacts.all_of(config.db_path)}
 
 
 @app.post("/api/contacts")

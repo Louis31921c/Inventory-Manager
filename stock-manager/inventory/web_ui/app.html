@@ -277,6 +277,13 @@
         <button class="action" id="contact-save">SAVE</button>
       </label>
     </div>
+    <div class="row">
+      <label class="field grow"><span>find</span><input id="contact-find" placeholder="company, person, site"></label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="contact-load">LOAD FILE</button>
+      </label>
+    </div>
+    <p class="muted" id="contact-file"></p>
     <div id="contact-note"></div>
     <div class="scroll-x short-box"><table id="table-contacts"></table></div>
   </div>
@@ -3589,7 +3596,15 @@ function renderContacts() {
       }));
       return box;
     } },
-  ], contactRows, "No contact yet.");
+  ], contactsShown(), "No contact yet.");
+}
+
+function contactsShown() {
+  const wanted = ($("contact-find")?.value ?? "").trim().toLowerCase();
+  if (!wanted) return contactRows;
+  return contactRows.filter((row) =>
+    [row.company, row.person, row.site, row.email, row.address]
+      .filter(Boolean).join(" ").toLowerCase().includes(wanted));
 }
 
 function contactChoices(select, chosen) {
@@ -3615,11 +3630,34 @@ async function loadContacts() {
     contactRows = data.contacts ?? [];
     incoterms = data.incoterms ?? [];
     incotermChoices($("contact-incoterm"), "");
+    if ($("contact-file")) {
+      $("contact-file").textContent = data.file
+        ? `Contact file on the disk: ${data.file} — LOAD FILE reads it in.`
+        : "No supplier-contacts.csv found on the disk.";
+    }
     renderContacts();
     renderOrders();
   } catch {
   }
 }
+
+$("contact-find")?.addEventListener("input", renderContacts);
+
+$("contact-load")?.addEventListener("click", async () => {
+  const button = $("contact-load");
+  button.disabled = true;
+  try {
+    const done = await api("/api/contacts/load", postJson({}));
+    await loadContacts();
+    notice($("contact-note"), "ok",
+           `${done.read} line(s) read from ${done.file}: ${done.added} added, ` +
+           `${done.updated} changed, ${done.same} already as the file says.`);
+  } catch (e) {
+    notice($("contact-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 $("contact-save").addEventListener("click", async () => {
   const body = {

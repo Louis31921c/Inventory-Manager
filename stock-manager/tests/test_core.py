@@ -2233,6 +2233,36 @@ def test_a_contact_rides_on_the_order(db_path):
     assert {sheet["id"]: sheet for sheet in db.purchase_orders(db_path)}[list_id]["contact"] is None
 
 
+def test_the_contact_file_on_the_disk_fills_the_book(db_path, tmp_path):
+    from inventory import contacts
+
+    paper = tmp_path / "supplier-contacts.csv"
+    paper.write_text("Societe;Contact;Tel;Mail;Adresse;Incoterm;Chantier;Remarque\n"
+                     "foussier;M. Lagarde;05 99 00 00 01;a@foussier.example.com;"
+                     "2 rue des Ateliers;dap;la genette;fixings\n"
+                     "metaleco;;05 99 00 00 02;;;banana;;\n"
+                     ";nobody;;;;;;a line with no company is skipped\n",
+                    encoding="utf-8")
+
+    where, rows = contacts.read_file(paper)
+    assert where == paper and len(rows) == 2
+
+    done = contacts.load_file(db_path, paper, "ALEX")
+    assert (done["read"], done["added"], done["updated"]) == (2, 2, 0)
+    book = {row["company"]: row for row in contacts.all_of(db_path)}
+    assert book["FOUSSIER"]["incoterm"] == "DAP" and book["FOUSSIER"]["site"] == "LA GENETTE"
+    assert book["METALECO"]["incoterm"] is None          # nonsense terms are dropped
+    assert book["METALECO"]["phone"] == "05 99 00 00 02"
+
+    # Reading it again recognises what is already there instead of doubling it.
+    again = contacts.load_file(db_path, paper, "ALEX")
+    assert (again["added"], again["updated"], again["same"]) == (0, 0, 2)
+    assert len(contacts.all_of(db_path)) == 2
+
+    with pytest.raises(FileNotFoundError):
+        contacts.read_file(tmp_path / "nothing.csv")
+
+
 def test_the_missing_lines_are_listed_by_note(db_path):
     from inventory import backorders
 
@@ -2303,6 +2333,14 @@ def test_route_screen_routes(tmp_path, monkeypatch):
                             json={"company": "bati sud", "incoterm": "DAP"}).json()
         assert saved["contacts"][0]["company"] == "BATI SUD"
         assert client.get("/api/contacts").json()["incoterms"][0]["id"] == "EXW"
+
+        paper = tmp_path / "book.csv"
+        paper.write_text("company,person,phone\nprolians,M. Sauret,05 99 00 00 03\n")
+        read = client.post(f"/api/contacts/load?path={paper}", headers=mine).json()
+        assert (read["added"], read["updated"]) == (1, 0)
+        assert "PROLIANS" in [row["company"] for row in read["contacts"]]
+        assert client.post("/api/contacts/load?path=/no/such/book.csv",
+                           headers=mine).status_code == 404
 
         waiting = client.get("/api/backorders").json()
         assert waiting["notes"] == [] and waiting["summary"]["lines"] == 0

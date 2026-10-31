@@ -200,6 +200,14 @@ DPU, DDP), plus the day it has to ship. Contacts are kept in a book on the Purch
 screen; picking one fills the terms in, and its address can be dropped straight into Route
 wrangler as a stop.
 
+The book can also come off the disk. Keep a `supplier-contacts.csv` with the columns `company`,
+`person`, `phone`, `email`, `address`, `incoterm`, `site`, `note` (the French headings `societe`,
+`contact`, `tel`, `mail`, `adresse`, `chantier`, `remarque` are understood too, and a comma or a
+semicolon both work), and LOAD FILE reads it in: new companies are added, known ones are brought
+up to date by company and person, lines without a company name are skipped. The file is looked
+for in the app folder, in `~/.local/share/stock-manager`, and in Documents, Desktop and Downloads;
+`STOCK_CONTACTS_FILE` points at it anywhere else. Reading it twice does not double the book.
+
 ## Partly delivered
 
 A delivery note read with a backorder mark owes you something. The Inventory screen lists every
