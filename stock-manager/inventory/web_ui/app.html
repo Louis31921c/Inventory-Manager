@@ -3881,19 +3881,6 @@ function renderStops() {
   renderTable($("table-stops"), [
     { label: "Stop", cell: (row) => document.createTextNode(row.label ?? "—") },
     { label: "Address", cell: (row) => document.createTextNode(short(row.address, 46)) },
-    { label: "Van", cell: (row) => {
-      const pick = el("select", { className: "cell" });
-      pick.replaceChildren(el("option", { value: "", textContent: "—" }),
-        ...vans.map((van) => el("option", { value: String(van.vehicle_id),
-                                            textContent: van.name })));
-      pick.value = row.vehicle_id == null ? "" : String(row.vehicle_id);
-      pick.addEventListener("change", async () => {
-        await api(`/api/route/places/${row.place_id}`,
-                  patchJson({ vehicle_id: pick.value ? Number(pick.value) : null }));
-        await loadRoute();
-      });
-      return pick;
-    } },
     { label: "Load", numeric: true, cell: (row) => document.createTextNode(
       [row.cubic ? `${row.cubic} m3` : "", row.kilos ? `${row.kilos} kg` : ""]
         .filter(Boolean).join(" · ") || "—") },
