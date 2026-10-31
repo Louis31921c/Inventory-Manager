@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from inventory import audit, db, llm, vocabulary
+from inventory import audit, db, llm, quotes, vocabulary
 from inventory.config import Config, MailConfig, SmsConfig
 from inventory.models import Line, Note, parse_date
 
@@ -2305,6 +2305,46 @@ def test_the_notes_say_what_is_standing_at_each_place(db_path):
     assert stock.cover(held, "SPIT FIX", "TASSIGNY", None, besides=mine) == 0
     assert stock.cover(held, "NOTHING LIKE IT", "LA GENETTE", None) == 0.0
     assert stock.cover(held, "SPIT FIX", "LA GENETTE", "PHASE 3", besides=other) == 40
+
+
+def test_the_sample_year_hangs_together():
+    """The made-up year must read like the real paperwork, or it teaches nothing."""
+    import importlib.util
+    import random
+
+    here = pathlib.Path(__file__).resolve().parent.parent / "sample_data"
+    spec = importlib.util.spec_from_file_location("make_sample_data",
+                                                  here / "make_sample_data.py")
+    maker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(maker)
+
+    year = maker.build(random.Random(1), days=120)
+    assert year["notes"] and year["orders"] and year["quotes"] and year["bills"]
+
+    # Every line belongs to a head, and every head has lines.
+    heads = {note["note_id"] for note in year["notes"]}
+    assert {line["note_id"] for line in year["note_lines"]} == heads
+    sheets = {order["list_id"] for order in year["orders"]}
+    assert {line["list_id"] for line in year["order_lines"]} == sheets
+
+    days = sorted(note["delivery_date"] for note in year["notes"])
+    assert days[0] < days[-1] <= maker.LAST_DAY.isoformat()
+    assert all(line["order_date"] <= line["delivery_date"] for line in year["note_lines"])
+    assert all(float(line["quantity"]) > 0 for line in year["note_lines"])
+
+    missing = [line for line in year["note_lines"] if line["backorder"]]
+    assert missing and any(line["expected_on"] for line in missing)
+
+    # Most of what goes out was delivered for that site; some of it never was.
+    knows = {(line["site"], line["article"]) for line in year["note_lines"]}
+    places = {order["list_id"]: order["site"] for order in year["orders"]}
+    answered = [line for line in year["order_lines"]
+                if (places[line["list_id"]], line["article"]) in knows]
+    assert len(year["order_lines"]) > len(answered) > len(year["order_lines"]) // 2
+
+    assert {bill["state"] for bill in year["bills"]} <= set(maker.BILL_STATES)
+    assert all(bill["total"] > 0 for bill in year["bills"])
+    assert {line["unit"] for line in year["quote_lines"]} <= set(quotes.UNITS)
 
 
 def test_the_contact_file_answers_a_name_and_a_company(db_path, tmp_path):
