@@ -3791,13 +3791,12 @@ function renderVans(data) {
   const stops = data.stops ?? [];
   vanBoxes.clear();
 
-  for (const [id, blank] of [["stop-van", "no van yet"], ["route-van", "every van"]]) {
-    const select = $(id);
-    const chosen = select.value;
-    select.replaceChildren(el("option", { value: "", textContent: blank }),
-      ...vans.map((van) => el("option", { value: String(van.vehicle_id), textContent: van.name })));
-    select.value = vans.some((van) => String(van.vehicle_id) === chosen) ? chosen : "";
-  }
+  // The lorry is picked in one place only: the box beside FIND THE SHORTEST RUN.
+  const select = $("route-van");
+  const chosen = select.value;
+  select.replaceChildren(el("option", { value: "", textContent: "every van" }),
+    ...vans.map((van) => el("option", { value: String(van.vehicle_id), textContent: van.name })));
+  select.value = vans.some((van) => String(van.vehicle_id) === chosen) ? chosen : "";
 
   $("vans").replaceChildren(...vans.map((van) => {
     const mine = stops.filter((stop) => stop.vehicle_id === van.vehicle_id && !stop.done);
@@ -3928,20 +3927,11 @@ async function addPlace(kind) {
   }
   notice($("route-note"), "", "Looking the address up on the map...");
   try {
-    const extra = kind === "stop" ? {
-      vehicle_id: $("stop-van").value ? Number($("stop-van").value) : null,
-      cubic: asNumber($("stop-cubic").value),
-      kilos: asNumber($("stop-kilos").value),
-      open_from: $("stop-from").value || null,
-      open_to: $("stop-to").value || null,
-    } : {};
+    const extra = {};
     await api("/api/route/places", postJson({
       address: address.value.trim(), label: label.value.trim() || null, kind, ...extra }));
     address.value = "";
     label.value = "";
-    if (kind === "stop") {
-      for (const id of ["stop-cubic", "stop-kilos", "stop-from", "stop-to"]) $(id).value = "";
-    }
     notice($("route-note"), "ok", "Address placed on the map.");
     await loadRoute();
   } catch (e) {
