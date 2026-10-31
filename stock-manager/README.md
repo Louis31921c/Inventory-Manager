@@ -314,10 +314,19 @@ article, falling back to the supplier's median, then to everybody's. A short lea
 factor than a long one, and an erratic article a bigger safety than a steady one, which is why
 two articles moving at the same rate can end up with very different red zones.
 
-Net flow is what was counted on the shelf minus what the open purchase orders still ask for.
-Against the top of each zone it lands in the red, the yellow, the green, or over the top, and
-the table is sorted so the red comes first. Articles nobody counted are marked `not counted`
-rather than assumed empty.
+Net flow is what is on the shelf minus what is still to leave it. On hand is already the notes
+in minus the orders that have gone out (or a hand count, which wins), so the demand side counts
+only the orders placed too recently to have shipped — counting all of them again would take the
+same quantity off twice and put healthy articles deep in the red. Against the top of each zone
+the flow lands in the red, the yellow, the green, or over the top, and the table is sorted so
+the red comes first. Articles nobody counted are marked `not counted` rather than assumed empty.
+
+The two charts on the landing card read differently on purpose. The left one draws each
+article against its own top of green, so a buffer of ten and a buffer of ten thousand are the
+same width and can be compared by shape; the net flow sits on that band as a line, or as an
+arrow on the edge when it is below zero or past the top. The right one puts every article on
+one scale of buffer share, running either side of nought, so a shortage draws to the left of
+the line rather than vanishing.
 
 ### Where the demand goes next
 
@@ -337,7 +346,8 @@ work than about next month.
 
 ## Predictions
 
-`DDMRP`, at the right of the tabs (or `F9`), opens a window of its own.
+`DDMRP` on the menu bar, the `DDMRP` button at the right of the tabs, or `F9`, opens a window
+of its own; the menu bar name also drops down the cards under the buffers.
 
 | Cell | What it gives you |
 |---|---|

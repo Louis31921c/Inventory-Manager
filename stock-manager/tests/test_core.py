@@ -2451,3 +2451,52 @@ def test_route_screen_routes(tmp_path, monkeypatch):
 
         assert client.delete(f"/api/contacts/{saved['contact_id']}",
                              headers=mine).status_code == 200
+
+
+def test_what_has_shipped_is_only_taken_off_the_shelf_once(db_path):
+    """Net flow once read as on hand minus every order ever, shipped ones included."""
+    from inventory import ddmrp, stock
+
+    db.save_note(db_path, make_note(delivery_date="2026-01-05", order_date="2026-01-02",
+                                    lines=[Line(article="SPIT FIX", quantity=1000)]),
+                 "sha-flow-1", "", "ALEX")
+    db.save_purchase_order(db_path, {"list_date": "2026-01-09", "site": "Villa Project",
+                                     "lines": [{"article": "SPIT FIX", "quantity": 400}]},
+                           "sha-flow-2", "", "ALEX")
+
+    assert stock.on_hand_map(db_path)["SPIT FIX"] == 600
+    rows, _chain, _window = ddmrp.buffers(db_path)
+    line = next(row for row in rows if row["article"] == "SPIT FIX")
+    # Six hundred, not two hundred: the four hundred left the shelf, it did not leave twice.
+    assert line["open_demand"] == 0
+    assert line["net_flow"] == 600
+    assert line["buffer_share"] > 0
+
+
+def test_an_order_that_has_not_gone_out_yet_still_counts_as_demand(db_path):
+    from inventory import ddmrp
+
+    today = date.today()
+    db.save_note(db_path, make_note(delivery_date=(today - timedelta(days=30)).isoformat(),
+                                    order_date=(today - timedelta(days=40)).isoformat(),
+                                    lines=[Line(article="SPIT FIX", quantity=1000)]),
+                 "sha-today-1", "", "ALEX")
+    db.save_purchase_order(db_path, {"list_date": today.isoformat(), "site": "Villa Project",
+                                     "lines": [{"article": "SPIT FIX", "quantity": 250}]},
+                           "sha-today-2", "", "ALEX")
+
+    rows, _chain, _window = ddmrp.buffers(db_path)
+    line = next(row for row in rows if row["article"] == "SPIT FIX")
+    assert line["open_demand"] == 250
+    assert line["net_flow"] == line["on_hand"] - 250
+
+
+def test_the_ddmrp_screen_is_named_on_the_menu_bar():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    bar = page[page.index('<nav class="menubar"'):page.index("</nav>")]
+    assert 'id="menu-ddmrp"' in bar and ">DDMRP<" in bar
+    # The menu that used to live inside the screen now hangs off that name.
+    assert 'id="ddmrp-tools"' not in page
+    assert 'id="tools-drop"' in bar

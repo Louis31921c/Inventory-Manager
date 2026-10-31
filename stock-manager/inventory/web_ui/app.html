@@ -22,6 +22,10 @@
     <div class="menu-drop" id="orders-drop" role="menu"></div>
   </span>
   <button type="button" id="menu-route">Route wrangler</button>
+  <span class="menu" id="tools-menu">
+    <button type="button" id="menu-ddmrp" aria-haspopup="true" aria-expanded="false">DDMRP</button>
+    <div class="menu-drop" id="tools-drop" role="menu"></div>
+  </span>
   <button type="button" id="menu-goto">SQL</button>
   <span class="menu" id="system-menu">
     <button type="button" id="menu-system" aria-haspopup="true" aria-expanded="false">System</button>
@@ -443,21 +447,13 @@
     <div class="row" id="ddmrp-stats"></div>
     <div class="side-by-side">
       <div>
-        <p class="eyebrow">Red, yellow and green, with what is on hand</p>
+        <p class="eyebrow">Red, yellow and green of each buffer, the line is the net flow</p>
         <div id="buffer-chart"></div>
       </div>
       <div>
-        <p class="eyebrow">Net flow against the top of green</p>
+        <p class="eyebrow">How much of its buffer each article is holding</p>
         <div id="netflow-chart"></div>
       </div>
-    </div>
-    <div class="row tight">
-      <span class="menu" id="tools-menu">
-        <button type="button" class="mini" id="ddmrp-tools" aria-haspopup="true"
-                aria-expanded="false">tools</button>
-        <div class="menu-drop" id="tools-drop" role="menu"></div>
-      </span>
-      <span class="muted" id="ddmrp-open"></span>
     </div>
   </div>
 
@@ -483,7 +479,7 @@
   </div>
 
   <div class="card">
-    <h2>Safety sock watch</h2>
+    <h2>Safety stock watch</h2>
     <div class="row">
       <label class="field narrow">
         <span>order cycle days</span>
@@ -2602,59 +2598,94 @@ const BUFFER_SHOWN = 10;
 
 function bufferBars(rows) {
   const width = 640;
-  const rowHeight = 22;
-  const pad = { left: 150, right: 46, top: 16 };
-  const height = pad.top + rows.length * rowHeight + 6;
-  const top = Math.max(...rows.map((row) => Math.max(row.top_of_green, row.net_flow)), 1);
+  const rowHeight = 26;
+  const pad = { left: 172, right: 60, top: 22 };
+  const height = pad.top + rows.length * rowHeight + 8;
   const plotWidth = width - pad.left - pad.right;
-  const scale = (value) => Math.max((value / top) * plotWidth, 0);
-  const parts = [svg("text", { x: pad.left, y: 10 }, ["red · yellow · green, the line is what is on hand"])];
+  const parts = [svg("text", { class: "value", x: width - pad.right + 4, y: 10 }, ["net flow"])];
 
+  // Every article against its own top of green: one shared scale would turn the
+  // small buffers into a sliver and tell nobody anything.
   rows.forEach((row, index) => {
     const y = pad.top + index * rowHeight;
+    const top = row.top_of_green > 0 ? row.top_of_green : 1;
+    const along = (value) => (Math.min(Math.max(value, 0), top) / top) * plotWidth;
     const zones = [
       ["zone-red", 0, row.top_of_red],
       ["zone-yellow", row.top_of_red, row.top_of_yellow],
-      ["zone-green", row.top_of_yellow, row.top_of_green],
+      ["zone-green", row.top_of_yellow, top],
     ];
-    parts.push(svg("text", { x: 0, y: y + 13 }, [short(row.article, 24)]));
+    parts.push(svg("text", { x: 0, y: y + 14 }, [short(row.article, 26)]));
     for (const [kind, from, to] of zones) {
       parts.push(svg("rect", {
-        class: kind, x: pad.left + scale(from), y: y + 3,
-        width: Math.max(scale(to - from), 1), height: 13,
+        class: kind, x: pad.left + along(from), y: y + 4, rx: 1,
+        width: Math.max(along(to) - along(from), 1), height: 14,
       }));
     }
-    const flow = pad.left + scale(Math.max(row.net_flow, 0));
-    parts.push(svg("line", { class: "flow", x1: flow, y1: y, x2: flow, y2: y + 19 }));
-    parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 13 },
+    parts.push(...flowMark(row, pad.left, plotWidth, y, top));
+    parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 15 },
                    [showNum(row.net_flow)]));
   });
 
   return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
 }
 
+function flowMark(row, left, plotWidth, y, top) {
+  // Off the band at either end is the thing worth seeing, so it gets an arrow
+  // sitting on the edge rather than a line quietly clamped out of sight.
+  const share = row.net_flow / top;
+  if (share < 0) return [arrow(left, y + 11, -1), warn(left + 10, y + 15, "below zero")];
+  if (share > 1) {
+    return [arrow(left + plotWidth, y + 11, 1),
+            warn(left + plotWidth - 58, y + 15, `${showNum(row.buffer_share)}%`)];
+  }
+  const at = left + share * plotWidth;
+  return [svg("line", { class: "flow", x1: at, y1: y, x2: at, y2: y + 22 })];
+}
+
+function arrow(x, y, way) {
+  const tip = x + way * 7;
+  return svg("polygon", { class: "flow-arrow",
+                          points: `${tip},${y} ${x},${y - 6} ${x},${y + 6}` });
+}
+
+function warn(x, y, text) {
+  return svg("text", { class: "edge", x, y }, [text]);
+}
+
 function netFlowBars(rows) {
   const width = 640;
-  const rowHeight = 20;
-  const pad = { left: 150, right: 48, top: 16 };
-  const height = pad.top + rows.length * rowHeight + 6;
+  const rowHeight = 22;
+  const pad = { left: 172, right: 58, top: 22 };
+  const height = pad.top + rows.length * rowHeight + 8;
   const plotWidth = width - pad.left - pad.right;
-  const top = Math.max(...rows.map((row) => Math.max(row.buffer_share, 0)), 120);
-  const scale = (share) => Math.max((Math.max(share, 0) / top) * plotWidth, 1);
-  const full = pad.left + (100 / top) * plotWidth;
+
+  // The share runs either side of nothing, so the nought sits where the numbers
+  // need it: a bar that only ever grows to the right cannot draw a shortage.
+  const shares = rows.map((row) => row.buffer_share);
+  const low = Math.min(...shares, 0);
+  const high = Math.max(...shares, 120);
+  const span = high - low || 1;
+  const at = (share) => pad.left + ((share - low) / span) * plotWidth;
+  const nought = at(0);
+  const full = at(100);
+
   const parts = [
-    svg("text", { x: pad.left, y: 10 }, ["share of the buffer each article is holding"]),
-    svg("line", { class: "guide", x1: full, y1: pad.top - 4, x2: full, y2: height - 4 }),
-    svg("text", { x: full + 3, y: 10 }, ["top of green"]),
+    svg("rect", { class: "track", x: pad.left, y: pad.top - 2, width: plotWidth,
+                  height: height - pad.top - 4 }),
+    svg("line", { class: "axis", x1: nought, y1: pad.top - 2, x2: nought, y2: height - 6 }),
+    svg("line", { class: "guide", x1: full, y1: pad.top - 2, x2: full, y2: height - 6 }),
+    svg("text", { x: Math.min(full + 3, width - pad.right - 48), y: 10 }, ["top of green"]),
   ];
 
   rows.forEach((row, index) => {
     const y = pad.top + index * rowHeight;
-    parts.push(svg("text", { x: 0, y: y + 12 }, [short(row.article, 24)]));
-    parts.push(svg("rect", { class: "track", x: pad.left, y: y + 3, width: plotWidth, height: 12 }));
+    const edge = at(row.buffer_share);
+    parts.push(svg("text", { x: 0, y: y + 12 }, [short(row.article, 26)]));
     parts.push(svg("rect", {
       class: `zone-${row.zone === "uncounted" ? "over" : row.zone}`,
-      x: pad.left, y: y + 3, width: scale(row.buffer_share), height: 12,
+      x: Math.min(nought, edge), y: y + 3, rx: 1,
+      width: Math.max(Math.abs(edge - nought), 1.5), height: 12,
     }));
     parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 13 },
                    [`${showNum(row.buffer_share)}%`]));
@@ -3698,9 +3729,10 @@ const SCREEN_MENUS = [
   { menu: "input-menu", drop: "input-drop", button: "menu-note",
     panel: "panel-capture", tab: "capture", key: "capture-card", title: "Input",
     skip: ["review", "mapping"] },
-  { menu: "tools-menu", drop: "tools-drop", button: "ddmrp-tools",
+  { menu: "tools-menu", drop: "tools-drop", button: "menu-ddmrp",
     panel: "panel-ddmrp", tab: "ddmrp", key: "ddmrp-card", title: "DDMRP",
-    skip: ["ddmrp-landing"] },
+    // The buffers are the screen itself, so the menu lists what sits under them.
+    skip: ["ddmrp-landing"], go: openPredictions },
 ];
 
 // A menu that walks to another screen instead of picking a card on this one.
@@ -3758,7 +3790,7 @@ function buildMenu(spec) {
     const entry = el("button", { type: "button", textContent: cardName(card), role: "menuitem" });
     entry.dataset.card = cardName(card);
     entry.addEventListener("click", () => {
-      openTab(spec.tab);
+      if (spec.go) spec.go(); else openTab(spec.tab);
       showOnly(spec, card);
       closeMenu(spec);
       say(`${spec.title} · ${cardName(card)}`);
@@ -3773,7 +3805,7 @@ function buildMenu(spec) {
   } catch {
   }
   showOnly(spec, wanted ?? cards[0]);
-  hover(spec, () => openTab(spec.tab));
+  hover(spec, spec.go ?? (() => openTab(spec.tab)));
 }
 
 function hover(spec, onClick) {

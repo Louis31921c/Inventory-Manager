@@ -17,6 +17,9 @@ functionnalities to developp :
         (customer purchase orders, shipped within 24h)
 
 - DONE: ddmrp landing page with 2 buffer graphs, then a roll-down for flow, safety stock watch, dots
+        (net flow no longer takes the shipped orders off twice; the left graph scales each
+        article to its own top of green, the right one runs either side of nought so a
+        shortage draws; DDMRP is named on the menu bar and that name carries the roll-down)
 
 - DONE: the sql screen lists every table name with its row count; click one to query it
 

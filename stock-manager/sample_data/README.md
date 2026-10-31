@@ -39,12 +39,15 @@ shorter one.
 Contacts come from `../../supplier-contacts.csv`, the same file the app reads on the
 Purchase orders screen.
 
-Roughly a year: about 500 notes over 1,600 lines, 260 orders over 1,500 lines, 60 quote
-requests, 150 bills. Around one line in twelve on a note is a backorder, and two in three
+Roughly a year: about 510 notes over 1,500 lines, 465 orders over 3,400 lines, 65 quote
+requests, 160 bills. Around one line in twelve on a note is a backorder, and two in three
 of those have a day promised, some of which have already gone by — so "Partly delivered"
 has late lines in it. Most order lines are answered by the notes for that site and some
-are not, so the Stored purchase orders screen shows both "in stock" and "to order". The
-DDMRP buffers come out with articles in every zone, not all green.
+are not, so the Stored purchase orders screen shows both "in stock" and "to order".
+
+The orders carry off most of what the notes bring, the way a real year does, so what is
+left on the shelf is of the same order as a buffer rather than a year of stock: the DDMRP
+screen comes out with articles in every zone, not all of them over the top of green.
 
 ## The files on their own
 

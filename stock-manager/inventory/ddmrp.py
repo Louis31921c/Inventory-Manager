@@ -96,11 +96,17 @@ def _on_hand(db_path):
 
 
 def _open_demand(db_path):
-    return {article: float(quantity or 0) for article, quantity in db.read(db_path, """
-            SELECT article, sum(quantity)
-            FROM purchase_order_lines
-            WHERE in_stock IS NOT TRUE AND quantity IS NOT NULL
-            GROUP BY article
+    """What is still to leave the shelf.
+
+    Only the orders that have not gone out yet: what has shipped was already taken off
+    the on-hand count in stock.py, so counting it here as well would subtract it twice.
+    """
+    return {article: float(quantity or 0) for article, quantity in db.read(db_path, f"""
+            SELECT l.article, sum(l.quantity)
+            FROM purchase_order_lines l JOIN purchase_orders h USING (list_id)
+            WHERE l.quantity IS NOT NULL
+              AND {stock.ORDER_DAY} > current_date - {stock.SHIPPING_DAYS}
+            GROUP BY l.article
             """)}
 
 

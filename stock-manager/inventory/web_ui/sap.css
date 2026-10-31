@@ -568,6 +568,8 @@ svg rect.zone-green { fill: #5aa469; }
 svg rect.zone-over { fill: #9fb3c8; }
 svg line.flow { stroke: #11324f; stroke-width: 2; }
 svg line.guide { stroke: var(--line); stroke-dasharray: 3 3; }
+svg polygon.flow-arrow { fill: #11324f; }
+svg text.edge { fill: var(--ink-soft); font-size: 9px; }
 .card .menu { position: relative; }
 
 /* ---- dropdown ------------------------------------------------------ */

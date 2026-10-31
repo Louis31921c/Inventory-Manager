@@ -103,32 +103,37 @@ def build(rng, days=DAYS):
                     shelf.setdefault((site, work_item, article), 0.0)
                     shelf[(site, work_item, article)] += amount
 
-        # An order or so a day from a customer, shipped inside the day after.
-        for _ in range(rng.choices([0, 1, 2], [2, 4, 2])[0]):
-            order_id += 1
+        # Two orders or so a day from a customer, shipped inside the day after. Over a
+        # year they have to carry off most of what the notes brought, or the shelf only
+        # ever grows and every buffer ends up over the top of green.
+        for _ in range(rng.choices([1, 2, 3], [3, 4, 2])[0]):
             site, work_item = pick_place(rng)
             standing = [key for key in shelf if key[0] == site and shelf[key] > 0]
-            orders.append({"list_id": order_id, "list_date": day.isoformat(), "site": site,
-                           "work_item": work_item or "", "drafter": rng.choice(DRAFTERS)})
-            wanted = rng.randint(3, 9)
-            taken = 0
+            wanted = rng.randint(6, 18)
+            lines = []
             # Most of what goes out was delivered for that site; some of it was never
             # scanned in, which is what the "to order" word on a line is there to say.
             for key in rng.sample(standing, min(len(standing), wanted)):
-                if rng.random() < 0.25:
+                if rng.random() < 0.05:
                     continue
                 article = key[2]
-                amount = float(max(1, int(shelf[key] * rng.uniform(0.3, 0.95))))
+                amount = float(max(1, int(shelf[key] * rng.uniform(0.8, 1.0))))
                 shelf[key] = max(0.0, shelf[key] - amount)
-                taken += 1
-                order_lines.append({"list_id": order_id, "line_no": taken, "article": article,
-                                    "designation": _designation(article), "quantity": amount})
-            while taken < wanted:
+                lines.append((article, _designation(article), amount))
+            # Now and then a line for something that was never scanned in at that site.
+            while len(lines) < wanted and rng.random() < 0.2:
                 article, designation, _supplier, usual, _price = rng.choice(ARTICLES)
-                taken += 1
-                order_lines.append({"list_id": order_id, "line_no": taken, "article": article,
-                                    "designation": designation,
-                                    "quantity": quantity(rng, usual) / 2})
+                lines.append((article, designation, quantity(rng, usual) / 2))
+            # A site with nothing standing on it and no stray line orders nothing: an
+            # order with no line at all is not a thing the app can store.
+            if not lines:
+                continue
+            order_id += 1
+            orders.append({"list_id": order_id, "list_date": day.isoformat(), "site": site,
+                           "work_item": work_item or "", "drafter": rng.choice(DRAFTERS)})
+            for line_no, (article, designation, amount) in enumerate(lines, 1):
+                order_lines.append({"list_id": order_id, "line_no": line_no, "article": article,
+                                    "designation": designation, "quantity": amount})
 
         # A quote request about once a week, for what is not sold by the piece.
         if rng.random() < 0.2:
