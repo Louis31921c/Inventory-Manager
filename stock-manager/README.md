@@ -192,6 +192,20 @@ shipped within 24 hours. The Inventory screen shows in, out, still being picked 
 and a hand count (Safety stock watch) still wins for the article it was made on. The buffers read
 the same number, so nothing has to be counted by hand to be watched.
 
+## Who the order goes to
+
+Purchase orders are what a customer asks of you, so each one carries a contact: company, person,
+phone, e-mail, delivery address, and the incoterm the goods travel on (EXW, FCA, CPT, CIP, DAP,
+DPU, DDP), plus the day it has to ship. Contacts are kept in a book on the Purchase orders
+screen; picking one fills the terms in, and its address can be dropped straight into Route
+wrangler as a stop.
+
+## Partly delivered
+
+A delivery note read with a backorder mark owes you something. The Inventory screen lists every
+such note: the articles still missing, their supplier, site and work item, with the day you were
+promised the rest. Past that day the date turns red; "arrived" takes the line off the list.
+
 ## Quotes
 
 Purchase orders, Quotes and Bills sit under the one menu: hover **Purchase orders** and pick.
@@ -211,6 +225,11 @@ PostgreSQL script keyed on `quote_id, line_no`. In the chat: `/quote supplier:fo
 
 Save the yard the truck leaves from, type the day's delivery addresses, and the app orders them
 into the shortest run (nearest neighbour, then 2-opt) and says how many kilometres that is.
+
+Three vans are set up: two Renault Partner (3.3 m3, 650 kg) and an Iveco Daily (19.6 m3,
+1800 kg). A stop carries its load and the hours it can be served; you drop it on a van and the
+card adds the load up against what that van takes, turns the bar red when it will not fit, and
+says so in words. Each van has its own route button, and its own distance.
 
 Addresses are placed on the map by **Nominatim** and measured by road by **OSRM**, both run by
 OpenStreetMap. No account, no key, no cost; one lookup a second. That call is the only thing the

@@ -301,6 +301,66 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        14,
+        "contacts: who an outbound order goes to, and on what terms",
+        """
+        CREATE SEQUENCE IF NOT EXISTS contact_seq START 1;
+        CREATE TABLE IF NOT EXISTS contacts (
+            contact_id INTEGER PRIMARY KEY DEFAULT nextval('contact_seq'),
+            company    VARCHAR NOT NULL,
+            person     VARCHAR,
+            phone      VARCHAR,
+            email      VARCHAR,
+            address    VARCHAR,
+            incoterm   VARCHAR,
+            site       VARCHAR,
+            note       VARCHAR,
+            added_at   TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            added_by   VARCHAR
+        );
+
+        ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS contact_id INTEGER;
+        ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS incoterm VARCHAR;
+        ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS ship_by DATE;
+        """,
+    ),
+    (
+        15,
+        "what a delivery note still owes: the day the rest is expected",
+        """
+        ALTER TABLE inventory_lines ADD COLUMN IF NOT EXISTS expected_on DATE;
+        ALTER TABLE inventory_lines ADD COLUMN IF NOT EXISTS settled_on DATE;
+        """,
+    ),
+    (
+        16,
+        "the vans, what they can carry and when a stop can be served",
+        """
+        CREATE SEQUENCE IF NOT EXISTS vehicle_seq START 1;
+        CREATE TABLE IF NOT EXISTS vehicles (
+            vehicle_id  INTEGER PRIMARY KEY DEFAULT nextval('vehicle_seq'),
+            name        VARCHAR NOT NULL,
+            shape       VARCHAR NOT NULL DEFAULT 'van',
+            plate       VARCHAR,
+            cubic       DOUBLE,
+            kilos       DOUBLE,
+            note        VARCHAR
+        );
+
+        INSERT INTO vehicles (name, shape, cubic, kilos)
+        SELECT * FROM (VALUES ('Renault Partner 1', 'van', 3.3, 650.0),
+                              ('Renault Partner 2', 'van', 3.3, 650.0),
+                              ('Iveco Daily', 'truck', 19.6, 1800.0)) AS v(name, shape, cubic, kilos)
+        WHERE NOT EXISTS (SELECT 1 FROM vehicles);
+
+        ALTER TABLE places ADD COLUMN IF NOT EXISTS vehicle_id INTEGER;
+        ALTER TABLE places ADD COLUMN IF NOT EXISTS cubic DOUBLE;
+        ALTER TABLE places ADD COLUMN IF NOT EXISTS kilos DOUBLE;
+        ALTER TABLE places ADD COLUMN IF NOT EXISTS open_from VARCHAR;
+        ALTER TABLE places ADD COLUMN IF NOT EXISTS open_to VARCHAR;
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

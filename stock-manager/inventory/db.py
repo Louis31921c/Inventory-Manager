@@ -17,7 +17,7 @@ LIST_LINE_COLUMNS = ("list_id", "line_no", "article", "designation", "reference"
                      "stock", "in_stock")
 COUNTED_TABLES = ("notes", "inventory_lines", "purchase_orders", "purchase_order_lines", "catalog",
                   "article_names", "audit", "stock_counts", "bills", "quotes", "quote_lines",
-                  "places")
+                  "places", "contacts", "vehicles")
 
 
 class QueryError(Exception):
@@ -368,20 +368,29 @@ def purchase_orders(db_path):
     
     rows = read(db_path, """
             SELECT h.list_id, h.list_date, h.site, h.work_item, h.drafter, h.image_path,
-                   h.created_by,
+                   h.created_by, h.contact_id, h.incoterm, h.ship_by,
+                   c.company, c.person, c.phone, c.email, c.address,
                    list({'line_no': l.line_no, 'article': l.article, 'designation': l.designation,
                          'reference': l.reference, 'quantity': l.quantity, 'stock': l.stock,
                          'in_stock': l.in_stock} ORDER BY l.line_no) AS lines
-            FROM purchase_orders h LEFT JOIN purchase_order_lines l USING (list_id)
+            FROM purchase_orders h
+            LEFT JOIN purchase_order_lines l USING (list_id)
+            LEFT JOIN contacts c USING (contact_id)
             GROUP BY h.list_id, h.list_date, h.site, h.work_item, h.drafter, h.image_path,
-                     h.created_by
+                     h.created_by, h.contact_id, h.incoterm, h.ship_by,
+                     c.company, c.person, c.phone, c.email, c.address
             ORDER BY h.list_date DESC NULLS LAST, h.list_id DESC
             """)
     return [{"id": list_id, "list_date": day.isoformat() if day else None,
              "site": site, "work_item": work_item, "drafter": drafter,
              "photo": bool(image_path), "created_by": created_by,
+             "contact_id": contact_id, "incoterm": incoterm,
+             "ship_by": ship_by.isoformat() if ship_by else None,
+             "contact": ({"company": company, "person": person, "phone": phone,
+                          "email": email, "address": address} if contact_id else None),
              "lines": [l for l in (lines or []) if l.get("article") is not None]}
-            for list_id, day, site, work_item, drafter, image_path, created_by, lines in rows]
+            for (list_id, day, site, work_item, drafter, image_path, created_by, contact_id,
+                 incoterm, ship_by, company, person, phone, email, address, lines) in rows]
 
 
 def set_in_stock(db_path, list_id, line_no, in_stock):

@@ -183,6 +183,13 @@
   </div>
 
   <div class="card">
+    <h2>Partly delivered</h2>
+    <div class="row" id="waiting-stats"></div>
+    <div id="waiting-note"></div>
+    <div id="waiting"></div>
+  </div>
+
+  <div class="card">
     <h2>Delivered lines</h2>
     <div class="row">
       <label class="field grow"><span>Search</span><input id="q-search" placeholder="article, reference, supplier..."></label>
@@ -255,6 +262,26 @@
   </div>
 
   <div class="card">
+    <h2>Contacts</h2>
+    <div class="row">
+      <label class="field grow"><span>company</span><input id="contact-company"></label>
+      <label class="field grow"><span>person</span><input id="contact-person"></label>
+      <label class="field narrow"><span>phone</span><input id="contact-phone"></label>
+      <label class="field grow"><span>e-mail</span><input id="contact-email" autocomplete="off"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>delivery address</span><input id="contact-address"></label>
+      <label class="field narrow"><span>incoterm</span><select id="contact-incoterm"></select></label>
+      <label class="field narrow"><span>site</span><input id="contact-site"></label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action" id="contact-save">SAVE</button>
+      </label>
+    </div>
+    <div id="contact-note"></div>
+    <div class="scroll-x short-box"><table id="table-contacts"></table></div>
+  </div>
+
+  <div class="card">
     <h2>Stored purchase orders</h2>
     <div class="row">
       <label class="field grow"><span>Search</span><input id="o-search" placeholder="article, reference, work item..."></label>
@@ -324,10 +351,24 @@
   </div>
 
   <div class="card">
+    <h2>The vans</h2>
+    <div class="vans" id="vans"></div>
+  </div>
+
+  <div class="card">
     <h2>Destination</h2>
     <div class="row">
       <label class="field grow"><span>address</span><input id="stop-address"></label>
       <label class="field narrow"><span>set a name</span><input id="stop-label"></label>
+      <label class="field narrow"><span>van</span><select id="stop-van"></select></label>
+    </div>
+    <div class="row">
+      <label class="field narrow"><span>load m3</span>
+        <input id="stop-cubic" type="number" min="0" step="0.1"></label>
+      <label class="field narrow"><span>load kg</span>
+        <input id="stop-kilos" type="number" min="0" step="1"></label>
+      <label class="field narrow"><span>open from</span><input id="stop-from" type="time"></label>
+      <label class="field narrow"><span>open to</span><input id="stop-to" type="time"></label>
       <label class="field narrow" style="justify-content: flex-end">
         <button class="action" id="stop-add">ADD</button>
       </label>
@@ -342,6 +383,7 @@
   <div class="card">
     <div class="row">
       <button class="action" id="route-go">FIND THE SHORTEST RUN</button>
+      <label class="field narrow"><span>for</span><select id="route-van"></select></label>
       <label class="field narrow" style="justify-content: flex-end">
         <span>back to the hub</span>
         <input type="checkbox" id="route-loop" checked>
@@ -1967,6 +2009,38 @@ function renderOrders() {
     actions.append(confirmButton("Delete", () => api(`/api/orders/${sheet.id}`, { method: "DELETE" })));
     title.append(actions);
 
+    // Who it ships to and on what terms, saved as you pick it.
+    const terms = el("div", { className: "row tight ship" });
+    const contact = el("select", { className: "cell" });
+    contactChoices(contact, sheet.contact_id);
+    const incoterm = el("select", { className: "cell" });
+    incotermChoices(incoterm, sheet.incoterm);
+    const shipBy = el("input", { className: "cell", type: "date", value: sheet.ship_by ?? "" });
+    const save = async () => {
+      // A contact with its own terms fills the incoterm in when the order has none.
+      const chosen = contactRows.find((row) => String(row.contact_id) === contact.value);
+      if (!incoterm.value && chosen?.incoterm) incoterm.value = chosen.incoterm;
+      try {
+        await api(`/api/orders/${sheet.id}/terms`, patchJson({
+          contact_id: contact.value ? Number(contact.value) : null,
+          incoterm: incoterm.value || "",
+          ship_by: shipBy.value || "",
+        }));
+        await refresh();
+      } catch (e) {
+        notice($("global-notice"), "bad", e.message);
+      }
+    };
+    for (const box of [contact, incoterm, shipBy]) box.addEventListener("change", save);
+    terms.append(el("span", { className: "legend", textContent: "ships to" }), contact,
+                 el("span", { className: "legend", textContent: "incoterm" }), incoterm,
+                 el("span", { className: "legend", textContent: "ship by" }), shipBy);
+    if (sheet.contact) {
+      const reach = [sheet.contact.person, sheet.contact.phone, sheet.contact.email,
+                     sheet.contact.address].filter(Boolean).join(" · ");
+      if (reach) terms.append(el("span", { className: "desig", textContent: reach }));
+    }
+
     const table = el("table", { className: "order-table" });
     renderTable(table, [
       { label: "#", numeric: true, cell: (line) => String(line.line_no) },
@@ -1989,6 +2063,7 @@ function renderOrders() {
 
     const block = el("div", { className: "sheet" }, [
       title,
+      terms,
       el("div", { className: "sheet-body" }, [
         el("div", { className: "scroll-x" }, [table]),
         rail,
@@ -3475,6 +3550,259 @@ $("quote-drop").addEventListener("click", async () => {
   }
 });
 
+// ---- who an order goes to -------------------------------------------------
+
+let contactRows = [];
+let incoterms = [];
+
+function renderContacts() {
+  renderTable($("table-contacts"), [
+    { label: "Company", cell: (row) => {
+      const box = el("span", {}, [el("strong", { textContent: row.company })]);
+      if (row.person) box.append(el("div", { className: "desig", textContent: row.person }));
+      return box;
+    } },
+    { label: "Phone", cell: (row) => document.createTextNode(row.phone ?? "—") },
+    { label: "E-mail", cell: (row) => document.createTextNode(row.email ?? "—") },
+    { label: "Address", cell: (row) => document.createTextNode(short(row.address ?? "—", 40)) },
+    { label: "Incoterm", cell: (row) => document.createTextNode(row.incoterm ?? "—") },
+    { label: "Site", cell: (row) => document.createTextNode(row.site ?? "—") },
+    { label: "", cell: (row) => {
+      const box = el("span", { className: "row tight" });
+      if (row.address) {
+        const toRoute = el("button", { className: "mini", type: "button", textContent: "to route" });
+        toRoute.addEventListener("click", async () => {
+          try {
+            await api("/api/route/places", postJson({
+              address: row.address, label: row.company, kind: "stop" }));
+            notice($("contact-note"), "ok", `${row.company} added to today's deliveries.`);
+            await loadRoute();
+          } catch (e) {
+            notice($("contact-note"), "bad", e.message);
+          }
+        });
+        box.append(toRoute);
+      }
+      box.append(confirmButton("Delete", async () => {
+        await api(`/api/contacts/${row.contact_id}`, { method: "DELETE" });
+        await loadContacts();
+      }));
+      return box;
+    } },
+  ], contactRows, "No contact yet.");
+}
+
+function contactChoices(select, chosen) {
+  select.replaceChildren(
+    el("option", { value: "", textContent: "no contact" }),
+    ...contactRows.map((row) => el("option", {
+      value: String(row.contact_id),
+      textContent: row.person ? `${row.company} — ${row.person}` : row.company,
+    })));
+  select.value = chosen == null ? "" : String(chosen);
+}
+
+function incotermChoices(select, chosen) {
+  select.replaceChildren(
+    el("option", { value: "", textContent: "none" }),
+    ...incoterms.map((term) => el("option", { value: term.id, textContent: term.label })));
+  select.value = chosen ?? "";
+}
+
+async function loadContacts() {
+  try {
+    const data = await api("/api/contacts");
+    contactRows = data.contacts ?? [];
+    incoterms = data.incoterms ?? [];
+    incotermChoices($("contact-incoterm"), "");
+    renderContacts();
+    renderOrders();
+  } catch {
+  }
+}
+
+$("contact-save").addEventListener("click", async () => {
+  const body = {
+    company: $("contact-company").value.trim(),
+    person: $("contact-person").value.trim() || null,
+    phone: $("contact-phone").value.trim() || null,
+    email: $("contact-email").value.trim() || null,
+    address: $("contact-address").value.trim() || null,
+    incoterm: $("contact-incoterm").value || null,
+    site: $("contact-site").value.trim() || null,
+  };
+  if (!body.company) {
+    notice($("contact-note"), "warn", "A contact needs a company name.");
+    return;
+  }
+  try {
+    await api("/api/contacts", postJson(body));
+    for (const id of ["contact-company", "contact-person", "contact-phone", "contact-email",
+                      "contact-address", "contact-site"]) {
+      $(id).value = "";
+    }
+    notice($("contact-note"), "ok", `${body.company} saved.`);
+    await loadContacts();
+  } catch (e) {
+    notice($("contact-note"), "bad", e.message);
+  }
+});
+
+// ---- what a delivery note still owes --------------------------------------
+
+function renderWaiting(data) {
+  const sum = data.summary ?? {};
+  const tiles = [
+    ["notes", showNum(sum.notes ?? 0)],
+    ["lines missing", showNum(sum.lines ?? 0)],
+    ["suppliers", showNum(sum.suppliers ?? 0)],
+    ["past the day", showNum(sum.late ?? 0)],
+    ["no day yet", showNum(sum.undated ?? 0)],
+  ];
+  $("waiting-stats").replaceChildren(...tiles.map(([name, value]) =>
+    el("span", { className: "stat" }, [
+      el("span", { className: "stat-name", textContent: name }),
+      el("strong", { textContent: value }),
+    ])));
+
+  const notes = data.notes ?? [];
+  if (!notes.length) {
+    $("waiting").replaceChildren(el("p", { className: "muted",
+                                           textContent: "Every delivery note is complete." }));
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("waiting").replaceChildren(...notes.map((note) => {
+    const title = el("div", { className: "sheet-title" }, [
+      el("strong", { textContent: note.supplier ?? "no supplier" }),
+      el("span", { className: "muted",
+                   textContent: [`note #${note.note_id}`, showDate(note.delivery_date),
+                                 note.site, note.work_item].filter(Boolean).join(" · ") }),
+    ]);
+    if (note.photo) {
+      title.append(el("a", { className: "mini", style: "margin-left:auto",
+                             href: `/api/photo/${note.note_id}`, target: "_blank",
+                             textContent: "photo" }));
+    }
+
+    const table = el("table", { className: "order-table" });
+    renderTable(table, [
+      { label: "Article", cell: (line) => {
+        const box = el("span", {}, [el("strong", { textContent: line.article })]);
+        if (line.designation) {
+          box.append(el("div", { className: "desig", textContent: line.designation }));
+        }
+        return box;
+      } },
+      { label: "Quantity", numeric: true, cell: (line) => document.createTextNode(showNum(line.quantity)) },
+      { label: "Work item", cell: (line) => document.createTextNode(line.work_item ?? "—") },
+      { label: "Expected", cell: (line) => {
+        const day = el("input", { className: "cell", type: "date", value: line.expected_on ?? "" });
+        if (line.expected_on && line.expected_on < today) day.classList.add("bad");
+        day.addEventListener("change", async () => {
+          await api(`/api/backorders/${line.note_id}/${line.line_no}`,
+                    patchJson({ expected_on: day.value || null }));
+          await loadWaiting();
+        });
+        return day;
+      } },
+      { label: "", cell: (line) => {
+        const came = el("button", { className: "mini", type: "button", textContent: "arrived" });
+        came.addEventListener("click", async () => {
+          await api(`/api/backorders/${line.note_id}/${line.line_no}`,
+                    patchJson({ settled: true }));
+          await loadWaiting();
+        });
+        return came;
+      } },
+    ], note.missing, "");
+
+    return el("div", { className: "sheet" }, [title, table]);
+  }));
+}
+
+async function loadWaiting() {
+  try {
+    renderWaiting(await api("/api/backorders"));
+  } catch (e) {
+    notice($("waiting-note"), "bad", e.message);
+  }
+}
+
+// ---- the vans -------------------------------------------------------------
+
+let vans = [];
+
+const VAN_SHAPES = {
+  van: "M6 54 L6 34 L26 34 L40 18 L84 18 L84 54 Z M26 34 L26 20",
+  truck: "M4 56 L4 20 L62 20 L62 56 Z M62 30 L78 30 L92 44 L92 56 L62 56 Z",
+};
+
+function vanDrawing(shape) {
+  const body = svg("path", {
+    d: VAN_SHAPES[shape] ?? VAN_SHAPES.van, fill: "none",
+    "stroke-width": 3, "stroke-linejoin": "round",
+  });
+  const wheels = [["van", 30, 70], ["truck", 22, 80]][shape === "truck" ? 1 : 0];
+  return svg("svg", { viewBox: "0 0 100 70", class: "van-shape", role: "img" }, [
+    body,
+    svg("circle", { cx: wheels[1], cy: 58, r: 7, class: "wheel" }),
+    svg("circle", { cx: wheels[2], cy: 58, r: 7, class: "wheel" }),
+  ]);
+}
+
+function bar(used, most) {
+  const share = most ? Math.min(used / most, 1.4) : 0;
+  const wide = Math.min(share, 1) * 100;
+  const over = share > 1;
+  return el("span", { className: `meter${over ? " over" : ""}` },
+            [el("span", { className: "fill", style: `width:${wide}%` })]);
+}
+
+function renderVans(data) {
+  vans = data.vehicles ?? [];
+  const stops = data.stops ?? [];
+
+  for (const [id, blank] of [["stop-van", "no van yet"], ["route-van", "every van"]]) {
+    const select = $(id);
+    const chosen = select.value;
+    select.replaceChildren(el("option", { value: "", textContent: blank }),
+      ...vans.map((van) => el("option", { value: String(van.vehicle_id), textContent: van.name })));
+    select.value = vans.some((van) => String(van.vehicle_id) === chosen) ? chosen : "";
+  }
+
+  $("vans").replaceChildren(...vans.map((van) => {
+    const mine = stops.filter((stop) => stop.vehicle_id === van.vehicle_id && !stop.done);
+    const head = el("div", { className: "row tight" }, [
+      el("strong", { textContent: van.name }),
+      el("span", { className: "muted", textContent: `${mine.length} stop(s)` }),
+    ]);
+    const load = el("div", { className: "van-load" }, [
+      el("span", { className: "legend", textContent:
+        `${van.load.cubic} / ${showNum(van.cubic)} m3` }),
+      bar(van.load.cubic, van.cubic),
+      el("span", { className: "legend", textContent:
+        `${van.load.kilos} / ${showNum(van.kilos)} kg` }),
+      bar(van.load.kilos, van.kilos),
+    ]);
+    const list = el("ul", { className: "van-stops" }, mine.map((stop) =>
+      el("li", { textContent: [stop.label, stop.open_from && stop.open_to
+        ? `${stop.open_from}–${stop.open_to}` : ""].filter(Boolean).join(" · ") })));
+    const box = el("div", { className: "van" }, [vanDrawing(van.shape), head, load, list]);
+    for (const wrong of van.trouble ?? []) {
+      box.append(el("p", { className: "notice warn", textContent: wrong }));
+    }
+    const go = el("button", { className: "mini", type: "button", textContent: "its route" });
+    go.addEventListener("click", () => {
+      $("route-van").value = String(van.vehicle_id);
+      findRoute();
+    });
+    box.append(go);
+    return box;
+  }));
+}
+
 // ---- route wrangler -------------------------------------------------------
 
 let stopRows = [];
@@ -3483,8 +3811,24 @@ function renderStops() {
   renderTable($("table-stops"), [
     { label: "Stop", cell: (row) => document.createTextNode(row.label ?? "—") },
     { label: "Address", cell: (row) => document.createTextNode(short(row.address, 46)) },
-    { label: "Placed", cell: (row) => document.createTextNode(
-      row.lat == null ? "not on the map" : `${row.lat.toFixed(4)}, ${row.lon.toFixed(4)}`) },
+    { label: "Van", cell: (row) => {
+      const pick = el("select", { className: "cell" });
+      pick.replaceChildren(el("option", { value: "", textContent: "—" }),
+        ...vans.map((van) => el("option", { value: String(van.vehicle_id),
+                                            textContent: van.name })));
+      pick.value = row.vehicle_id == null ? "" : String(row.vehicle_id);
+      pick.addEventListener("change", async () => {
+        await api(`/api/route/places/${row.place_id}`,
+                  patchJson({ vehicle_id: pick.value ? Number(pick.value) : null }));
+        await loadRoute();
+      });
+      return pick;
+    } },
+    { label: "Load", numeric: true, cell: (row) => document.createTextNode(
+      [row.cubic ? `${row.cubic} m3` : "", row.kilos ? `${row.kilos} kg` : ""]
+        .filter(Boolean).join(" · ") || "—") },
+    { label: "Window", cell: (row) => document.createTextNode(
+      row.open_from && row.open_to ? `${row.open_from}–${row.open_to}` : "—") },
     { label: "Done", cell: (row) => {
       const box = el("input", { type: "checkbox", checked: row.done });
       box.addEventListener("change", async () => {
@@ -3508,6 +3852,7 @@ async function loadRoute() {
   try {
     const data = await api("/api/route");
     stopRows = data.stops ?? [];
+    renderVans(data);
     $("tree-route").textContent = `(${stopRows.filter((row) => !row.done).length})`;
     $("depot-now").textContent = data.depot
       ? `Leaving from ${data.depot.label} — ${data.depot.address}`
@@ -3526,10 +3871,20 @@ async function addPlace(kind) {
   }
   notice($("route-note"), "", "Looking the address up on the map...");
   try {
-    await api("/api/route/places",
-              postJson({ address: address.value.trim(), label: label.value.trim() || null, kind }));
+    const extra = kind === "stop" ? {
+      vehicle_id: $("stop-van").value ? Number($("stop-van").value) : null,
+      cubic: asNumber($("stop-cubic").value),
+      kilos: asNumber($("stop-kilos").value),
+      open_from: $("stop-from").value || null,
+      open_to: $("stop-to").value || null,
+    } : {};
+    await api("/api/route/places", postJson({
+      address: address.value.trim(), label: label.value.trim() || null, kind, ...extra }));
     address.value = "";
     label.value = "";
+    if (kind === "stop") {
+      for (const id of ["stop-cubic", "stop-kilos", "stop-from", "stop-to"]) $(id).value = "";
+    }
     notice($("route-note"), "ok", "Address placed on the map.");
     await loadRoute();
   } catch (e) {
@@ -3547,12 +3902,14 @@ $("stops-clear").addEventListener("click", async () => {
   await loadRoute();
 });
 
-$("route-go").addEventListener("click", async () => {
+async function findRoute() {
   const loop = $("route-loop").checked;
+  const van = $("route-van").value;
   $("route-go").disabled = true;
   notice($("route-note"), "", "Measuring the roads...");
   try {
-    const plan = await api(`/api/route/plan?round_trip=${loop}`, postJson({}));
+    const plan = await api(
+      `/api/route/plan?round_trip=${loop}${van ? `&vehicle_id=${van}` : ""}`, postJson({}));
     renderTable($("table-route"), [
       { label: "Order", numeric: true,
         cell: (row) => document.createTextNode(String(row.position + 1)) },
@@ -3560,15 +3917,18 @@ $("route-go").addEventListener("click", async () => {
       { label: "Address", cell: (row) => document.createTextNode(short(row.address, 52)) },
     ], plan.stops, "Nothing to drive.");
     $("route-total").textContent =
-      `${plan.km} km over ${plan.legs.length} leg(s), `
+      `${plan.vehicle ? `${plan.vehicle.name}: ` : ""}${plan.km} km over ${plan.legs.length} leg(s), `
       + (plan.source === "road" ? "measured by road" : "straight-line only, the road service was quiet");
-    notice($("route-note"), "ok", "Route worked out.");
+    notice($("route-note"), (plan.trouble ?? []).length ? "warn" : "ok",
+           (plan.trouble ?? []).length ? plan.trouble.join(" ; ") : "Route worked out.");
   } catch (e) {
     notice($("route-note"), "bad", e.message);
   } finally {
     $("route-go").disabled = false;
   }
-});
+}
+
+$("route-go").addEventListener("click", findRoute);
 
 async function refresh() {
   try {
@@ -3596,7 +3956,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {

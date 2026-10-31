@@ -21,3 +21,16 @@ functionnalities to developp :
 
 - DONE: route wrangler: save the yard, type the delivery addresses, shortest run by road
         (Nominatim + OSRM, OpenStreetMap)
+
+- DONE: the PO part is the outbound/order to ship: a contact book (company, person, phone,
+        mail, address, incoterm, site), picked per order, with the ship-by day
+        
+- DONE: "Partly delivered" on the Inventory screen: every note with a backorder mark, the
+        missing articles, supplier, site and work item, with the expected day you type in
+
+- DONE: route wrangler: 2 Renault Partner + 1 Iveco Daily, each drawn as a shape, each with
+        its stops, its load against its capacity, the delivery windows and its own route
+
+-a blockchain for dots/ open claw automatic purchase : they can freely make baskets, but for the first purchase of an item ( ex first time buying spit fix), there's the synchronized ai checking for coherence, then I manually have to check it too. Important : it is a project, don't build it yet but let's discuss about it to make it work.
+
+- 

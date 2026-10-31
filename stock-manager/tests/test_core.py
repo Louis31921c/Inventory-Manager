@@ -2204,3 +2204,108 @@ def test_the_route_asks_the_road_service_first(db_path):
     assert plan["source"] == "road"
     assert plan["metres"] == 400 + 600 + 900
     assert [stop["label"] for stop in plan["stops"]] == ["YARD", "A", "B"]
+
+
+def test_a_contact_rides_on_the_order(db_path):
+    from inventory import contacts
+
+    contact_id = contacts.save(db_path, {"company": "bati sud", "person": "Mme Roussel",
+                                         "phone": "0556", "email": "a@b.fr",
+                                         "address": "12 rue Fondaudege", "incoterm": "dap",
+                                         "site": "la genette"}, "ALEX")
+    stored = contacts.one(db_path, contact_id)
+    assert stored["company"] == "BATI SUD" and stored["incoterm"] == "DAP"
+    assert contacts.for_site(db_path, "LA GENETTE")["contact_id"] == contact_id
+
+    list_id = db.save_purchase_order(db_path, {"site": "LA GENETTE",
+                                               "lines": [{"article": "BOLT", "quantity": 2}]},
+                                     "sha-c", "", "ALEX")
+    assert contacts.put_on_order(db_path, list_id, contact_id, "ddp", "2026-11-12")
+    order = {sheet["id"]: sheet for sheet in db.purchase_orders(db_path)}[list_id]
+    assert order["incoterm"] == "DDP" and order["ship_by"] == "2026-11-12"
+    assert order["contact"]["person"] == "Mme Roussel"
+
+    # Nonsense terms are dropped rather than stored.
+    contacts.put_on_order(db_path, list_id, None, "banana", None)
+    assert {sheet["id"]: sheet for sheet in db.purchase_orders(db_path)}[list_id]["incoterm"] is None
+
+    assert contacts.drop(db_path, contact_id)
+    assert {sheet["id"]: sheet for sheet in db.purchase_orders(db_path)}[list_id]["contact"] is None
+
+
+def test_the_missing_lines_are_listed_by_note(db_path):
+    from inventory import backorders
+
+    note = make_note(lines=[Line(article="CEMENT 35KG", quantity=40),
+                            Line(article="MESH ST25", quantity=5, backorder=True)])
+    db.save_note(db_path, note, "sha-back", "", "ALEX")
+
+    waiting = backorders.notes(db_path)
+    assert len(waiting) == 1 and len(waiting[0]["missing"]) == 1
+    missing = waiting[0]["missing"][0]
+    assert missing["article"] == "MESH ST25" and missing["supplier"] == "ACME SUPPLIES"
+    assert missing["site"] == "VILLA PROJECT" and missing["expected_on"] is None
+    assert backorders.summary(db_path) == {"lines": 1, "notes": 1, "suppliers": 1,
+                                           "late": 0, "undated": 1}
+
+    backorders.expect(db_path, missing["note_id"], missing["line_no"], "2020-01-02")
+    assert backorders.summary(db_path)["late"] == 1
+
+    backorders.settle(db_path, missing["note_id"], missing["line_no"])
+    assert backorders.notes(db_path) == []
+    assert backorders.rows(db_path, settled=True)[0]["article"] == "MESH ST25"
+
+
+def test_a_van_says_when_the_load_does_not_fit(db_path):
+    from inventory import routing
+
+    vans = {van["name"]: van for van in routing.vehicles(db_path)}
+    assert set(vans) == {"Renault Partner 1", "Renault Partner 2", "Iveco Daily"}
+    partner = vans["Renault Partner 1"]
+    assert partner["cubic"] == 3.3 and partner["shape"] == "van"
+
+    stops = [{"label": "A", "cubic": 2.4, "kilos": 400, "open_from": "08:00", "open_to": "12:00"},
+             {"label": "B", "cubic": 1.6, "kilos": 300, "open_from": "13:00", "open_to": "17:00"}]
+    assert routing.load_of(stops) == {"cubic": 4.0, "kilos": 700.0}
+    said = routing.trouble(partner, stops)
+    assert len(said) == 2 and "3.3 m3 fits" in said[0] and "650.0 kg allowed" in said[1]
+
+    assert routing.trouble(vans["Iveco Daily"], stops) == []
+    backwards = [stops[1], stops[0]]
+    assert any("shuts before" in word for word in routing.trouble(vans["Iveco Daily"], backwards))
+
+
+def test_route_screen_routes(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        screen = client.get("/api/route").json()
+        assert [van["name"] for van in screen["vehicles"]] == [
+            "Renault Partner 1", "Renault Partner 2", "Iveco Daily"]
+        assert screen["vehicles"][0]["stops"] == 0
+
+        saved = client.post("/api/contacts", headers=mine,
+                            json={"company": "bati sud", "incoterm": "DAP"}).json()
+        assert saved["contacts"][0]["company"] == "BATI SUD"
+        assert client.get("/api/contacts").json()["incoterms"][0]["id"] == "EXW"
+
+        waiting = client.get("/api/backorders").json()
+        assert waiting["notes"] == [] and waiting["summary"]["lines"] == 0
+
+        assert client.delete(f"/api/contacts/{saved['contact_id']}",
+                             headers=mine).status_code == 200

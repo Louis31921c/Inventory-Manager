@@ -413,6 +413,28 @@ input.cell:focus { border-color: var(--accent); outline: none; }
 }
 .menu-drop button[aria-current="true"]::after { content: " \2022"; }
 
+/* ---- the vans ------------------------------------------------------- */
+
+.vans { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.van {
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  padding: 6px 8px 8px;
+}
+.van > * + * { margin-top: 4px; }
+.van-shape { height: 56px; width: 100%; }
+.van-shape path { stroke: var(--ink); }
+.van-shape circle.wheel { fill: none; stroke: var(--ink); stroke-width: 3; }
+.van-load { display: grid; gap: 2px; grid-template-columns: 1fr; }
+.van-stops { font-size: 11px; list-style: none; margin: 0; padding: 0; }
+.van-stops li { color: var(--ink-soft); padding: 1px 0; }
+.meter { background: var(--panel); border: 1px solid var(--line-soft); display: block; height: 7px; }
+.meter .fill { background: var(--accent); display: block; height: 100%; }
+.meter.over .fill { background: var(--red); }
+.sheet .ship { align-items: center; padding: 2px 0 4px; }
+.sheet .ship select.cell, .sheet .ship input.cell { max-width: 190px; width: auto; }
+input.cell.bad { border-color: var(--red); color: var(--red); }
+
 /* ---- figures on a screen ------------------------------------------- */
 
 .stat {

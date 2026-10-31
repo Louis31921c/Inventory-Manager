@@ -24,8 +24,8 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, alerts, audit, backup, baskets, bills, catalog, db, ddmrp,
-               discord_bot,
+from . import (account, alerts, audit, backorders, backup, baskets, bills, catalog, contacts,
+               db, ddmrp, discord_bot,
                forecast, intake, llm,
                mailbox, models_info, pg, quotes, routing, sheets, stock, vocabulary)
 from .config import load_config, set_setting
@@ -908,6 +908,97 @@ def read_tables():
     return {"tables": db.table_counts(config.db_path)}
 
 
+# ---- who the order goes to ------------------------------------------------
+
+class ContactBody(BaseModel):
+    company: str
+    person: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    address: str | None = None
+    incoterm: str | None = None
+    site: str | None = None
+    note: str | None = None
+
+
+class OrderTerms(BaseModel):
+    contact_id: int | None = None
+    incoterm: str | None = None
+    ship_by: str | None = None
+
+
+@app.get("/api/contacts")
+def read_contacts():
+    return {"contacts": contacts.all_of(config.db_path), "incoterms": contacts.terms()}
+
+
+@app.post("/api/contacts")
+def save_contact(request: Request, body: ContactBody):
+    try:
+        contact_id = contacts.save(config.db_path, body.model_dump(), who(request)[0])
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "contact.save", f"contact #{contact_id}", body.company)
+    return {"contact_id": contact_id, "contacts": contacts.all_of(config.db_path)}
+
+
+@app.patch("/api/contacts/{contact_id}")
+def edit_contact(request: Request, contact_id: int, body: dict):
+    if contacts.one(config.db_path, contact_id) is None:
+        raise HTTPException(404, f"No contact #{contact_id}.")
+    try:
+        contacts.update(config.db_path, contact_id, body)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "contact.edit", f"contact #{contact_id}", ", ".join(sorted(body)))
+    return {"contacts": contacts.all_of(config.db_path)}
+
+
+@app.delete("/api/contacts/{contact_id}")
+def remove_contact(request: Request, contact_id: int):
+    if not contacts.drop(config.db_path, contact_id):
+        raise HTTPException(404, f"No contact #{contact_id}.")
+    event(request, "contact.delete", f"contact #{contact_id}")
+    return {"deleted": contact_id}
+
+
+@app.patch("/api/orders/{list_id}/terms")
+def set_order_terms(request: Request, list_id: int, body: OrderTerms):
+    if not db.read(config.db_path, "SELECT count(*) FROM purchase_orders WHERE list_id = ?",
+                   [list_id])[0][0]:
+        raise HTTPException(404, f"No purchase order #{list_id}.")
+    contacts.put_on_order(config.db_path, list_id, body.contact_id, body.incoterm, body.ship_by)
+    event(request, "order.terms", f"order #{list_id}",
+          f"contact {body.contact_id or 'none'} · {body.incoterm or 'no incoterm'}")
+    return {"list_id": list_id}
+
+
+# ---- what a delivery note still owes --------------------------------------
+
+class Waiting(BaseModel):
+    expected_on: str | None = None
+    settled: bool | None = None
+
+
+@app.get("/api/backorders")
+def read_backorders():
+    return {"notes": backorders.notes(config.db_path),
+            "lines": backorders.rows(config.db_path),
+            "summary": backorders.summary(config.db_path)}
+
+
+@app.patch("/api/backorders/{note_id}/{line_no}")
+def edit_backorder(request: Request, note_id: int, line_no: int, body: Waiting):
+    if body.expected_on is not None:
+        backorders.expect(config.db_path, note_id, line_no, body.expected_on)
+    if body.settled is not None:
+        backorders.settle(config.db_path, note_id, line_no, body.settled)
+    event(request, "backorder.edit", f"note #{note_id} line {line_no}",
+          body.expected_on or ("arrived" if body.settled else "still waiting"))
+    return {"summary": backorders.summary(config.db_path),
+            "notes": backorders.notes(config.db_path)}
+
+
 # ---- route wrangler -------------------------------------------------------
 
 class PlaceBody(BaseModel):
@@ -915,12 +1006,28 @@ class PlaceBody(BaseModel):
     label: str | None = None
     kind: str = "stop"
     note: str | None = None
+    vehicle_id: int | None = None
+    cubic: float | None = None
+    kilos: float | None = None
+    open_from: str | None = None
+    open_to: str | None = None
+
+
+def _route_screen():
+    stops = routing.places(config.db_path, "stop")
+    vans = routing.vehicles(config.db_path)
+    for van in vans:
+        mine = [stop for stop in stops
+                if stop["vehicle_id"] == van["vehicle_id"] and not stop["done"]]
+        van["stops"] = len(mine)
+        van["load"] = routing.load_of(mine)
+        van["trouble"] = routing.trouble(van, mine)
+    return {"depot": routing.depot(config.db_path), "stops": stops, "vehicles": vans}
 
 
 @app.get("/api/route")
 def read_route_places():
-    return {"depot": routing.depot(config.db_path),
-            "stops": routing.places(config.db_path, "stop")}
+    return _route_screen()
 
 
 @app.post("/api/route/places")
@@ -928,18 +1035,22 @@ def add_route_place(request: Request, body: PlaceBody):
     kind = "depot" if body.kind == "depot" else "stop"
     try:
         place_id = routing.add(config.db_path, body.address, body.label, kind,
-                               body.note, who(request)[0])
+                               body.note, who(request)[0], vehicle_id=body.vehicle_id,
+                               cubic=body.cubic, kilos=body.kilos,
+                               open_from=body.open_from, open_to=body.open_to)
     except routing.MapError as e:
         raise HTTPException(422, str(e)) from e
     event(request, "route.place", f"{kind} #{place_id}", body.address)
-    return {"place_id": place_id, "depot": routing.depot(config.db_path),
-            "stops": routing.places(config.db_path, "stop")}
+    return {"place_id": place_id, **_route_screen()}
 
 
 @app.patch("/api/route/places/{place_id}")
 def mark_route_place(place_id: int, body: dict):
-    routing.mark(config.db_path, place_id, bool(body.get("done")))
-    return {"stops": routing.places(config.db_path, "stop")}
+    if "done" in body:
+        routing.mark(config.db_path, place_id, bool(body.get("done")))
+    if "vehicle_id" in body:
+        routing.set_vehicle(config.db_path, place_id, body.get("vehicle_id"))
+    return _route_screen()
 
 
 @app.delete("/api/route/places/{place_id}")
@@ -958,10 +1069,10 @@ def clear_route_stops(request: Request):
 
 
 @app.post("/api/route/plan")
-async def plan_route(round_trip: bool = True):
+async def plan_route(round_trip: bool = True, vehicle_id: int | None = None):
     """Asks OpenStreetMap for road distances; the only call that leaves this machine."""
     try:
-        return await asyncio.to_thread(routing.route, config.db_path, round_trip)
+        return await asyncio.to_thread(routing.route, config.db_path, round_trip, None, vehicle_id)
     except routing.MapError as e:
         raise HTTPException(422, str(e)) from e
 
