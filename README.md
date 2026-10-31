@@ -252,6 +252,27 @@ buys, supplier, and one line saying why. Check it, change any quantity, then
 
 Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
 
+## The chat bot
+
+Two doors onto the same room: Discord and Slack. Both answer `/basket`, `/basket_show`,
+`/basket_clear`, `/purchase`, `/quote` and `/stock`, and both fill the same baskets and go
+through the same gate. Each starts only if its tokens are set, so running one, both or
+neither is a matter of what is in Settings → Chat bot.
+
+Discord takes one bot token. Slack takes two, because it cannot knock on a door that is only
+on loopback: the connection is made outward, in socket mode, so it wants a bot token
+(`xoxb-`) for what it says and an app-level token (`xapp-`) for the socket itself. Create the
+app at api.slack.com, switch Socket Mode on, add the six slash commands, install it to the
+workspace, then paste both tokens.
+
+A Slack slash command carries one line of free text where Discord carried a form, so on Slack
+`/basket` with nothing after it opens the same form as a dialog, and `/basket` with something
+after it reads the line straight.
+
+```bash
+pip install 'stock-manager[discord,slack]'
+```
+
 ## The purchase gate
 
 A basket is free: anyone in the chat can fill one, and `/basket` now takes the price off the

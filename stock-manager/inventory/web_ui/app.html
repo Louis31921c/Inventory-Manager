@@ -584,6 +584,7 @@
 
   <div class="card">
     <h2>Chat bot</h2>
+    <p class="eyebrow">Discord</p>
     <div class="row">
       <label class="field grow"><span>Bot token</span>
         <input id="chat-token" type="password" autocomplete="new-password"></label>
@@ -594,9 +595,30 @@
       <button class="action" id="chat-save">Save the bot</button>
       <button class="action ghost" id="chat-forget">Forget the token</button>
     </div>
-    <p class="muted">Commands: <code>/basket</code>--- <code>/basket_show</code>---
-      <code>/basket_clear</code>--- <code>/purchase</code>--- <code>/stock</code></p>
     <div id="chat-note"></div>
+
+    <p class="eyebrow">Slack</p>
+    <p class="muted" id="slack-state"></p>
+    <div class="row">
+      <label class="field grow"><span>Bot token (xoxb-)</span>
+        <input id="slack-bot-token" type="password" autocomplete="new-password"></label>
+      <label class="field grow"><span>App token (xapp-)</span>
+        <input id="slack-app-token" type="password" autocomplete="new-password"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>Channel ids it answers in</span>
+        <input id="slack-channels" autocomplete="off" placeholder="empty = every channel"></label>
+    </div>
+    <div class="row">
+      <button class="action" id="slack-save">Save the bot</button>
+      <button class="action ghost" id="slack-forget">Forget both tokens</button>
+    </div>
+    <div id="slack-note"></div>
+
+    <p class="muted">Both answer the same commands: <code>/basket</code>---
+      <code>/basket_show</code>--- <code>/basket_clear</code>--- <code>/purchase</code>---
+      <code>/quote</code>--- <code>/stock</code>. On Slack, <code>/basket</code> with
+      nothing after it opens the form.</p>
   </div>
 
   <div class="card">
@@ -3098,13 +3120,15 @@ async function loadBaskets() {
   }
   const open = data.baskets ?? [];
   const chat = data.chat ?? {};
-  $("basket-card").hidden = open.length === 0 && !chat.ready;
+  const slack = data.slack ?? {};
+  const onAir = [chat.ready && "Discord", slack.ready && "Slack"].filter(Boolean);
+  $("basket-card").hidden = open.length === 0 && !onAir.length;
 
-  $("basket-state").textContent = chat.ready
-    ? "The Discord bot is on. /basket fills these, /purchase turns one into an order."
-    : (chat.installed
+  $("basket-state").textContent = onAir.length
+    ? `${onAir.join(" and ")} on air. /basket fills these, /purchase turns one into an order.`
+    : (chat.installed || slack.installed
         ? "No bot token yet: Settings, then Chat bot."
-        : "The Discord library is not installed: pip install 'stock-manager[discord]'.");
+        : "Neither library is installed: pip install 'stock-manager[discord,slack]'.");
 
   if ($("chat-state")) {
     $("chat-state").textContent = chat.ready
@@ -3114,6 +3138,16 @@ async function loadBaskets() {
                         : "Library missing: pip install 'stock-manager[discord]'");
   }
   $("chat-channels").value = (chat.channels ?? []).join(", ");
+
+  // Slack wants both tokens before it can open its socket, so say which one is missing.
+  $("slack-state").textContent = slack.ready
+    ? `Bot ready · ${slack.channels.length ? slack.channels.join(", ") : "every channel"}`
+    : (!slack.installed ? "Library missing: pip install 'stock-manager[slack]'"
+      : !slack.bot_token_set && !slack.app_token_set ? "No token stored yet."
+      : !slack.bot_token_set ? "The bot token (xoxb-) is missing."
+      : !slack.app_token_set ? "The app token (xapp-) is missing."
+      : "Both tokens stored, bot starting with the app.");
+  $("slack-channels").value = (slack.channels ?? []).join(", ");
 
   $("baskets").replaceChildren(...open.map((basket) => {
     const head = el("div", { className: "row tight" }, [
@@ -3181,6 +3215,32 @@ async function saveChat(forget) {
     button.disabled = false;
   }
 }
+
+async function saveSlack(forget) {
+  const button = forget ? $("slack-forget") : $("slack-save");
+  button.disabled = true;
+  try {
+    await api("/api/slack/settings", postJson({
+      bot_token: $("slack-bot-token").value || null,
+      app_token: $("slack-app-token").value || null,
+      channels: $("slack-channels").value,
+      forget,
+    }));
+    $("slack-bot-token").value = "";
+    $("slack-app-token").value = "";
+    notice($("slack-note"), "ok", forget
+      ? "Both tokens forgotten. The bot stops at the next start."
+      : "Saved. Restart Stock Manager for the bot to sign in.");
+    await loadBaskets();
+  } catch (e) {
+    notice($("slack-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("slack-save").addEventListener("click", () => saveSlack(false));
+$("slack-forget").addEventListener("click", () => saveSlack(true));
 
 $("chat-save").addEventListener("click", () => saveChat(false));
 $("chat-forget").addEventListener("click", () => saveChat(true));

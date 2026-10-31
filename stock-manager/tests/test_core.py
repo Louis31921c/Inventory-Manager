@@ -1978,14 +1978,29 @@ def test_mail_and_chat_settings_routes(tmp_path, monkeypatch):
         assert client.post("/api/mail/settings", headers=mine,
                            json={"provider": "nope"}).status_code == 422
 
+        # Two doors now, so the answer names them: Discord and Slack side by side.
         chat = client.post("/api/chat/settings", headers=mine,
                            json={"token": "a-bot-token", "channels": "777, 888"}).json()
-        assert chat["token_set"] is True and chat["channels"] == ["777", "888"]
+        assert chat["discord"]["token_set"] is True
+        assert chat["discord"]["channels"] == ["777", "888"]
         assert "a-bot-token" not in client.get("/api/chat/settings").text
 
         gone = client.post("/api/chat/settings", headers=mine,
                            json={"channels": "777", "forget": True}).json()
-        assert gone["token_set"] is False
+        assert gone["discord"]["token_set"] is False
+
+        slack = client.post("/api/slack/settings", headers=mine,
+                            json={"bot_token": "xoxb-secret", "app_token": "xapp-secret",
+                                  "channels": "C01"}).json()
+        assert slack["slack"]["bot_token_set"] is True
+        assert slack["slack"]["app_token_set"] is True
+        assert slack["slack"]["channels"] == ["C01"]
+        assert "xoxb-secret" not in client.get("/api/chat/settings").text
+
+        dropped = client.post("/api/slack/settings", headers=mine,
+                              json={"channels": "C01", "forget": True}).json()
+        assert dropped["slack"]["bot_token_set"] is False
+        assert dropped["slack"]["app_token_set"] is False
 
         assert client.get("/api/baskets").json()["baskets"] == []
         assert client.post("/api/baskets/777/order", headers=mine).status_code == 404
@@ -1993,6 +2008,7 @@ def test_mail_and_chat_settings_routes(tmp_path, monkeypatch):
 
         page = client.get("/").text
         assert 'id="mail-provider"' in page and 'id="chat-token"' in page
+        assert 'id="slack-bot-token"' in page and 'id="slack-app-token"' in page
 
 
 def test_the_bot_registers_its_commands(db_path, tmp_path):
@@ -2022,7 +2038,7 @@ def test_the_bot_registers_its_commands(db_path, tmp_path):
              for command in held[0].get_commands()}
     assert set(names) == {"basket", "basket_show", "basket_clear", "purchase", "stock", "quote"}
     assert names["quote"] == ["supplier", "items", "site", "work_item"]
-    assert names["basket"] == ["shop", "items", "site", "work_item"]
+    assert names["basket"] == ["shop", "items", "site", "work_item", "supplier"]
 
 
 def test_the_logo_is_served_before_the_password(tmp_path, monkeypatch):
@@ -2749,3 +2765,76 @@ def test_the_landing_page_carries_the_approval_window():
     home = page[page.index('id="panel-home"'):page.index('id="panel-capture"')]
     assert 'id="gate-card"' in home and "<h2>Waiting for you</h2>" in home
     assert 'id="gate-list"' in home
+
+
+# ---- the Slack door -------------------------------------------------------
+
+def test_the_same_words_come_out_in_slack_markup():
+    from inventory import chat
+
+    assert chat.to_slack("**Basket** (2 line(s)) for **foussier.fr**") == \
+        "*Basket* (2 line(s)) for *foussier.fr*"
+    # Discord's italics are Slack's italics, and must not be eaten by the bold pass.
+    assert chat.to_slack("· 12 × VIS  _ALEX_") == "· 12 × VIS  _ALEX_"
+    assert chat.to_slack("nothing to do here") == "nothing to do here"
+
+
+def test_both_doors_say_the_same_thing(db_path):
+    from inventory import chat, discord_bot
+
+    # The formatters live in one place now; the Discord module still answers for them.
+    assert discord_bot.basket_text is chat.basket_text
+    assert discord_bot.purchase_text is chat.purchase_text
+    assert discord_bot.allowed is chat.allowed
+
+
+def test_slack_needs_both_tokens_before_it_is_ready(monkeypatch):
+    from inventory import slack_bot
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "")
+    assert slack_bot.status()["ready"] is False
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    assert slack_bot.status()["ready"] is False
+    assert slack_bot.status()["bot_token_set"] is True
+
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+    monkeypatch.setenv("SLACK_CHANNELS", "C01, C02")
+    now = slack_bot.status()
+    assert now["channels"] == ["C01", "C02"]
+    assert now["ready"] is now["installed"]
+
+
+def test_the_slack_door_builds_its_commands(tmp_path, monkeypatch):
+    pytest.importorskip("slack_bolt")
+    from inventory import slack_bot
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+    app = slack_bot.build_app(make_config(tmp_path), ["C01"])
+    # Building must not reach out to Slack: no network, no token check.
+    assert app is not None
+
+
+def test_a_slack_dialog_carries_the_fields_discord_had(monkeypatch):
+    pytest.importorskip("slack_bolt")
+    from inventory import slack_bot
+
+    view = slack_bot.basket_dialog("C01")
+    assert view["callback_id"] == slack_bot.BASKET_VIEW
+    assert view["private_metadata"] == "C01"
+    assert [block["block_id"] for block in view["blocks"]] == \
+        ["shop", "items", "site", "work_item", "supplier"]
+    # Only the shop and the items are asked for; the rest may be left alone.
+    assert [block["optional"] for block in view["blocks"]] == [False, False, True, True, True]
+
+
+def test_reading_one_field_out_of_a_submitted_dialog():
+    from inventory import slack_bot
+
+    view = {"state": {"values": {"items": {"value": {"value": "12 vis th 6x25 @ 0.11"}},
+                                 "site": {"value": {"value": None}}}}}
+    assert slack_bot.typed(view, "items") == "12 vis th 6x25 @ 0.11"
+    assert slack_bot.typed(view, "site") == ""
+    assert slack_bot.typed(view, "nothing here") == ""

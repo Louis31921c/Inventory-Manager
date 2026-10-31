@@ -27,8 +27,8 @@ from dataclasses import replace
 from . import (account, alerts, audit, backorders, backup, baskets, bills, catalog, contacts,
                db, ddmrp, discord_bot,
                forecast, gate, intake, llm,
-               mailbox, models_info, pg, prices, quotes, routing, sheets, stock, verify,
-               vocabulary)
+               mailbox, models_info, pg, prices, quotes, routing, sheets, slack_bot, stock,
+               verify, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
 
@@ -86,6 +86,8 @@ async def startup():
     asyncio.create_task(_mail_loop())
     if discord_bot.settings()["token"]:
         asyncio.create_task(discord_bot.run(config))
+    if slack_bot.settings()["bot_token"] and slack_bot.settings()["app_token"]:
+        asyncio.create_task(slack_bot.run(config))
 
 
 async def _purge_loop():
@@ -562,7 +564,8 @@ def save_mail_settings(request: Request, body: MailSettings):
 
 @app.get("/api/baskets")
 def read_baskets():
-    return {"baskets": baskets.open_baskets(config.db_path), "chat": discord_bot.status()}
+    return {"baskets": baskets.open_baskets(config.db_path), "chat": discord_bot.status(),
+            "slack": slack_bot.status()}
 
 
 @app.post("/api/baskets/{channel}/order")
@@ -680,10 +683,17 @@ class ChatSettings(BaseModel):
     forget: bool = False
 
 
+class SlackSettings(BaseModel):
+    bot_token: str | None = None
+    app_token: str | None = None
+    channels: str = ""
+    forget: bool = False
+
+
 @app.get("/api/chat/settings")
 def chat_settings():
-    """Whether the Discord bot can run. The token itself never leaves the machine."""
-    return discord_bot.status()
+    """Whether either bot can run. No token ever leaves the machine."""
+    return {"discord": discord_bot.status(), "slack": slack_bot.status()}
 
 
 @app.post("/api/chat/settings")
@@ -695,7 +705,25 @@ def save_chat_settings(request: Request, body: ChatSettings):
     elif body.token:
         set_setting(discord_bot.TOKEN_KEY, body.token.strip())
     event(request, "chat.settings", "discord", f"{len(channels.split(',')) if channels else 0} channel(s)")
-    return discord_bot.status()
+    return {"discord": discord_bot.status(), "slack": slack_bot.status()}
+
+
+@app.post("/api/slack/settings")
+def save_slack_settings(request: Request, body: SlackSettings):
+    """Two tokens: the bot says things with one and holds the socket open with the other."""
+    channels = ",".join(piece.strip() for piece in body.channels.split(",") if piece.strip())
+    set_setting(slack_bot.CHANNELS_KEY, channels)
+    if body.forget:
+        set_setting(slack_bot.BOT_TOKEN_KEY, "")
+        set_setting(slack_bot.APP_TOKEN_KEY, "")
+    else:
+        if body.bot_token:
+            set_setting(slack_bot.BOT_TOKEN_KEY, body.bot_token.strip())
+        if body.app_token:
+            set_setting(slack_bot.APP_TOKEN_KEY, body.app_token.strip())
+    event(request, "chat.settings", "slack",
+          f"{len(channels.split(',')) if channels else 0} channel(s)")
+    return {"discord": discord_bot.status(), "slack": slack_bot.status()}
 
 
 @app.post("/api/mail/check")

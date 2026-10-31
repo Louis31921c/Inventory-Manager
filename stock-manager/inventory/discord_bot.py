@@ -1,104 +1,30 @@
-"""The group chat side: a basket people fill in Discord, a purchase order at the end.
+"""The Discord door: a basket people fill in a channel, a purchase order at the end.
 
-Nothing here buys anything. `/purchase` writes the order into Stock Manager and hands it back
-to a person to place on the supplier's own site: a bot with a company card is not something
-this app will do on its own.
+Nothing here buys anything. `/purchase` writes the order into Stock Manager and hands it
+back to a person to place on the supplier's own site: a bot with a company card is not
+something this app will do on its own.
+
+What anyone reads is written once, in chat.py, which the Slack door uses as well. Only the
+plumbing is here.
 """
 import asyncio
 import logging
 import os
 
-from . import baskets, gate, quotes, verify
+from . import baskets, chat, gate, quotes, verify
+from .chat import (MAX_SHOWN, allowed, basket_text, held_text, purchase_text, quote_text,
+                   show_number, stock_text)
 from .config import load_config
 
 log = logging.getLogger(__name__)
 
 TOKEN_KEY = "DISCORD_BOT_TOKEN"
 CHANNELS_KEY = "DISCORD_CHANNELS"
-MAX_SHOWN = 25
 
 
 def settings():
-    allow = os.environ.get(CHANNELS_KEY, "")
     return {"token": os.environ.get(TOKEN_KEY, "").strip(),
-            "channels": [piece.strip() for piece in allow.split(",") if piece.strip()]}
-
-
-def allowed(channel_id, channels):
-    """No allow-list means every channel the bot was invited to."""
-    return not channels or str(channel_id) in channels
-
-
-def show_number(value):
-    if value is None:
-        return "?"
-    return str(int(value)) if float(value).is_integer() else f"{value:g}"
-
-
-def basket_text(rows):
-    if not rows:
-        return "The basket is empty. `/basket shop:... items:...` fills it."
-    shop = next((row["shop"] for row in rows if row["shop"]), None)
-    site = next((row["site"] for row in rows if row["site"]), None)
-    head = f"**Basket** ({len(rows)} line(s))"
-    if shop:
-        head += f" for **{shop}**"
-    if site:
-        head += f", site {site}"
-    body = "\n".join(f"· {show_number(row['quantity'])} × {row['article']}"
-                     + (f"  _{row['added_by']}_" if row["added_by"] else "")
-                     for row in rows[:MAX_SHOWN])
-    if len(rows) > MAX_SHOWN:
-        body += f"\n· ... and {len(rows) - MAX_SHOWN} more"
-    return f"{head}\n{body}"
-
-
-def purchase_text(answer):
-    if answer is None:
-        return "Nothing in the basket to order."
-    lines = "\n".join(f"· {show_number(row['quantity'])} × {row['article']}"
-                      for row in answer["lines"][:MAX_SHOWN])
-    where = f" on {answer['shop']}" if answer["shop"] else ""
-    site = f", site {answer['site']}" if answer["site"] else ""
-    return (f"**Purchase order #{answer['list_id']}** is in Stock Manager"
-            f" ({len(answer['lines'])} line(s){site}){where}.\n{lines}\n"
-            f"Someone has to place it on the supplier's site and tick it off in the app: "
-            f"the bot does not pay for anything.")
-
-
-def held_text(request_id, reading, answer):
-    """What the channel is told when the gate holds a basket."""
-    why = "\n".join(f"· {word}" for word in gate.said(reading["reasons"]))
-    lines = "\n".join(
-        f"· {show_number(row['quantity'])} × {row['article']}"
-        + (f" @ {row['unit_price']:.2f}" if row.get("unit_price") is not None else " (no price)")
-        for row in reading["lines"][:MAX_SHOWN])
-    agent = {"same": "the agent recognises every article",
-             "new": "the agent says at least one article is genuinely new",
-             "unsure": "the agent is not sure"}.get(answer["verdict"], answer["verdict"])
-    return (f"**Held for approval — request #{request_id}** "
-            f"({reading['total']:.2f} EUR)\n{lines}\n\nWhy:\n{why}\n\n"
-            f"First check: {agent}. {answer['note']}\n"
-            f"Nothing is bought until it is approved in Stock Manager. "
-            f"The basket stays as it is.")
-
-
-def quote_text(quote):
-    """A quote asks for a price; it never says what the price is."""
-    lines = "\n".join(f"· {quotes.show_quantity(row)} {row['article']}"
-                      for row in quote["rows"][:MAX_SHOWN])
-    where = f" from **{quote['supplier']}**" if quote["supplier"] else ""
-    site = f", site {quote['site']}" if quote["site"] else ""
-    return (f"**Quote request #{quote['quote_id']}**{where} is in Stock Manager"
-            f" ({len(quote['rows'])} line(s){site}).\n{lines}\n"
-            f"Send it out and type the prices in when they answer.")
-
-
-def stock_text(article, rows):
-    if not rows:
-        return f"Nothing on the shelf matches **{article}**."
-    body = "\n".join(f"· {row['article']}: {show_number(row['quantity'])}" for row in rows)
-    return f"**{article}**\n{body}"
+            "channels": chat.channel_list(os.environ.get(CHANNELS_KEY, ""))}
 
 
 def build_client(config, channels):
@@ -133,7 +59,7 @@ def build_client(config, channels):
             return
         parsed = baskets.parse_items(items)
         if not parsed:
-            await interaction.response.send_message("I read no article in that.", ephemeral=True)
+            await interaction.response.send_message(chat.no_article(), ephemeral=True)
             return
         await asyncio.to_thread(baskets.add, config.db_path, interaction.channel_id, parsed,
                                 shop.strip() or None, site.strip() or None,
@@ -196,7 +122,7 @@ def build_client(config, channels):
             return
         asked = quotes.parse_request(items)
         if not asked:
-            await interaction.response.send_message("I read no article in that.", ephemeral=True)
+            await interaction.response.send_message(chat.no_article(), ephemeral=True)
             return
         head = {"supplier": supplier, "site": site, "work_item": work_item}
         quote_id = await asyncio.to_thread(quotes.save, config.db_path, head, asked,

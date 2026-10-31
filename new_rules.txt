@@ -5,6 +5,8 @@ functionnalities to developp :
 
 - DONE: a chatbot for discord companies groupchats: /basket-"website" + items, /purchase, /quote
        quote = request only: article, quantity, unit (ml, m2, m3, kg, t, l, h, piece), supplier, site
+       (and the same bot on Slack, socket mode, two tokens; the words both doors say are
+        written once in chat.py. Either, both or neither runs, on what Settings holds)
 
 - DONE: connecting to outlook, gmail, proton, yahoo mail, apple email
 
