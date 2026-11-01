@@ -1,0 +1,82 @@
+# Stock Manager's Slack app, in one paste.
+#
+# api.slack.com/apps -> Create New App -> From an app manifest -> pick the workspace ->
+# paste this -> Create. It makes the bot user, the six commands, the scopes, socket mode
+# and interactivity in one go, so there is nothing to click through afterwards.
+#
+# Then, in order:
+#   1. Basic Information -> App-Level Tokens -> Generate -> scope connections:write.
+#      That is the xapp- token.
+#   2. Install App -> Install to Workspace. That is the xoxb- token.
+#   3. Paste both into Stock Manager: Settings -> Chat bot -> Slack. Save, restart.
+#   4. In Slack, in each channel it should answer in: /invite @Logistics Manager (test)
+#      Then put those channel ids into Settings, so it answers in those and nowhere else.
+#
+# There is no Request URL anywhere: socket mode means the app calls out to Slack, which
+# is what lets it run on a laptop with no address of its own.
+display_information:
+  # 35 characters is Slack's limit for this; that is 34.
+  name: logistics manager test environment
+  description: The workshop's basket, quotes and shelf, from the channel
+  long_description: >-
+    This is the way into Stock Manager from a group chat. Fill a basket with what the job
+    needs, ask the shelf what it holds, ask a supplier for a price, and turn the basket into
+    a purchase order.
+
+    Buying is not free. The first time an article is bought, the first time it comes from a
+    new supplier, a basket over the ceiling, a line at more than twice the usual price, or a
+    line with no price at all: any of those holds the basket. Terminus, a second agent, then
+    reads the names against what the shelf already knows and says whether the article is one
+    we have under another wording. It approves nothing. Approval is a person's, in Stock
+    Manager itself, and nothing is bought until they give it.
+  background_color: "#2c5d99"
+
+features:
+  bot_user:
+    display_name: Logistics Manager (test)
+    always_online: false
+  slash_commands:
+    - command: /basket
+      description: Add what you need to this channel's basket
+      usage_hint: "12 vis th 6x25 @ 0.11, 4 rondelle m8 — or nothing, for the form"
+      should_escape: false
+    - command: /basket_show
+      description: Show what is in this channel's basket
+      usage_hint: " "
+      should_escape: false
+    - command: /basket_clear
+      description: Empty this channel's basket
+      usage_hint: " "
+      should_escape: false
+    - command: /purchase
+      description: Turn the basket into a purchase order
+      usage_hint: " "
+      should_escape: false
+    - command: /quote
+      description: Ask a supplier to price something by the metre, kilo or m3
+      usage_hint: "120 ml skirting board; 3 m3 gravel — or nothing, for the form"
+      should_escape: false
+    - command: /stock
+      description: What the shelf holds for an article
+      usage_hint: "rondelle m8"
+      should_escape: false
+
+oauth_config:
+  scopes:
+    bot:
+      # The six commands above.
+      - commands
+      # Answering a command, and posting what a form came back with.
+      - chat:write
+      # Only needed to answer in a channel nobody has invited it to. Drop this line if you
+      # would rather /invite it everywhere it is wanted, which is the tighter way round.
+      - chat:write.public
+
+settings:
+  # The forms /basket and /quote open are interactive, so this has to be on. Socket mode
+  # means no request_url: the app holds the connection open from your side.
+  interactivity:
+    is_enabled: true
+  socket_mode_enabled: true
+  org_deploy_enabled: false
+  token_rotation_enabled: false

@@ -643,6 +643,7 @@
     </div>
     <div class="row">
       <button class="action" id="slack-save">Save the bot</button>
+      <button class="action ghost" id="slack-check">Test the connection</button>
       <button class="action ghost" id="slack-forget">Forget both tokens</button>
     </div>
     <div id="slack-note"></div>
@@ -3364,6 +3365,20 @@ async function saveSlack(forget) {
     button.disabled = false;
   }
 }
+
+$("slack-check").addEventListener("click", async () => {
+  const button = $("slack-check");
+  button.disabled = true;
+  spinner($("slack-note"), "Asking Slack...");
+  try {
+    const answer = await api("/api/slack/check", { method: "POST" });
+    notice($("slack-note"), answer.ok ? "ok" : "bad", answer.detail);
+  } catch (e) {
+    notice($("slack-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 $("slack-save").addEventListener("click", () => saveSlack(false));
 $("slack-forget").addEventListener("click", () => saveSlack(true));

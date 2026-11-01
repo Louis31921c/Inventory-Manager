@@ -36,11 +36,7 @@ def settings():
 
 def status():
     kept = settings()
-    try:
-        import slack_bolt  # noqa: F401
-        installed = True
-    except ImportError:
-        installed = False
+    installed = available()
     both = bool(kept["bot_token"]) and bool(kept["app_token"])
     return {"installed": installed, "bot_token_set": bool(kept["bot_token"]),
             "app_token_set": bool(kept["app_token"]), "channels": kept["channels"],
@@ -96,6 +92,58 @@ def typed(view, name):
     """One field out of a submitted dialog, empty when it was left alone."""
     block = (view.get("state", {}).get("values", {}) or {}).get(name, {})
     return (block.get("value", {}) or {}).get("value", "") or ""
+
+
+def check():
+    """Try both tokens against Slack and say what came back.
+
+    The bot token says who the app is; the app token is what opens the socket. They fail
+    in different ways and are easy to paste the wrong way round, so both are tried and
+    each is answered for on its own.
+    """
+    kept = settings()
+    if not available():
+        return False, "The library is missing: pip install 'stock-manager[slack]'."
+    if not kept["bot_token"] and not kept["app_token"]:
+        return False, "No token stored yet."
+
+    from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
+
+    said = []
+    if not kept["bot_token"]:
+        return False, "The bot token (xoxb-) is missing."
+    try:
+        who = WebClient(token=kept["bot_token"]).auth_test()
+        said.append(f"{who['user']} in {who['team']}")
+    except SlackApiError as e:
+        return False, f"The bot token was refused: {e.response.get('error', e)}"
+    except Exception as e:
+        return False, f"Slack could not be reached: {e}"
+
+    if not kept["app_token"]:
+        return False, "The app token (xapp-) is missing, so the socket cannot open."
+    try:
+        # This hands back a socket address, which proves the token without holding it open.
+        WebClient(token=kept["app_token"]).apps_connections_open()
+        said.append("the socket opens")
+    except SlackApiError as e:
+        return False, f"The app token was refused: {e.response.get('error', e)}"
+    except Exception as e:
+        return False, f"The socket could not be opened: {e}"
+
+    where = (", ".join(kept["channels"]) if kept["channels"]
+             else "every channel it is invited to")
+    said.append(f"answering in {where}")
+    return True, " · ".join(said)
+
+
+def available():
+    try:
+        import slack_bolt  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 def build_app(config, channels):

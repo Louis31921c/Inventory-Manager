@@ -571,6 +571,14 @@ def save_mail_settings(request: Request, body: MailSettings):
     return {"current": _mail_state(), "help": chosen["help"]}
 
 
+@app.post("/api/slack/check")
+def check_slack(request: Request):
+    """Try the stored tokens against Slack. Neither of them is in the answer."""
+    ok, said = slack_bot.check()
+    event(request, "chat.check", "slack", "ok" if ok else said[:80])
+    return {"ok": ok, "detail": said}
+
+
 @app.get("/api/mail/oauth")
 def mail_oauth_state():
     """Where the Microsoft sign-in stands. No token is ever in this answer."""

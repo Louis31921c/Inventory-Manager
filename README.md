@@ -309,9 +309,15 @@ neither is a matter of what is in Settings → Chat bot.
 
 Discord takes one bot token. Slack takes two, because it cannot knock on a door that is only
 on loopback: the connection is made outward, in socket mode, so it wants a bot token
-(`xoxb-`) for what it says and an app-level token (`xapp-`) for the socket itself. Create the
-app at api.slack.com, switch Socket Mode on, add the six slash commands, install it to the
-workspace, then paste both tokens.
+(`xoxb-`) for what it says and an app-level token (`xapp-`) for the socket itself.
+
+`slack-app-manifest.yaml` saves the clicking. At api.slack.com, **Create New App → From an
+app manifest**, paste it, and the bot user, the six commands, the scopes, socket mode and
+interactivity are all made at once. Then generate the app-level token (Basic Information →
+App-Level Tokens → `connections:write`), install to the workspace for the bot token, paste
+both into Settings → Chat bot, and `/invite` the app into the channels it should answer in.
+**Test the connection** tries both tokens and says which one is wrong if either is — they are
+easy to paste the wrong way round.
 
 A Slack slash command carries one line of free text where Discord carried a form, so on Slack
 `/basket` with nothing after it opens the same form as a dialog, and `/basket` with something

@@ -3117,3 +3117,55 @@ def test_the_plutus_card_asks_for_an_article_too():
     card = page[page.index('id="plutus-card"'):page.index('id="ask-agent"')]
     for box in ['id="order-site"', 'id="order-work"', 'id="order-article"']:
         assert box in card
+
+
+def test_the_slack_test_says_which_token_is_wrong(monkeypatch):
+    from inventory import slack_bot
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "")
+    assert slack_bot.check() == (False, "No token stored yet.")
+
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+    ok, said = slack_bot.check()
+    assert ok is False and "bot token" in said
+
+    # The two fail in different ways, and each is answered for on its own.
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "")
+    monkeypatch.setattr(slack_bot, "available", lambda: True)
+
+    import slack_sdk
+
+    monkeypatch.setattr(slack_sdk.WebClient, "auth_test",
+                        lambda self: {"user": "plutus", "team": "the workshop"})
+    ok, said = slack_bot.check()
+    assert ok is False and "app token" in said
+
+
+def test_a_slack_test_that_works_names_the_bot_and_never_the_token(monkeypatch):
+    from inventory import slack_bot
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-secret")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-secret")
+    monkeypatch.setenv("SLACK_CHANNELS", "C01")
+    monkeypatch.setattr(slack_bot, "available", lambda: True)
+
+    import slack_sdk
+
+    monkeypatch.setattr(slack_sdk.WebClient, "auth_test",
+                        lambda self: {"user": "plutus", "team": "the workshop"})
+    monkeypatch.setattr(slack_sdk.WebClient, "apps_connections_open",
+                        lambda self, **kw: {"url": "wss://nowhere"})
+
+    ok, said = slack_bot.check()
+    assert ok is True
+    assert "plutus in the workshop" in said and "C01" in said
+    assert "xoxb-secret" not in said and "xapp-secret" not in said
+
+
+def test_the_slack_card_can_test_the_connection():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    assert 'id="slack-check"' in page
