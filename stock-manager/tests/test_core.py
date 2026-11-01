@@ -3187,8 +3187,7 @@ def test_the_bar_carries_the_blockchain_screen():
     bar = page[page.index('<nav class="menubar"'):page.index("</nav>")]
     assert 'id="menu-chain"' in bar and ">Blockchain<" in bar
     screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
-    assert "<h2>The two bots</h2>" in screen
-    assert "<h2>The round</h2>" in screen
+    assert "<h2>bots</h2>" in screen
     assert "<h2>What Plutus drafted</h2>" in screen
     # The round is drawn, with somewhere to say which step is live and a way out of it.
     assert 'id="chain-round"' in screen and 'id="chain-now"' in screen
@@ -3252,8 +3251,12 @@ def test_the_round_has_seven_steps_and_says_which_are_not_built():
     from inventory import gate
 
     assert [number for number, _, _ in gate.STEPS] == [1, 2, 3, 4, 5, 6, 7]
+    # Numbered the way the app walks it: approve, then the money, then the order.
+    assert [name for _, name, _ in gate.STEPS][:5] == [
+        "reading what was asked", "checking the shelf", "Terminus reads the names",
+        "the decision", "waiting for you"]
     # Nothing here places an order with a supplier, and nothing holds money.
-    assert gate.UNBUILT == (3, 6)
+    assert gate.UNBUILT == (6, 7)
     for number, _, detail in gate.STEPS:
         if number in gate.UNBUILT:
             assert detail.startswith("not built")
@@ -3266,16 +3269,16 @@ def test_the_round_says_where_a_request_has_got_to(db_path):
 
     request_id = gate.ask(db_path, gate.look(db_path, [a_basket()]), asked_by="ALEX")
     waiting = gate.where_we_are(db_path)
-    assert waiting["step"] == 4 and waiting["request_id"] == request_id
+    assert waiting["step"] == 3 and waiting["request_id"] == request_id
 
     gate.record_check(db_path, request_id, "unsure", "cannot tell")
     asked = gate.where_we_are(db_path)
-    assert asked["step"] == 7 and "yours" in asked["why"]
+    assert asked["step"] == 5 and "yours" in asked["why"]
 
     gate.approve(db_path, request_id, "ALEX")
     # Approved and nothing places it, so the round stops at the step that is not built.
     placing = gate.where_we_are(db_path)
-    assert placing["step"] == 3 and "by hand" in placing["why"]
+    assert placing["step"] == 7 and "by hand" in placing["why"]
 
     gate.mark_ordered(db_path, request_id, "ALEX")
     assert gate.where_we_are(db_path)["step"] == 0
@@ -3293,3 +3296,24 @@ def test_a_shelf_already_full_of_it_is_said_out_loud(db_path):
     # Asking for about what is there is not dwelling stock, it is restocking.
     assert gate.dwelling(db_path, [{"article": "RONDELLE M8", "quantity": 900}]) == []
     assert gate.dwelling(db_path, [{"article": "NOT HERE", "quantity": 5}]) == []
+
+
+def test_the_command_line_is_found_even_when_the_path_misses_it(monkeypatch, tmp_path):
+    """A desktop launcher does not get the shell's PATH; the app still has to find it."""
+    from inventory import agents
+
+    monkeypatch.setattr(agents.shutil, "which", lambda name: None)
+    monkeypatch.setattr(agents, "LIKELY", ())
+    assert agents.claude_binary() is None
+    assert agents.status()["ready"] is False
+
+    pretend = tmp_path / "claude"
+    pretend.write_text("#!/bin/sh\n")
+    pretend.chmod(0o755)
+    monkeypatch.setattr(agents, "LIKELY", (str(pretend),))
+    assert agents.claude_binary() == str(pretend)
+    assert agents.status()["found_at"] == str(pretend)
+
+    # A file that is there but cannot be run is not a command line.
+    pretend.chmod(0o644)
+    assert agents.claude_binary() is None

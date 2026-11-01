@@ -14,7 +14,9 @@ Code CLI that is already signed in on this machine.
 """
 
 import logging
+import os
 import shutil
+from pathlib import Path
 
 from . import llm
 
@@ -29,16 +31,35 @@ TERMINUS = "terminus"
 TIMEOUT = 420
 
 
+# A desktop launcher does not get the shell's PATH, so the command line can be installed
+# and still be invisible to the app. These are where it usually is when PATH misses it.
+LIKELY = ("~/.local/bin/claude", "~/.npm-global/bin/claude", "/usr/local/bin/claude",
+          "~/.local/bin/claude-code")
+
+
+def claude_binary():
+    """Where the Claude command line is, PATH or not."""
+    found = shutil.which("claude") or shutil.which("claude-code")
+    if found:
+        return found
+    for guess in LIKELY:
+        path = Path(guess).expanduser()
+        if path.is_file() and os.access(path, os.X_OK):
+            return str(path)
+    return None
+
+
 def available():
-    return bool(shutil.which("claude") or shutil.which("claude-code"))
+    return claude_binary() is not None
 
 
 def status():
     """What the screens say about the agents, without naming a key that does not exist."""
-    ready = available()
+    found = claude_binary()
     return {
-        "ready": ready,
-        "detail": ("the Claude command line is signed in on this machine" if ready
+        "ready": bool(found),
+        "found_at": found,
+        "detail": (f"the Claude command line is at {found}" if found
                    else "install the Claude Code CLI, then run claude and /login"),
         "agents": [
             {"name": PLUTUS, "does": "drafts a purchase order from the planner's numbers"},
@@ -49,7 +70,8 @@ def status():
 
 async def ask(prompt, schema, system=None, model=None, timeout=TIMEOUT):
     """One question to Claude, one structured answer. The only door either agent uses."""
-    backend = llm.ClaudeCodeBackend(model=model, timeout=timeout)
+    backend = llm.ClaudeCodeBackend(model=model, timeout=timeout,
+                                    binary=claude_binary() or "claude")
     return await backend.answer(prompt, schema, system=system)
 
 

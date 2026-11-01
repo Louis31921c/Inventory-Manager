@@ -211,19 +211,12 @@
 
 <section class="panel" id="panel-chain" role="tabpanel" hidden>
   <div class="card">
-    <h2>The two bots</h2>
+    <h2>bots</h2>
     <div class="row" id="chain-stats"></div>
-    <div id="chain-bots"></div>
-    <p class="legend" id="chain-rules"></p>
-  </div>
-
-  <div class="card">
-    <h2>The round</h2>
     <div id="chain-round"></div>
     <p class="legend" id="chain-now"></p>
     <div id="chain-warn"></div>
     <div class="row tight" id="chain-doing"></div>
-    <p class="legend" id="chain-state"></p>
   </div>
 
   <div class="card">
@@ -3688,19 +3681,6 @@ const CHAIN_WORDS = {
   ordered: "the order was placed",
 };
 
-function botCard(name, what, ready, lines) {
-  const box = el("div", { className: "sheet" }, [
-    el("div", { className: "sheet-title" }, [
-      el("strong", { textContent: name }),
-      el("span", { className: "muted", textContent: what }),
-      el("span", { className: `pill ${ready ? "green" : "red"}`,
-                   textContent: ready ? "ready" : "not reachable" }),
-    ]),
-  ]);
-  for (const line of lines) box.append(el("p", { className: "legend", textContent: line }));
-  return box;
-}
-
 function roundDiagram(steps, atStep) {
   // Seven steps on a circle, each one pointing at the next, the live one in red. The
   // numbers run clockwise from the top, which is where a round is read from.
@@ -3790,61 +3770,37 @@ async function loadChain() {
   try {
     data = await api("/api/chain");
   } catch (e) {
-    notice($("chain-state"), "bad", e.message);
+    notice($("chain-warn"), "bad", e.message);
     return;
   }
 
   const log = data.log ?? {};
   const doings = data.doings ?? {};
   const held = doings.requests ?? {};
-  const verdicts = doings.terminus?.verdicts ?? {};
 
   $("chain-stats").replaceChildren(
-    statTile("entries sealed", showNum(log.entries ?? 0)),
     statTile("baskets held", showNum(Object.values(held).reduce((sum, one) => sum + one, 0))),
     statTile("waiting on you", showNum((held.waiting ?? 0) + (held.checked ?? 0))),
     statTile("approved", showNum(held.approved ?? 0)),
-    statTile("cancelled", showNum(held.cancelled ?? 0)),
   );
-
-  const ready = data.agents?.ready ?? false;
-  const said = (word) => `${word}: ${showNum(verdicts[word] ?? 0)}`;
-  $("chain-bots").replaceChildren(
-    botCard("Plutus", "drafts a purchase order from the planner's numbers", ready, [
-      `${showNum(doings.plutus?.drafted ?? 0)} draft(s) written. It signs nothing: a draft `
-      + "is a draft until a person saves it, and it never touches this chain.",
-    ]),
-    botCard("Terminus", "says whether an article is one we already know", ready, [
-      `${showNum(doings.terminus?.read ?? 0)} basket(s) read — `
-      + `${said("same")}, ${said("new")}, ${said("unsure")}.`,
-      "It approves nothing. When it cannot be reached, or is not sure, the basket stays held.",
-    ]),
-  );
-
-  const rules = data.rules ?? {};
-  $("chain-rules").textContent =
-    `A basket is held by: a first article, a supplier it has not come from before, a basket `
-    + `over ${showNum(rules.ceiling)} EUR, a line over ${rules.dear}× the usual price, or a `
-    + `line with no price. An approval is asked again if the price moves more than `
-    + `${Math.round((rules.drift ?? 0) * 100)}%.`;
-
-  $("chain-state").textContent = log.whole
-    ? `The chain holds: ${showNum(log.entries ?? 0)} entries, last seal `
-      + `${(log.last_seal ?? "").slice(0, 12)}…`
-    : `THE CHAIN IS BROKEN at entry ${log.broken_at}: that line, or one before it, was `
-      + "changed after it was written.";
-  $("chain-state").className = log.whole ? "muted" : "bad";
 
   const steps = data.steps ?? [];
   const now = data.now ?? {};
   $("chain-round").replaceChildren(roundDiagram(steps, now.step ?? 0));
 
   const step = steps.find((one) => one.number === now.step);
+  // Nothing in flight says nothing: an empty round is its own answer.
   $("chain-now").textContent = step
     ? `Step ${step.number}, ${step.name} — ${now.why ?? step.detail}`
       + (now.request_id ? ` (request #${now.request_id})` : "")
-    : (now.why ?? "Nothing is in flight.");
+    : "";
   $("chain-now").className = step ? "legend here" : "legend";
+
+  // A broken seal is the one thing on this screen that still has to shout.
+  if (!log.whole) {
+    notice($("chain-warn"), "bad", `THE CHAIN IS BROKEN at entry ${log.broken_at}: that `
+      + "line, or one before it, was changed after it was written.");
+  }
 
   // Buying more of what is already standing there is the easy mistake; it is said out loud.
   const full = now.dwelling ?? [];

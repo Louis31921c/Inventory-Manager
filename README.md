@@ -376,11 +376,11 @@ and the drawing redrawn every few seconds while you are looking at it:
 |---|---|---|
 | 1 | reading what was asked | a basket is being filled in the chat |
 | 2 | checking the shelf | what is already standing there, against what is asked for |
-| 3 | placing the order | *not built: an approved order is placed by hand* |
-| 4 | Terminus reads the names | is this an article we already know? |
-| 5 | the decision | whether it can go through, or has to be put to a person |
+| 3 | Terminus reads the names | is this an article we already know? |
+| 4 | the decision | whether it can go through, or has to be put to a person |
+| 5 | waiting for you | nothing is bought until a person approves it |
 | 6 | the wallet | *not built: nothing here holds funds or bills anything* |
-| 7 | waiting for you | nothing is bought until a person approves it |
+| 7 | placing the order | *not built: an approved order is placed by hand* |
 
 The two steps that are not built are drawn dashed rather than left out, because they are part
 of the round even where the app does not walk them yet.
@@ -390,9 +390,9 @@ asks for, the screen names the article and by how much, since buying more of wha
 there is the easiest mistake to make and the hardest to see. Approve and Cancel are on the
 step itself, so a round can be ended where it is being read.
 
-Above the round, what the two agents are and what each has done; below it, the drafts Plutus
-has written. If a sealed entry is changed behind its back, the line under the round says at
-which one the chain stops holding.
+Above the round, how many baskets are held, waiting and approved; below it, the drafts Plutus
+has written. Nothing in flight says nothing — an empty round is its own answer — but a sealed
+entry changed behind its back still shouts, naming the one where the chain stops holding.
 
 What an article usually costs is the middle of its recent prices, kept as each order goes
 through. Early on there is no history and the price rules simply do not fire; the first

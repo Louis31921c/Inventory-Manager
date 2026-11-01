@@ -247,14 +247,14 @@ def history(db_path, limit=40):
 STEPS = [
     (1, "reading what was asked", "a basket is being filled in the chat"),
     (2, "checking the shelf", "what is already standing there, against what is asked for"),
-    (3, "placing the order", "not built: an approved order is placed by hand"),
-    (4, "Terminus reads the names", "is this an article we already know?"),
-    (5, "the decision", "whether it can go through, or has to be put to a person"),
+    (3, "Terminus reads the names", "is this an article we already know?"),
+    (4, "the decision", "whether it can go through, or has to be put to a person"),
+    (5, "waiting for you", "nothing is bought until a person approves it"),
     (6, "the wallet", "not built: nothing here holds funds or bills anything"),
-    (7, "waiting for you", "nothing is bought until a person approves it"),
+    (7, "placing the order", "not built: an approved order is placed by hand"),
 ]
 
-UNBUILT = (3, 6)
+UNBUILT = (6, 7)
 
 # How much of an article counts as plenty already on the shelf.
 DWELLING_WEEKS = 8
@@ -291,15 +291,15 @@ def where_we_are(db_path):
 
     if open_now:
         held = open_now[-1]
-        step = 4 if held["agent_verdict"] is None else 7
+        step = 3 if held["agent_verdict"] is None else 5
         return {"step": step, "request_id": held["request_id"], "state": held["state"],
                 "reasons": held["reasons"], "verdict": held["agent_verdict"],
                 "said": held["agent_said"], "total": held["total"],
                 "dwelling": dwelling(db_path, held["lines"]),
-                "why": ("Terminus is reading the names." if step == 4
+                "why": ("Terminus is reading the names." if step == 3
                         else "It is yours to approve or to cancel.")}
     if approved:
-        return {"step": 3, "request_id": approved[0][0], "state": APPROVED,
+        return {"step": 7, "request_id": approved[0][0], "state": APPROVED,
                 "reasons": [], "verdict": None, "said": None, "total": None, "dwelling": [],
                 "why": "Approved. Nothing here places it, so it is placed by hand."}
     if baskets:
