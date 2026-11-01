@@ -572,6 +572,31 @@
         <select id="mail-security"><option value="ssl">SSL</option><option value="starttls">STARTTLS</option></select>
       </label>
     </div>
+    <div id="mail-oauth" hidden>
+      <p class="eyebrow">Sign in with Microsoft</p>
+      <p class="muted" id="mail-oauth-state"></p>
+      <div class="row tight">
+        <label class="field narrow" style="justify-content: flex-start">
+          <button class="mini" id="mail-oauth-on" aria-pressed="false">use a token, not a password</button>
+        </label>
+        <label class="field grow"><span>Application id</span>
+          <input id="mail-client-id" autocomplete="off"
+                 placeholder="the id of the app you registered in Azure"></label>
+        <label class="field narrow"><span>Tenant</span>
+          <input id="mail-tenant" autocomplete="off" placeholder="common"></label>
+      </div>
+      <div class="row tight">
+        <button class="action" id="mail-oauth-start">Sign in</button>
+        <button class="action ghost" id="mail-oauth-forget">Forget the sign-in</button>
+      </div>
+      <div id="mail-oauth-code" hidden>
+        <p class="legend">Open <a id="mail-oauth-uri" target="_blank" rel="noopener"
+          href="https://microsoft.com/devicelogin">microsoft.com/devicelogin</a> and type this
+          code in. This window keeps watch until you have.</p>
+        <p class="device-code" id="mail-oauth-digits"></p>
+      </div>
+      <div id="mail-oauth-note"></div>
+    </div>
     <p class="muted" id="mail-help"></p>
     <div class="row">
       <button class="action" id="mail-save">Save the mailbox</button>
@@ -3035,7 +3060,76 @@ function showMailHelp() {
   const chosen = mailProviders.find((row) => row.id === $("mail-provider").value);
   $("mail-help").textContent = chosen ? chosen.help : "";
   $("mail-by-hand").hidden = !mailByHand();
+  // Only Microsoft takes a token in place of a password, so only Microsoft is asked.
+  $("mail-oauth").hidden = $("mail-provider").value !== "outlook";
+  $("mail-oauth-on").setAttribute("aria-pressed", String(oauthOn));
+  $("mail-password").disabled = oauthOn;
 }
+
+let oauthOn = false;
+let oauthWatch = null;
+
+async function loadMailOauth() {
+  let state;
+  try {
+    state = await api("/api/mail/oauth");
+  } catch {
+    return;
+  }
+
+  $("mail-oauth-state").textContent = !state.available
+    ? "The library is missing: pip install 'stock-manager[outlook]'"
+    : state.signed_in ? `Signed in${state.who ? ` as ${state.who}` : ""}.`
+    : state.waiting ? "Waiting for the code to be typed in..."
+    : state.error ? `Last try: ${state.error}`
+    : "Not signed in yet.";
+
+  $("mail-oauth-code").hidden = !state.waiting;
+  if (state.waiting) {
+    $("mail-oauth-digits").textContent = state.code ?? "";
+    if (state.uri) $("mail-oauth-uri").href = state.uri;
+  }
+
+  // Keep looking only while somebody is away typing the code into a browser.
+  if (state.waiting && !oauthWatch) {
+    oauthWatch = setInterval(loadMailOauth, 4000);
+  } else if (!state.waiting && oauthWatch) {
+    clearInterval(oauthWatch);
+    oauthWatch = null;
+    if (state.signed_in) notice($("mail-oauth-note"), "ok", "Signed in. Test the connection.");
+    else if (state.error) notice($("mail-oauth-note"), "bad", state.error);
+  }
+}
+
+$("mail-oauth-on").addEventListener("click", () => {
+  oauthOn = !oauthOn;
+  showMailHelp();
+});
+
+$("mail-oauth-start").addEventListener("click", async () => {
+  const button = $("mail-oauth-start");
+  button.disabled = true;
+  spinner($("mail-oauth-note"), "Asking Microsoft for a code...");
+  try {
+    await api("/api/mail/oauth/start", { method: "POST" });
+    notice($("mail-oauth-note"), "", "");
+    await loadMailOauth();
+  } catch (e) {
+    notice($("mail-oauth-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("mail-oauth-forget").addEventListener("click", async () => {
+  try {
+    await api("/api/mail/oauth/forget", { method: "POST" });
+    notice($("mail-oauth-note"), "ok", "Forgotten. Sign in again when you need the mailbox.");
+    await loadMailOauth();
+  } catch (e) {
+    notice($("mail-oauth-note"), "bad", e.message);
+  }
+});
 
 async function loadMailSettings() {
   let data;
@@ -3060,8 +3154,13 @@ async function loadMailSettings() {
   $("mail-security").value = now.security ?? "ssl";
   $("mail-stored").textContent = now.password_set
     ? `password stored · ${now.configured ? "mailbox ready" : "user name missing"}`
-    : "no password stored yet";
+    : (now.oauth ? "signed in with Microsoft, no password needed"
+                 : "no password stored yet");
+  $("mail-client-id").value = now.client_id ?? "";
+  $("mail-tenant").value = now.tenant ?? "";
+  oauthOn = Boolean(now.oauth);
   showMailHelp();
+  await loadMailOauth();
 
   const state = now.configured
     ? `${now.user} on ${now.host}, folder ${now.folder}, every ${now.every_minutes} min`
@@ -3085,11 +3184,16 @@ $("mail-save").addEventListener("click", async () => {
       host: $("mail-host").value.trim(),
       port: Number($("mail-port").value) || null,
       security: $("mail-security").value,
+      oauth: oauthOn,
+      client_id: $("mail-client-id").value.trim(),
+      tenant: $("mail-tenant").value.trim(),
     }));
     $("mail-password").value = "";
+    notice($("mail-oauth-note"), "", "");
     notice($("mail-settings-note"), "ok",
       answer.current.configured ? "Mailbox saved. Test the connection to be sure."
-                                : "Saved. A user name and a password are still needed.");
+        : (answer.current.oauth ? "Saved. Sign in with Microsoft to finish."
+                                : "Saved. A user name and a password are still needed."));
     await loadMailSettings();
   } catch (e) {
     notice($("mail-settings-note"), "bad", e.message);

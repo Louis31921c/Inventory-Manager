@@ -27,8 +27,8 @@ from dataclasses import replace
 from . import (account, alerts, audit, backorders, backup, baskets, bills, catalog, contacts,
                db, ddmrp, discord_bot,
                forecast, gate, intake, llm,
-               mailbox, models_info, pg, prices, quotes, routing, sheets, slack_bot, stock,
-               verify, vocabulary)
+               mail_oauth, mailbox, models_info, pg, prices, quotes, routing, sheets,
+               slack_bot, stock, verify, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
 
@@ -517,6 +517,9 @@ class MailSettings(BaseModel):
     host: str = ""
     port: int | None = None
     security: str = ""
+    oauth: bool = False
+    client_id: str = ""
+    tenant: str = ""
 
 
 def _mail_state():
@@ -524,7 +527,8 @@ def _mail_state():
     return {"provider": mail.provider, "host": mail.host, "port": mail.port, "user": mail.user,
             "folder": mail.folder, "security": mail.security, "mark_read": mail.mark_read,
             "every_minutes": mail.every_minutes, "configured": mail.enabled,
-            "password_set": bool(mail.password)}
+            "password_set": bool(mail.password), "oauth": mail.oauth,
+            "client_id": mail.client_id, "tenant": mail.tenant}
 
 
 @app.get("/api/mail/settings")
@@ -557,9 +561,38 @@ def save_mail_settings(request: Request, body: MailSettings):
     elif not body.user.strip():
         set_setting("IMAP_PASSWORD", "")
 
+    # Only Microsoft takes a token, so the switch means nothing anywhere else.
+    set_setting(mail_oauth.OAUTH_KEY, "1" if (body.oauth and provider == "outlook") else "")
+    set_setting(mail_oauth.CLIENT_ID_KEY, body.client_id.strip())
+    set_setting(mail_oauth.TENANT_KEY, body.tenant.strip())
+
     config = replace(config, mail=load_config(data_dir=config.data_dir, user=config.user).mail)
     event(request, "mail.settings", provider or "other", config.mail.host)
     return {"current": _mail_state(), "help": chosen["help"]}
+
+
+@app.get("/api/mail/oauth")
+def mail_oauth_state():
+    """Where the Microsoft sign-in stands. No token is ever in this answer."""
+    return mail_oauth.state()
+
+
+@app.post("/api/mail/oauth/start")
+def mail_oauth_start(request: Request):
+    """Ask Microsoft for a code. The waiting is done on a thread, not on this request."""
+    try:
+        started = mail_oauth.start()
+    except mail_oauth.OAuthError as e:
+        raise HTTPException(409, str(e)) from e
+    event(request, "mail.oauth.start", config.mail.user or "outlook")
+    return {**started, "state": mail_oauth.state()}
+
+
+@app.post("/api/mail/oauth/forget")
+def mail_oauth_forget(request: Request):
+    mail_oauth.forget()
+    event(request, "mail.oauth.forget", config.mail.user or "outlook")
+    return mail_oauth.state()
 
 
 @app.get("/api/baskets")

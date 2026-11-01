@@ -252,6 +252,32 @@ buys, supplier, and one line saying why. Check it, change any quantity, then
 
 Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
 
+### Outlook without a password
+
+Microsoft turned basic IMAP auth off for most tenants, so a password alone is refused however
+right it is. Stock Manager signs in with a token instead, the device code way: it asks
+Microsoft for a code, you type the code into microsoft.com/devicelogin in a browser, and the
+refresh token stays in `~/.config/stock-manager/outlook-token.json`, readable by you and
+nobody else. No token is ever shown back on a screen.
+
+It needs an application of your own, because there is no shared one to ship:
+
+1. Azure portal, App registrations, New registration. Any name, accounts in your own
+   directory or in any directory as you prefer.
+2. Authentication, Add a platform, Mobile and desktop, and switch **Allow public client
+   flows** on. That is what enables the device code.
+3. API permissions, Add, APIs my organization uses, **Office 365 Exchange Online**,
+   Delegated, **IMAP.AccessAsUser.All**. Grant consent if your tenant asks for it.
+4. Copy the Application (client) ID into Settings, Mailbox, and the tenant id too if you want
+   it narrowed to one firm — `common` lets any account in.
+
+Then press Sign in and type the code. An app password from your tenant still works if you
+have one; leave the token switch off and use the password box as before.
+
+```bash
+pip install 'stock-manager[outlook]'
+```
+
 ## The chat bot
 
 Two doors onto the same room: Discord and Slack. Both answer `/basket`, `/basket_show`,

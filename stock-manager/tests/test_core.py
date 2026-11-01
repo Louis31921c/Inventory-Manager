@@ -2838,3 +2838,88 @@ def test_reading_one_field_out_of_a_submitted_dialog():
     assert slack_bot.typed(view, "items") == "12 vis th 6x25 @ 0.11"
     assert slack_bot.typed(view, "site") == ""
     assert slack_bot.typed(view, "nothing here") == ""
+
+
+# ---- signing in to Outlook with a token ------------------------------------
+
+def test_the_mailbox_counts_as_set_up_when_it_has_a_token_instead_of_a_password(tmp_path):
+    from inventory.config import MailConfig
+
+    base = dict(host="outlook.office365.com", port=993, user="stock@company.com",
+                folder="INBOX", security="ssl", insecure=False, mark_read=True,
+                every_minutes=15, provider="outlook")
+    assert MailConfig(password="", **base).enabled is False
+    assert MailConfig(password="hunter2", **base).enabled is True
+    # Microsoft takes a token where everyone else still takes a password.
+    assert MailConfig(password="", oauth=True, **base).enabled is True
+
+
+def test_the_xoauth2_string_is_the_one_microsoft_asks_for():
+    from inventory import mail_oauth
+
+    assert mail_oauth.sasl("stock@company.com", "ey.TOKEN") == \
+        "user=stock@company.com\x01auth=Bearer ey.TOKEN\x01\x01"
+
+
+def test_nobody_is_signed_in_before_anybody_signs_in(tmp_path, monkeypatch):
+    from inventory import mail_oauth
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.delenv("AZURE_CLIENT_ID", raising=False)
+    assert mail_oauth.signed_in() is False
+    assert mail_oauth.who() is None
+
+    now = mail_oauth.state()
+    assert now["signed_in"] is False and now["waiting"] is False
+    assert now["tenant"] == "common" and now["on"] is False
+    # Without an application id there is nothing to ask Microsoft with.
+    with pytest.raises(mail_oauth.OAuthError):
+        mail_oauth.start()
+
+
+def test_the_token_cache_is_the_owner_s_to_read_and_can_be_forgotten(tmp_path, monkeypatch):
+    from inventory import mail_oauth
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    store = type("Store", (), {"has_state_changed": True,
+                               "serialize": lambda self: '{"RefreshToken": {}}'})()
+    mail_oauth._save(store)
+
+    path = mail_oauth.cache_file()
+    assert path.exists()
+    assert oct(path.stat().st_mode)[-3:] == "600"
+
+    assert mail_oauth.forget() is True
+    assert path.exists() is False
+
+
+def test_a_mailbox_with_no_sign_in_says_so_rather_than_opening(tmp_path, monkeypatch):
+    from inventory import mail_oauth, mailbox
+    from inventory.config import MailConfig
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("AZURE_CLIENT_ID", "a-registered-app")
+
+    def nobody():
+        raise mail_oauth.OAuthError("Nobody is signed in to Outlook yet.")
+
+    monkeypatch.setattr(mail_oauth, "token", nobody)
+    monkeypatch.setattr(mailbox.imaplib, "IMAP4_SSL",
+                        lambda *a, **kw: type("Box", (), {"authenticate": lambda *x: None})())
+
+    settings = MailConfig(host="outlook.office365.com", port=993, user="stock@company.com",
+                          password="", folder="INBOX", security="ssl", insecure=False,
+                          mark_read=True, every_minutes=15, provider="outlook", oauth=True)
+    with pytest.raises(mailbox.MailError) as raised:
+        mailbox.connect(settings)
+    assert "signed in" in str(raised.value)
+
+
+def test_the_mailbox_card_asks_for_the_microsoft_sign_in():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    card = page[page.index("<h2>Mailbox</h2>"):page.index("<h2>Chat bot</h2>")]
+    for box in ['id="mail-oauth"', 'id="mail-client-id"', 'id="mail-tenant"',
+                'id="mail-oauth-start"', 'id="mail-oauth-digits"']:
+        assert box in card

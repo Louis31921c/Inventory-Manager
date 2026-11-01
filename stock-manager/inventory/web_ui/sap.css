@@ -256,6 +256,14 @@ p { margin: 0; }
 .legend.ok { color: var(--green); }
 .legend.warn { color: var(--amber); }
 p.bad { color: var(--red); font-weight: 700; }
+/* The code Microsoft gives out loud, for typing into a browser on another screen. */
+.device-code {
+  font-family: monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  margin: 4px 0;
+}
 .legend, .desig { font-size: 11px; }
 .eyebrow { color: var(--ink-soft); font-size: 11px; text-transform: uppercase; }
 

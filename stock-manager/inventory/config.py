@@ -56,10 +56,14 @@ class MailConfig:
     mark_read: bool
     every_minutes: int
     provider: str = ""
+    oauth: bool = False
+    client_id: str = ""
+    tenant: str = ""
 
     @property
     def enabled(self):
-        return bool(self.host and self.user and self.password)
+        # Microsoft takes a token where everyone else still takes a password.
+        return bool(self.host and self.user and (self.password or self.oauth))
 
 
 @dataclass(frozen=True)
@@ -125,6 +129,9 @@ def _mail():
         insecure=insecure or (known["insecure"] if provider else False),
         mark_read=os.environ.get("IMAP_MARK_READ", "1").strip().lower() not in ("0", "false", "no"),
         every_minutes=int(os.environ.get("MAIL_EVERY_MINUTES", "15")),
+        oauth=os.environ.get("IMAP_OAUTH", "").strip().lower() in ("1", "true", "yes"),
+        client_id=os.environ.get("AZURE_CLIENT_ID", "").strip(),
+        tenant=os.environ.get("AZURE_TENANT", "").strip() or "common",
     )
 
 

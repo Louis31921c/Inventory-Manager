@@ -23,9 +23,11 @@ PROVIDERS = {
     "outlook": {
         "label": "Outlook / Microsoft 365",
         "host": "outlook.office365.com", "port": 993, "security": "ssl", "insecure": False,
-        "help": "Microsoft no longer lets a password alone open an IMAP mailbox. Ask whoever "
-                "runs your tenant for an app password, or have the supplier mail forwarded to a "
-                "mailbox that still allows it.",
+        "help": "Microsoft no longer lets a password alone open an IMAP mailbox. Sign in with "
+                "Microsoft below instead: register an application in Azure (public client, "
+                "device code flow on, delegated permission IMAP.AccessAsUser.All), paste its "
+                "application id, and type the code it gives you into microsoft.com/devicelogin. "
+                "An app password from your tenant still works if you have one.",
     },
     "yahoo": {
         "label": "Yahoo Mail",
@@ -97,7 +99,17 @@ def connect(settings):
         else:
             box = imaplib.IMAP4_SSL(settings.host, settings.port,
                                     ssl_context=_context(settings), timeout=30)
-        box.login(settings.user, settings.password)
+        if getattr(settings, "oauth", False):
+            # Microsoft no longer takes the password: the mailbox opens on a token.
+            from . import mail_oauth
+            try:
+                access = mail_oauth.token()
+            except mail_oauth.OAuthError as e:
+                raise MailError(str(e)) from e
+            box.authenticate("XOAUTH2",
+                             lambda _: mail_oauth.sasl(settings.user, access).encode())
+        else:
+            box.login(settings.user, settings.password)
     except (imaplib.IMAP4.error, OSError, ssl.SSLError) as e:
         raise MailError(f"{settings.host}: {e}") from e
     return box

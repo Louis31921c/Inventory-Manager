@@ -9,6 +9,9 @@ functionnalities to developp :
         written once in chat.py. Either, both or neither runs, on what Settings holds)
 
 - DONE: connecting to outlook, gmail, proton, yahoo mail, apple email
+        (and Outlook without a password: Microsoft refuses one now, so the mailbox opens on
+         a token. Device code flow, your own Azure app id, the refresh token kept 0600 and
+         never shown back)
 
 - DONE: a new section : bills, tracked from the mailbox, with a cost per month indicator
         (the cost per supplier and the list of stored bills were taken off again)

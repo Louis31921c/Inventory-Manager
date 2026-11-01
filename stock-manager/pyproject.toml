@@ -21,6 +21,7 @@ dependencies = [
 gemini = ["google-genai>=2.24"]
 discord = ["discord.py>=2.3"]
 slack = ["slack-bolt>=1.18"]
+outlook = ["msal>=1.28"]
 dev = ["pytest", "pytest-asyncio", "pillow", "httpx"]
 
 [project.scripts]
