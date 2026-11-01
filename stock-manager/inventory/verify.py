@@ -1,14 +1,14 @@
-"""The verification agent: Claude, reading what Dots wants to buy against what we know.
+"""Terminus: Claude, reading what the chat wants to buy against the names we know.
 
 It answers one question and one only — *is this the article we already have under another
 name?* Dots writes "CHEVILLE SPIT FIX 10x100"; the shelf knows "343546 - CHEVILLE SPIT FIX
-3 10X100". Same thing, written twice. That is a reading job, and it is the one the agent
-is for.
+3 10X100". Same thing, written twice. That is a reading job, and it is the one
+Terminus is for.
 
 It never answers the other question — *do we want this, at this price, from this
-supplier?* That one is the person's, and the agent's answer is evidence on their card, not
-a recommendation to accept. When the agent cannot be reached, or is not sure, the gate
-holds: it never falls open.
+supplier?* That one is the person's, and Terminus' answer is evidence on their card, not a
+recommendation to accept. When it cannot be reached, or is not sure, the gate holds:
+it never falls open.
 """
 
 import re
@@ -118,10 +118,10 @@ async def check(db_path, lines, model=None):
     try:
         answer = await agents.ask(_question(lines, known), SCHEMA, model=model)
     except llm.ExtractionError as e:
-        return {"verdict": UNSURE, "note": f"The verification agent could not answer: {e}",
+        return {"verdict": UNSURE, "note": f"Terminus could not answer: {e}",
                 "lines": []}
     except Exception as e:  # a backend that breaks must not open the gate
-        return {"verdict": UNSURE, "note": f"The verification agent failed: {e}", "lines": []}
+        return {"verdict": UNSURE, "note": f"Terminus failed: {e}", "lines": []}
 
     answers = answer.get("lines") or []
     return {"verdict": overall(answers), "note": answer.get("note") or "", "lines": answers}

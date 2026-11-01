@@ -93,7 +93,7 @@ def build_client(config, channels):
 
         reading = await asyncio.to_thread(gate.look, config.db_path, held)
         if reading["held"]:
-            # Held: the agent reads the names, then it waits for a person. The basket stays
+            # Held: Terminus reads the names, then it waits for a person. The basket stays
             # where it is, so nothing is lost either way the answer goes.
             await interaction.response.defer(thinking=True)
             request_id = await asyncio.to_thread(

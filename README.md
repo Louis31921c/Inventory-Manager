@@ -243,7 +243,7 @@ time, and the reorder point is the lead time demand on top of it; the sheet is w
 a 7 day lead time at 95% service, or pass your own with
 `/export/safety-stock.xlsx?lead=14&service=99`.
 
-### The two agents
+### Plutus and Terminus
 
 The app runs two agents, both of them Claude, both of them narrow. They go out through one
 door, so there is one timeout and one way for either to fail, and neither needs an API key:
@@ -251,10 +251,12 @@ they run the Claude Code command line that is already signed in on this machine.
 
 | Agent | Asks | Cannot |
 |---|---|---|
-| buying | what does the planner's arithmetic say we should order? | sign anything — a draft is a draft until you save it |
-| verification | is this article one we already know under another wording? | approve anything — the gate still waits for you |
+| **Plutus** | what does the planner's arithmetic say we should order? | sign anything — a draft is a draft until you save it |
+| **Terminus** | is this article one we already know under another wording? | approve anything — the gate still waits for you |
 
-`draft the order`, on the Purchase agent card, hands the buying agent the planner's numbers
+Plutus had the purse; Terminus was the boundary stone nobody was allowed to move.
+
+`draft the order`, on the Plutus card, hands it the planner's numbers
 and gets a purchase order back: article, quantity rounded to how the trade buys, supplier,
 and one clause saying why. Check it, change any quantity, then `save as purchase order` and it
 lands in the Purchase orders tab like any other sheet.
@@ -263,7 +265,7 @@ An empty draft is an answer, not a failure. The agent is told to leave out what 
 comfortable, so a shelf in good order comes back with no lines and a note saying what it left
 out and why.
 
-Nothing is sent to a supplier. The agent drafts, you sign, and the order stays in the app.
+Nothing is sent to a supplier. Plutus drafts, you sign, and the order stays in the app.
 
 ### Outlook without a password
 
@@ -328,14 +330,14 @@ reads the basket first, and five things hold it back for a person:
 
 A held basket goes through two checks, and they are two different questions.
 
-**The verification agent** — Claude, reading the names — answers *is this the article we
-already know under another wording?* Dots writes `CHEVILLE SPIT FIX 10x100`, the shelf knows
+**Terminus** — Claude, reading the names — answers *is this the article we already know
+under another wording?* The chat asks for `CHEVILLE SPIT FIX 10x100`, the shelf knows
 `343546 - CHEVILLE SPIT FIX 3 10X100`. It answers same, new or unsure, with its reason, and it
 approves nothing. When it cannot be reached, or is not sure, the gate stays shut.
 
 **You** answer the other question — *do we want this, at this price, from this supplier?* — on
 the Waiting for you card, which is on the landing page and only appears when something is
-waiting. The agent's answer is evidence next to the basket, not a recommendation to accept.
+waiting. Terminus' answer is evidence next to the basket, not a recommendation to accept.
 
 An approval never expires; there is a Cancel instead. What it does carry is the price it was
 given at, so an order placed long after a yes, at a price that has moved more than 10%, is

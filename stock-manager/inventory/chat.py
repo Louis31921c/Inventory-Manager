@@ -82,9 +82,9 @@ def held_text(request_id, reading, answer):
         f"· {show_number(row['quantity'])} × {row['article']}"
         + (f" @ {row['unit_price']:.2f}" if row.get("unit_price") is not None else " (no price)")
         for row in reading["lines"][:MAX_SHOWN])
-    agent = {"same": "the agent recognises every article",
-             "new": "the agent says at least one article is genuinely new",
-             "unsure": "the agent is not sure"}.get(answer["verdict"], answer["verdict"])
+    agent = {"same": "Terminus recognises every article",
+             "new": "Terminus says at least one article is genuinely new",
+             "unsure": "Terminus is not sure"}.get(answer["verdict"], answer["verdict"])
     return (f"**Held for approval — request #{request_id}** "
             f"({reading['total']:.2f} EUR)\n{lines}\n\nWhy:\n{why}\n\n"
             f"First check: {agent}. {answer['note']}\n"

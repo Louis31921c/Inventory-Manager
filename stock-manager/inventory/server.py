@@ -667,7 +667,7 @@ def ask_gate(request: Request, body: GateAsk):
 
 @app.post("/api/gate/{request_id}/check")
 async def check_gate(request: Request, request_id: int):
-    """The first factor: the verification agent reads the names, and nothing else."""
+    """The first factor: Terminus reads the names, and nothing else."""
     found = gate.one(config.db_path, request_id)
     if found is None:
         raise HTTPException(404, f"No request #{request_id}.")
@@ -1561,7 +1561,7 @@ class OrderDraft(BaseModel):
 
 @app.post("/api/forecast/draft")
 async def draft_order(request: Request, body: OrderDraft):
-    """The buying agent turns the planner's numbers into an order, for a person to sign."""
+    """Plutus turns the planner's numbers into an order, for a person to sign."""
     lead, service, horizon = _planner_settings(body.lead, body.service, body.horizon)
     plan = forecast.summary(config.db_path, lead, service, horizon)
     rows = plan["articles"]
@@ -1602,9 +1602,9 @@ async def draft_order(request: Request, body: OrderDraft):
                       "reason": str(line.get("reason") or "")})
     # No line is an answer, not a failure: the agent is told to leave out what is
     # comfortable, so a shelf in good order is meant to come back empty.
-    event(request, "order.draft", f"{len(lines)} line(s)", "by the buying agent")
+    event(request, "order.draft", f"{len(lines)} line(s)", "by Plutus")
     return {"lines": lines, "note": str(answer.get("note") or ""),
-            "model": config.model or "claude", "agent": agents.BUYING,
+            "model": config.model or "claude", "agent": agents.PLUTUS,
             "drafted_from": len(planner["articles"]), "site": body.site,
             "work_item": body.work_item}
 

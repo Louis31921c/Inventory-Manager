@@ -1277,11 +1277,11 @@ def test_planner_routes(tmp_path, monkeypatch):
         half = client.get("/api/movements?period=half").json()
         assert [row["label"] for row in half["rows"]] == ["2026 H2"]
 
-        # The buying agent is not called for real here: a draft is a Claude run.
+        # Plutus is not called for real here: a draft is a Claude run.
         from inventory import agents
 
         async def no_agent(planner, model=None):
-            raise llm.ExtractionError("The buying agent needs the Claude command line.")
+            raise llm.ExtractionError("Plutus needs the Claude command line.")
 
         monkeypatch.setattr(agents, "draft_order", no_agent)
         answer = client.post("/api/forecast/draft", json={}, headers=mine)
@@ -1295,7 +1295,7 @@ def test_planner_routes(tmp_path, monkeypatch):
 
         monkeypatch.setattr(agents, "draft_order", drafted)
         answer = client.post("/api/forecast/draft", json={}, headers=mine).json()
-        assert answer["agent"] == agents.BUYING
+        assert answer["agent"] == agents.PLUTUS
         assert answer["lines"][0]["article"] == "BOLT M6"
 
         for dataset in ("inventory", "purchase_orders", "safety-stock"):
@@ -2586,7 +2586,7 @@ def test_the_tree_folds_and_carries_a_quote_and_a_dots_order():
     page = server_module.PAGE.read_text()
     tree = page[page.index('<aside class="tree"'):page.index("</aside>")]
     assert 'id="tree-toggle"' in tree and 'id="tree-list"' in tree
-    assert 'id="tree-new-quote"' in tree and 'id="tree-dots"' in tree
+    assert 'id="tree-new-quote"' in tree and 'id="tree-plutus"' in tree
     # The sites hang off the Purchase orders menu now, not off the tree.
     assert 'id="tree-sites"' not in page
 
@@ -2678,7 +2678,7 @@ def test_the_gate_log_is_sealed_and_an_edit_breaks_it(db_path):
 
     reading = gate.look(db_path, [a_basket()])
     request_id = gate.ask(db_path, reading, channel="42", shop="foussier.fr", asked_by="ALEX")
-    gate.record_check(db_path, request_id, "same", "the agent knows this one")
+    gate.record_check(db_path, request_id, "same", "Terminus knows this one")
     gate.approve(db_path, request_id, "ALEX")
 
     whole, broken, entries = gate.verify_chain(db_path)
@@ -2734,7 +2734,7 @@ def test_an_ordered_request_feeds_the_price_history(db_path):
     assert "first-article" not in gate.look(db_path, [a_basket()])["reasons"]
 
 
-def test_the_verification_agent_never_opens_the_gate_when_it_fails(db_path, monkeypatch):
+def test_terminus_never_opens_the_gate_when_it_fails(db_path, monkeypatch):
     from inventory import llm, verify
 
     async def boom(self, prompt, schema, system=None):
@@ -2743,10 +2743,10 @@ def test_the_verification_agent_never_opens_the_gate_when_it_fails(db_path, monk
     monkeypatch.setattr(llm.ClaudeCodeBackend, "answer", boom)
     answer = asyncio.run(verify.check(db_path, [a_basket()]))
     assert answer["verdict"] == "unsure"
-    assert "could not answer" in answer["note"]
+    assert "Terminus could not answer" in answer["note"]
 
 
-def test_the_agent_takes_the_most_doubtful_line_as_its_answer():
+def test_terminus_takes_the_most_doubtful_line_as_its_answer():
     from inventory import verify
 
     assert verify.overall([{"verdict": "same"}, {"verdict": "same"}]) == "same"
@@ -2948,12 +2948,12 @@ def test_the_app_runs_two_agents_and_says_what_each_one_does():
     from inventory import agents
 
     now = agents.status()
-    assert {one["name"] for one in now["agents"]} == {agents.BUYING, agents.VERIFICATION}
+    assert {one["name"] for one in now["agents"]} == {agents.PLUTUS, agents.TERMINUS}
     # There is no key to show: the agents run the command line on this machine.
     assert "key" not in str(now).lower()
 
 
-def test_the_buying_agent_asks_claude_and_hands_back_what_it_said(monkeypatch):
+def test_plutus_asks_claude_and_hands_back_what_it_said(monkeypatch):
     from inventory import agents
 
     asked = {}
@@ -2976,7 +2976,7 @@ def test_the_buying_agent_asks_claude_and_hands_back_what_it_said(monkeypatch):
     assert asked["schema"] is llm.ORDER_SCHEMA
 
 
-def test_the_buying_agent_says_so_when_the_command_line_is_not_there(monkeypatch):
+def test_plutus_says_so_when_the_command_line_is_not_there(monkeypatch):
     from inventory import agents
 
     monkeypatch.setattr(agents, "available", lambda: False)
@@ -3002,11 +3002,11 @@ def test_both_agents_go_out_through_the_same_door(monkeypatch, db_path):
     assert seen == [verify.SCHEMA, llm.ORDER_SCHEMA]
 
 
-def test_the_purchase_card_is_the_agent_s_now():
+def test_the_purchase_card_is_plutus_now():
     from inventory import server as server_module
 
     page = server_module.PAGE.read_text()
-    assert "<h2>Purchase agent</h2>" in page
+    assert "<h2>Plutus</h2>" in page
     assert 'id="ask-agent"' in page and 'id="agent-note"' in page
     # The button asked for a route that does not exist, so it only ever answered 404.
     assert "/api/forecast/dotsDraft" not in page

@@ -66,7 +66,7 @@
   <button type="button" data-goes="settings">Settings</button>
   <button type="button" data-goes="ddmrp">DDMRP buffers</button>
   <button type="button" id="tree-new-quote">New quote</button>
-  <button type="button" id="tree-dots">Purchase agent</button>
+  <button type="button" id="tree-plutus">Plutus</button>
   </div>
 </aside>
 
@@ -509,7 +509,7 @@
   </div>
 
   <div class="card">
-    <h2>Purchase agent</h2>
+    <h2>Plutus</h2>
     <div class="row">
       <label class="field grow">
         <span>site</span>
@@ -894,10 +894,10 @@ $("tree-new-quote").addEventListener("click", () => {
   say("Quotes · ask for a quote");
 });
 
-$("tree-dots").addEventListener("click", () => {
+$("tree-plutus").addEventListener("click", () => {
   treePick = null;
-  openCard("tools-menu", "Purchase agent");
-  say("DDMRP · purchase agent");
+  openCard("tools-menu", "Plutus");
+  say("DDMRP · Plutus");
 });
 
 for (const node of document.querySelectorAll(".tree button[data-goes]")) {
@@ -2874,7 +2874,7 @@ for (const name of ["week", "month", "half"]) {
 $("ask-agent").addEventListener("click", async () => {
   const button = $("ask-agent");
   button.disabled = true;
-  notice($("agent-note"), "", "The buying agent is reading the numbers...");
+  notice($("agent-note"), "", "Plutus is reading the numbers...");
   try {
     // The route is /api/forecast/draft. It was being asked for /api/forecast/orderDraft,
     // which is no route at all, so the button answered 404 and nothing was ever drafted.
@@ -3637,7 +3637,7 @@ function gateLines(rows) {
 const AGENT_WORDS = {
   same: ["ok", "every article is one we know"],
   new: ["warn", "at least one article is genuinely new"],
-  unsure: ["warn", "the agent is not sure"],
+  unsure: ["warn", "not sure"],
 };
 
 function gateRow(held) {
@@ -3655,14 +3655,14 @@ function gateRow(held) {
   // The agent settles the names. It never says whether to buy: that is the line below.
   const [kind, plain] = AGENT_WORDS[held.agent_verdict] ?? ["", "not checked yet"];
   const agent = el("p", { className: `legend ${kind}` },
-    [`First check: ${plain}${held.agent_said ? ` — ${held.agent_said}` : ""}`]);
+    [`Terminus: ${plain}${held.agent_said ? ` — ${held.agent_said}` : ""}`]);
 
   const buttons = el("div", { className: "row tight" });
   const approve = el("button", { className: "action", textContent: "Approve" });
   approve.addEventListener("click", () => gateSay(held.request_id, "approve"));
   const cancel = el("button", { className: "action ghost", textContent: "Cancel" });
   cancel.addEventListener("click", () => gateSay(held.request_id, "cancel"));
-  const check = el("button", { className: "mini", textContent: "Ask the agent again" });
+  const check = el("button", { className: "mini", textContent: "Ask Terminus again" });
   check.addEventListener("click", () => gateSay(held.request_id, "check"));
   buttons.append(approve, cancel, el("span", { className: "grow" }), check);
 
@@ -3676,7 +3676,7 @@ function gateRow(held) {
 
 async function gateSay(requestId, word) {
   try {
-    say(word === "check" ? "Asking the agent..." : "...");
+    say(word === "check" ? "Asking Terminus..." : "...");
     await api(`/api/gate/${requestId}/${word}`, { method: "POST" });
     await loadGate();
     say(word === "approve" ? `Request #${requestId} approved`
