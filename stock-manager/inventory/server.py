@@ -639,6 +639,8 @@ def read_chain(limit: int = 200):
     """The sealed log, whether it still holds, and what the two agents have done."""
     whole, broken, entries = gate.verify_chain(config.db_path)
     rows = gate.chain(config.db_path)[-min(max(limit, 1), 500):]
+    held = gate.waiting(config.db_path)
+    in_flight = {str(row["channel"]) for row in held if row["channel"]}
     return {
         "log": {"whole": whole, "broken_at": broken, "entries": entries,
                 "last_seal": gate.last_seal(config.db_path)},
@@ -651,10 +653,12 @@ def read_chain(limit: int = 200):
                    "built": number not in gate.UNBUILT}
                   for number, name, detail in gate.STEPS],
         "now": gate.where_we_are(config.db_path),
-        "approval": gate.waiting(config.db_path),
+        "approval": held,
         # A basket is emptied when it becomes an order, so whatever is still in one is
-        # whatever nobody has bought.
-        "baskets": baskets.open_baskets(config.db_path),
+        # whatever nobody has bought — except the ones already held, which are in flight
+        # and are answered for on the line above rather than twice over.
+        "baskets": [row for row in baskets.open_baskets(config.db_path)
+                    if str(row["channel"]) not in in_flight],
     }
 
 

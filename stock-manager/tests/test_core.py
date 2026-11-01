@@ -3370,3 +3370,40 @@ def test_the_chain_answers_with_what_waits_and_what_nobody_bought(tmp_path, monk
 
         baskets.to_purchase_order(server.config.db_path, "C01", "ALEX")
         assert client.get("/api/chain").json()["baskets"] == []
+
+
+def test_a_held_basket_is_not_also_counted_as_one_nobody_bought(tmp_path, monkeypatch):
+    """The two tables mean different things, and a basket belongs to one of them."""
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import baskets
+    from inventory import config as config_module
+    from inventory import gate
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        # C99 asked and was held; C01 asked for nothing yet.
+        baskets.add(server.config.db_path, "C99",
+                    baskets.parse_items("3 widget neuf @ 9"), "foussier.fr", who="ALEX")
+        baskets.add(server.config.db_path, "C01",
+                    baskets.parse_items("4 rondelle m8 @ 0.03"), "foussier.fr", who="LUC")
+        reading = gate.look(server.config.db_path,
+                            baskets.lines(server.config.db_path, "C99"))
+        gate.ask(server.config.db_path, reading, channel="C99", asked_by="ALEX")
+
+        answer = client.get("/api/chain").json()
+        # The held one is in flight and is answered for once, not twice.
+        assert [row["channel"] for row in answer["approval"]] == ["C99"]
+        assert [row["channel"] for row in answer["baskets"]] == ["C01"]

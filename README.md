@@ -394,11 +394,19 @@ Above the round, how many baskets are held, waiting and approved. Nothing in fli
 nothing — an empty round is its own answer — but a sealed entry changed behind its back still
 shouts, naming the one where the chain stops holding.
 
-The name on the bar rolls down to what sits under the round. **Waiting on you** is the held
-baskets, each with why it is held, what Terminus made of it, and an Approve and a Cancel on
-the row; under them, the baskets `/basket` filled that `/purchase` never took — a basket is
-emptied the moment it becomes an order, so whatever is still in one is something nobody
-bought. **What Plutus drafted** is the other.
+The name on the bar rolls down to what sits under the round. **Waiting on you** holds two
+lists that are easy to confuse and mean different things:
+
+- *Held baskets* — somebody ran `/purchase`, the gate fired, and it is stopped on you. There
+  is a request, Terminus has read it or is reading it, and Approve and Cancel are on the row.
+- *Baskets nobody has bought* — `/basket` filled them and `/purchase` was never run at all.
+  Nothing is stopped; nobody has asked yet. A basket is emptied the moment it becomes an
+  order, so whatever is still sitting in one has not been ordered.
+
+A held basket keeps its lines, so it would show in both. It does not: a channel with a
+request in flight is answered for once, on the first list.
+
+**What Plutus drafted** is the other card under the round.
 
 What an article usually costs is the middle of its recent prices, kept as each order goes
 through. Early on there is no history and the price rules simply do not fire; the first
