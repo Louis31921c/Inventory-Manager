@@ -236,10 +236,14 @@ section.panel {
   gap: 10px;
   grid-template-rows: repeat(5, 1fr);
   height: 100%;
+  justify-items: end;
   min-height: 0;
 }
+/* The first and the last stand off the top and the bottom of the screen. */
+.home-doors .door[data-door="slack"] { margin-top: 18px; }
+.home-doors .door[data-door="contacts"] { margin-bottom: 18px; }
 .home-doors .door {
-  align-items: center;
+  align-items: flex-end;
   background: none;
   border: 0;
   color: var(--ink);
@@ -253,11 +257,18 @@ section.panel {
   min-height: 0;
   padding: 0;
 }
-/* The mark takes whatever the row has left once the name is set, and stays square. */
-.door-icon { flex: 1 1 auto; max-width: 100%; min-height: 0; }
+/* The mark takes whatever the row has left once the name is set, less ten, and stays
+   square. It sits at 15%, so it reads as a watermark until the pointer is on it. */
+.door-icon {
+  flex: 1 1 auto;
+  max-width: 100%;
+  min-height: 0;
+  opacity: .15;
+  transition: opacity .12s;
+}
 .door-icon svg {
   display: block;
-  height: 100%;
+  height: calc(100% - 10px);
   transition: transform .12s;
   width: auto;
 }
@@ -266,9 +277,11 @@ section.panel {
   font-weight: 700;
   max-width: 100%;
   overflow: hidden;
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.home-doors .door:hover .door-icon { opacity: 1; }
 .home-doors .door:hover .door-icon svg { transform: scale(1.08); }
 .home-doors .door:hover .door-name { color: var(--accent); text-decoration: underline; }
 /* Nothing here is ever dimmed: a mark is drawn at full strength whatever its state, and
