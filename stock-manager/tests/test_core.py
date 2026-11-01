@@ -3176,3 +3176,70 @@ def test_the_slack_card_can_test_the_connection():
 
     page = server_module.PAGE.read_text()
     assert 'id="slack-check"' in page
+
+
+# ---- the blockchain screen ------------------------------------------------
+
+def test_the_bar_carries_the_blockchain_screen():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    bar = page[page.index('<nav class="menubar"'):page.index("</nav>")]
+    assert 'id="menu-chain"' in bar and ">Blockchain<" in bar
+    screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
+    assert "<h2>The two bots</h2>" in screen
+    assert "<h2>The sealed log</h2>" in screen
+    assert "<h2>What Plutus drafted</h2>" in screen
+
+
+def test_the_chain_screen_counts_what_each_bot_has_done(db_path):
+    from inventory import gate
+
+    quiet = gate.doings(db_path)
+    assert quiet["terminus"]["read"] == 0 and quiet["plutus"]["drafted"] == 0
+
+    first = gate.ask(db_path, gate.look(db_path, [a_basket()]), asked_by="ALEX")
+    gate.record_check(db_path, first, "same", "known")
+    gate.approve(db_path, first, "ALEX")
+    second = gate.ask(db_path, gate.look(db_path, [a_basket(article="NEW THING")]),
+                      asked_by="ALEX")
+    gate.record_check(db_path, second, "unsure", "cannot tell")
+
+    now = gate.doings(db_path)
+    assert now["terminus"]["read"] == 2
+    assert now["terminus"]["verdicts"] == {"same": 1, "unsure": 1}
+    assert now["requests"] == {"approved": 1, "checked": 1}
+    # A draft is not a gate: Plutus never writes to this chain.
+    assert now["plutus"]["drafted"] == 0
+    assert all(entry["event"] != "drafted" for entry in gate.chain(db_path))
+
+
+def test_the_chain_route_answers_with_the_log_and_the_bots(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import gate
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+        request_id = gate.ask(server.config.db_path,
+                              gate.look(server.config.db_path, [a_basket()]), asked_by="ALEX")
+        gate.approve(server.config.db_path, request_id, "ALEX")
+
+        answer = client.get("/api/chain").json()
+        assert answer["log"]["whole"] is True and answer["log"]["entries"] == 2
+        assert len(answer["log"]["last_seal"]) == 64
+        assert [row["event"] for row in answer["entries"]] == ["approved", "requested"]
+        assert answer["doings"]["requests"] == {"approved": 1}
+        assert {one["name"] for one in answer["agents"]["agents"]} == {"plutus", "terminus"}

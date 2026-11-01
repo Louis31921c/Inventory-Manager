@@ -366,6 +366,12 @@ Every turn of the gate is written to a sealed log: each entry carries the hash o
 before it, so a line edited afterwards breaks the chain from there on and the card says at
 which entry. Nothing is ever deleted — a cancel is an entry of its own.
 
+**Blockchain**, on the menu bar, is where that log is read. It is a hash chain kept in the
+database here, not a network and not a coin: one local file, no peers, nothing to mine. The
+screen holds three things — what the two agents are and what each has done, the chain itself
+with the head of every seal, and the drafts Plutus has written. If an entry is changed behind
+its back, the screen says at which one the chain stops holding.
+
 What an article usually costs is the middle of its recent prices, kept as each order goes
 through. Early on there is no history and the price rules simply do not fire; the first
 purchase gate covers that stretch on its own.

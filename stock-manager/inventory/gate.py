@@ -242,6 +242,32 @@ def history(db_path, limit=40):
     return [_row(row) for row in rows]
 
 
+def doings(db_path, limit=40):
+    """What the two of them have done, for the screen that watches the chain.
+
+    Terminus leaves its mark on the requests it read; Plutus leaves its in the audit,
+    because a draft is not a gate and never touches this chain.
+    """
+    verdicts = db.read(db_path, """
+            SELECT agent_verdict, count(*) FROM gate_requests
+            WHERE agent_verdict IS NOT NULL GROUP BY agent_verdict
+            """)
+    states = db.read(db_path, "SELECT state, count(*) FROM gate_requests GROUP BY state")
+    drafts = db.read(db_path, """
+            SELECT happened_at, user_name, target, detail FROM audit
+            WHERE action = 'order.draft' ORDER BY event_id DESC LIMIT ?
+            """, (limit,))
+    return {
+        "terminus": {"verdicts": {word: count for word, count in verdicts},
+                     "read": sum(count for _, count in verdicts)},
+        "plutus": {"drafts": [{"at": at.isoformat(timespec="seconds") if at else None,
+                               "by": by, "lines": target, "detail": detail}
+                              for at, by, target, detail in drafts],
+                   "drafted": len(drafts)},
+        "requests": {state: count for state, count in states},
+    }
+
+
 def record_check(db_path, request_id, verdict, agent_said, matches=()):
     """What Terminus made of it. It settles the name, never the purchase."""
     db.write(db_path, """

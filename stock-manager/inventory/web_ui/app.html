@@ -29,6 +29,7 @@
     <button type="button" id="menu-ddmrp" aria-haspopup="true" aria-expanded="false">DDMRP</button>
     <div class="menu-drop" id="tools-drop" role="menu"></div>
   </span>
+  <button type="button" id="menu-chain">Blockchain</button>
   <button type="button" id="menu-goto">SQL</button>
   <span class="menubar-gap"></span>
   <span class="menu right" id="system-menu">
@@ -207,6 +208,29 @@
     <div class="scroll-x short-box"><table id="table-inventory"></table></div>
   </div>
  </section>
+
+<section class="panel" id="panel-chain" role="tabpanel" hidden>
+  <div class="card">
+    <h2>The two bots</h2>
+    <div class="row" id="chain-stats"></div>
+    <div id="chain-bots"></div>
+    <p class="legend" id="chain-rules"></p>
+  </div>
+
+  <div class="card">
+    <h2>The sealed log</h2>
+    <p class="muted" id="chain-state"></p>
+    <p class="legend">Every entry carries the hash of the one before it, so a line changed
+      afterwards breaks the chain from there on and this screen says where. Nothing is
+      deleted: a cancel is an entry of its own.</p>
+    <div class="scroll-x"><table id="table-chain"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>What Plutus drafted</h2>
+    <div class="scroll-x short-box"><table id="table-plutus"></table></div>
+  </div>
+</section>
 
 <section class="panel" id="panel-query" role="tabpanel" aria-labelledby="tab-query" hidden>
   <div class="card">
@@ -841,7 +865,7 @@ function flatten() {
 }
 
 const TABS = ["home", "capture", "inventory", "query", "orders", "quotes", "bills",
-              "route", "settings", "ddmrp"];
+              "route", "settings", "ddmrp", "chain"];
 
 // One card of the Purchase orders screen at a time; the menu says which.
 const ORDER_CARDS = ["order-scan", "contacts-card", "stored-po"];
@@ -930,6 +954,7 @@ function say(message, kind = "") {
 }
 
 $("menu-route").addEventListener("click", () => { openTab("route"); loadRoute(); });
+$("menu-chain").addEventListener("click", () => { openTab("chain"); loadChain(); });
 $("menu-goto").addEventListener("click", () => openTab("query"));
 $("menu-help").addEventListener("click", () => { window.location.href = "/license"; });
 
@@ -3638,6 +3663,108 @@ for (const id of ["contact-person", "contact-company"]) {
   $(id).addEventListener("keydown", (event) => {
     if (event.key === "Enter") askContactFile();
   });
+}
+
+// ---- the chain, and what the two of them have been doing ------------------
+
+const CHAIN_WORDS = {
+  requested: "a basket was held",
+  checked: "Terminus read the names",
+  approved: "a person approved it",
+  cancelled: "it was cancelled",
+  ordered: "the order was placed",
+};
+
+function botCard(name, what, ready, lines) {
+  const box = el("div", { className: "sheet" }, [
+    el("div", { className: "sheet-title" }, [
+      el("strong", { textContent: name }),
+      el("span", { className: "muted", textContent: what }),
+      el("span", { className: `pill ${ready ? "green" : "red"}`,
+                   textContent: ready ? "ready" : "not reachable" }),
+    ]),
+  ]);
+  for (const line of lines) box.append(el("p", { className: "legend", textContent: line }));
+  return box;
+}
+
+function chainRows(entries) {
+  renderTable($("table-chain"), [
+    { label: "#", numeric: true, cell: (row) => String(row.entry_id) },
+    { label: "What", cell: (row) => {
+      const box = el("span", {}, [
+        el("strong", { textContent: CHAIN_WORDS[row.event] ?? row.event })]);
+      const said = row.body?.said ?? row.body?.why ?? row.body?.reference ?? "";
+      if (said) box.append(el("div", { className: "desig", textContent: short(said, 80) }));
+      return box;
+    } },
+    { label: "Request", numeric: true,
+      cell: (row) => (row.request_id == null ? "—" : `#${row.request_id}`) },
+    { label: "Who", cell: (row) => row.who ?? "—" },
+    { label: "When", cell: (row) => (row.made_at ?? "").replace("T", " ") },
+    { label: "Seal", cell: (row) => el("code", { className: "seal", textContent:
+      `${row.seal.slice(0, 8)}…` }) },
+  ], entries, "Nothing has been held yet, so the chain has no entry.");
+}
+
+async function loadChain() {
+  let data;
+  try {
+    data = await api("/api/chain");
+  } catch (e) {
+    notice($("chain-state"), "bad", e.message);
+    return;
+  }
+
+  const log = data.log ?? {};
+  const doings = data.doings ?? {};
+  const held = doings.requests ?? {};
+  const verdicts = doings.terminus?.verdicts ?? {};
+
+  $("chain-stats").replaceChildren(
+    statTile("entries sealed", showNum(log.entries ?? 0)),
+    statTile("baskets held", showNum(Object.values(held).reduce((sum, one) => sum + one, 0))),
+    statTile("waiting on you", showNum((held.waiting ?? 0) + (held.checked ?? 0))),
+    statTile("approved", showNum(held.approved ?? 0)),
+    statTile("cancelled", showNum(held.cancelled ?? 0)),
+  );
+
+  const ready = data.agents?.ready ?? false;
+  const said = (word) => `${word}: ${showNum(verdicts[word] ?? 0)}`;
+  $("chain-bots").replaceChildren(
+    botCard("Plutus", "drafts a purchase order from the planner's numbers", ready, [
+      `${showNum(doings.plutus?.drafted ?? 0)} draft(s) written. It signs nothing: a draft `
+      + "is a draft until a person saves it, and it never touches this chain.",
+    ]),
+    botCard("Terminus", "says whether an article is one we already know", ready, [
+      `${showNum(doings.terminus?.read ?? 0)} basket(s) read — `
+      + `${said("same")}, ${said("new")}, ${said("unsure")}.`,
+      "It approves nothing. When it cannot be reached, or is not sure, the basket stays held.",
+    ]),
+  );
+
+  const rules = data.rules ?? {};
+  $("chain-rules").textContent =
+    `A basket is held by: a first article, a supplier it has not come from before, a basket `
+    + `over ${showNum(rules.ceiling)} EUR, a line over ${rules.dear}× the usual price, or a `
+    + `line with no price. An approval is asked again if the price moves more than `
+    + `${Math.round((rules.drift ?? 0) * 100)}%.`;
+
+  $("chain-state").textContent = log.whole
+    ? `The chain holds: ${showNum(log.entries ?? 0)} entries, last seal `
+      + `${(log.last_seal ?? "").slice(0, 12)}…`
+    : `THE CHAIN IS BROKEN at entry ${log.broken_at}: that line, or one before it, was `
+      + "changed after it was written.";
+  $("chain-state").className = log.whole ? "muted" : "bad";
+
+  chainRows(data.entries ?? []);
+
+  renderTable($("table-plutus"), [
+    { label: "When", cell: (row) => (row.at ?? "").replace("T", " ") },
+    { label: "Asked by", cell: (row) => row.by ?? "—" },
+    { label: "Drafted", cell: (row) => row.lines ?? "—" },
+    { label: "How", cell: (row) => row.detail ?? "—" },
+  ], doings.plutus?.drafts ?? [], "Plutus has not drafted anything yet.");
 }
 
 // ---- the gate on what the bot buys ----------------------------------------

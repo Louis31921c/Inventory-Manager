@@ -256,6 +256,8 @@ p { margin: 0; }
 .legend.ok { color: var(--green); }
 .legend.warn { color: var(--amber); }
 p.bad { color: var(--red); font-weight: 700; }
+/* A seal is only ever shown by its head: enough to tell two apart, no more. */
+code.seal { color: var(--ink-soft); font-size: 11px; }
 /* The code Microsoft gives out loud, for typing into a browser on another screen. */
 .device-code {
   font-family: monospace;

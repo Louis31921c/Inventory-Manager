@@ -109,6 +109,10 @@ functionnalities to developp :
                       - no expiry on the approval, but a cancel button
                       - an approved gate let the bot place the order
 
+- DONE: a Blockchain screen on the bar: the two bots and what each has done, the sealed
+        log with the head of every seal, and the drafts Plutus wrote. It says at which
+        entry the chain stops holding when one is edited behind its back
+
 - DONE: Plutus takes an article as well as a site and a work item. Empty and it picks what
         is thin; named and it reads those, part of a name being enough. An article you
         typed is ordered unless there is a reason not to, and then the note says which and

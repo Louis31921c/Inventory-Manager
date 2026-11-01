@@ -634,6 +634,22 @@ class GateWord(BaseModel):
     why: str | None = None
 
 
+@app.get("/api/chain")
+def read_chain(limit: int = 200):
+    """The sealed log, whether it still holds, and what the two agents have done."""
+    whole, broken, entries = gate.verify_chain(config.db_path)
+    rows = gate.chain(config.db_path)[-min(max(limit, 1), 500):]
+    return {
+        "log": {"whole": whole, "broken_at": broken, "entries": entries,
+                "last_seal": gate.last_seal(config.db_path)},
+        "entries": list(reversed(rows)),
+        "doings": gate.doings(config.db_path),
+        "agents": agents.status(),
+        "rules": {"ceiling": gate.CEILING, "dear": gate.DEAR, "drift": gate.DRIFT},
+        "words": gate.REASON_WORDS,
+    }
+
+
 @app.get("/api/agents")
 def read_agents():
     """The two agents and whether they can run. There is no key to show."""
