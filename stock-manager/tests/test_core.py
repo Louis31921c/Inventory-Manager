@@ -2549,7 +2549,7 @@ def test_the_tool_row_keeps_nothing_but_remember_me_and_exit():
     from inventory import server as server_module
 
     page = server_module.PAGE.read_text()
-    row = page[page.index('<div class="toolbar">'):page.index('<div class="screen-title">')]
+    row = page[page.index('<div class="toolbar">'):page.index('<div class="workspace">')]
     for gone in ['id="command"', 'id="tool-refresh"', 'id="tool-find"',
                  'id="tool-export"', 'id="tool-planner"']:
         assert gone not in row
@@ -3187,7 +3187,7 @@ def test_the_bar_carries_the_blockchain_screen():
     bar = page[page.index('<nav class="menubar"'):page.index("</nav>")]
     assert 'id="menu-chain"' in bar and ">Blockchain<" in bar
     screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
-    assert "<h2>bots</h2>" in screen
+    assert "<h2>blockchain</h2>" in screen
     assert "<h2>What Plutus drafted</h2>" in screen
     # The round is drawn, with somewhere to say which step is live and a way out of it.
     assert 'id="chain-round"' in screen and 'id="chain-now"' in screen

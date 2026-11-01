@@ -38,7 +38,7 @@ body {
   overflow: hidden;
   padding: 0;
 }
-.titlebar, .menubar, .toolbar, .screen-title, .fkeys { flex: 0 0 auto; }
+.titlebar, .menubar, .toolbar, .fkeys { flex: 0 0 auto; }
 
 a { color: var(--accent); }
 
@@ -123,14 +123,6 @@ button.tool.go::before { color: var(--green); content: "\2713 "; }
 button.tool.stop::before { color: var(--red); content: "\2715 "; }
 
 /* ---- screen layout ------------------------------------------------- */
-
-.screen-title {
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  font-size: 14px;
-  font-weight: 700;
-  padding: 5px 10px;
-}
 
 .workspace { display: flex; align-items: stretch; flex: 1 1 auto; min-height: 0; }
 
