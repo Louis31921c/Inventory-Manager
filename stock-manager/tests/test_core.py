@@ -3188,7 +3188,7 @@ def test_the_bar_carries_the_blockchain_screen():
     assert 'id="menu-chain"' in bar and ">Blockchain<" in bar
     screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
     assert "<h2>blockchain</h2>" in screen
-    assert "<h2>What Plutus drafted</h2>" in screen
+    assert "<h2>Plutus draft</h2>" in screen
     # The round is drawn, with somewhere to say which step is live and a way out of it.
     assert 'id="chain-round"' in screen and 'id="chain-now"' in screen
     assert 'id="chain-doing"' in screen and 'id="chain-warn"' in screen
@@ -3328,8 +3328,9 @@ def test_the_blockchain_name_rolls_down_to_what_sits_under_the_round():
 
     screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
     assert 'id="chain-card"' in screen          # the round, always there
-    assert "<h2>Waiting on you</h2>" in screen
-    assert "<h2>What Plutus drafted</h2>" in screen
+    assert "<h2>Held baskets</h2>" in screen
+    assert "<h2>Baskets nobody has bought</h2>" in screen
+    assert "<h2>Plutus draft</h2>" in screen
     assert 'id="table-approval"' in screen and 'id="table-unbought"' in screen
 
 

@@ -49,6 +49,16 @@ The orders carry off most of what the notes bring, the way a real year does, so 
 left on the shelf is of the same order as a buffer rather than a year of stock: the DDMRP
 screen comes out with articles in every zone, not all of them over the top of green.
 
+The year ends with the gate in the middle of its work, so the Blockchain screen has
+something on it: eight channels with a basket, three of them held and waiting on you, one
+approved and ordered, one turned down, and three nobody has run `/purchase` on at all. The
+reasons are spread — a first article, a supplier it has not come from, a line at three times
+the usual price, a line with no price, a basket over the ceiling — so no single rule looks
+like the only one. Six drafts sit under Plutus.
+
+All of it goes in through the app's own gate, so the log seals the way it would in earnest:
+`verify_chain` holds on a freshly built demo, and the screen says so.
+
 ## The files on their own
 
 `make_sample_data.py` with no `--db` only writes the csv files. They are plain text with

@@ -246,6 +246,137 @@ def write_places(folder):
     return write_csv(folder, "places", rows, ["kind", "label", "address", "lat", "lon"])
 
 
+# The chat the gate watches: a channel a site, the way a real workshop splits them up.
+CHANNELS = [
+    ("C0GENETTE", "LA GENETTE", "PHASE 3", "foussier.fr", "SOFIANE"),
+    ("C0OSTREA", "OSTREA", "PORTAIL BAT C", "metaleco.fr", "MARIE"),
+    ("C0ARIANE", "ARIANE", "ESCALIER", "wurth.fr", "LUC"),
+    ("C0GRAVELOTS", "LES GRAVELOTS", "PORTE PAC", "foussier.fr", "ALEX"),
+    ("C0PULSATION", "PULSATION", "VITRAGE", "saint-gobain.fr", "MARIE"),
+    ("C0ARTIGUES", "ARTIGUES", "COUVERTINES", "bati-formes.fr", "SOFIANE"),
+    ("C0MARNE", "SQUARE DE LA MARNE", "GC BALCONS BAT C", "decoupacier.fr", "LUC"),
+    ("C0BENAUGE", "LA BENAUGE", "GC TYPE 02", "lr-etanco.fr", "ALEX"),
+]
+
+# Something the shelf has never seen, so a basket asking for it is held on its first line.
+STRANGERS = [
+    ("CHEVILLE SPIT FIX 10X100", 0.71), ("JOINT EPDM 6MM", 52.0),
+    ("TOLE LARMEE 4MM", 96.0), ("PROFIL ALU 60X40", 31.5),
+    ("DISQUE DIAMANT 230", 28.0), ("GANT ANTI COUPURE T10", 6.4),
+]
+
+TERMINUS_SAID = {
+    "same": "the size and the grade match a name the shelf already has.",
+    "new": "nothing on the shelf is this article; it is a first purchase.",
+    "unsure": "the line gives no size, so two known names fit it equally well.",
+}
+
+
+def fill_gate(database, rng):
+    """A blockchain screen with something on it: baskets, held requests, Plutus drafts.
+
+    Every one of these goes in through the app's own gate, so the log seals the way it
+    would in earnest and verify_chain holds afterwards. Nothing is written straight into
+    gate_log, which would be a chain that only looks like one.
+    """
+    from inventory import baskets, db, gate, prices
+
+    # A price history first, or no article has a usual price to be judged against.
+    for article, _, supplier, _, price in ARTICLES[:24]:
+        for back in range(rng.randint(2, 5)):
+            prices.remember(database, article, round(price * rng.uniform(0.92, 1.08), 2),
+                            supplier=supplier, source="order",
+                            seen_on=LAST_DAY - timedelta(days=30 * back + rng.randint(0, 9)))
+
+    known = [(article, supplier, price) for article, _, supplier, _, price in ARTICLES[:24]]
+    made = []
+
+    for index, (channel, site, work_item, shop, who) in enumerate(CHANNELS):
+        # Each channel fills a basket: mostly things we buy, sometimes something new.
+        # A quantity the trade would actually ask for, so a basket of washers does not
+        # come to the same as a basket of glass and trip the ceiling every time.
+        def ask_for(price):
+            if price < 1:
+                return float(rng.choice([100, 200, 500]))
+            if price < 20:
+                return float(rng.choice([4, 6, 12, 24]))
+            return float(rng.randint(1, 4))
+
+        wanted = []
+        for _ in range(rng.randint(1, 3)):
+            article, supplier, price = rng.choice(known)
+            wanted.append({"article": article, "quantity": ask_for(price),
+                           "unit_price": round(price * rng.uniform(0.95, 1.1), 2),
+                           "supplier": supplier})
+
+        # Every reason the gate has, spread about, so no one of them looks like the rule.
+        flavour = index % 4
+        if flavour == 0:
+            stranger, price = rng.choice(STRANGERS)
+            wanted.append({"article": stranger, "quantity": float(rng.randint(2, 12)),
+                           "unit_price": price, "supplier": rng.choice(known)[1]})
+        elif flavour == 1:
+            article, _, price = rng.choice(known)
+            wanted.append({"article": article, "quantity": ask_for(price),
+                           "unit_price": round(price * rng.uniform(2.4, 3.2), 2),
+                           "supplier": rng.choice(known)[1]})
+        elif flavour == 2:
+            article, _, price = rng.choice(known)
+            wanted.append({"article": article, "quantity": ask_for(price),
+                           "unit_price": None, "supplier": rng.choice(known)[1]})
+        else:
+            article, supplier, price = rng.choice(known)
+            wanted.append({"article": article, "quantity": ask_for(price),
+                           "unit_price": round(price * rng.uniform(0.95, 1.1), 2),
+                           "supplier": "QUINCAILLERIE DU PONT"})
+
+        baskets.add(database, channel,
+                    [{"article": row["article"], "quantity": row["quantity"],
+                      "unit_price": row["unit_price"], "supplier": row["supplier"]}
+                     for row in wanted],
+                    shop, site, work_item, who, wanted[0]["supplier"])
+
+        # Two of the six are left alone: nobody has run /purchase on them at all.
+        if index >= len(CHANNELS) - 2:
+            continue
+
+        held = baskets.lines(database, channel)
+        reading = gate.look(database, held)
+        if not reading["held"]:
+            continue
+        request_id = gate.ask(database, reading, channel=channel, shop=shop, asked_by=who,
+                              site=site, work_item=work_item)
+        verdict = ("new" if any("first-article" in line["found"] for line in reading["lines"])
+                   else rng.choice(["same", "unsure"]))
+        gate.record_check(database, request_id, verdict, TERMINUS_SAID[verdict],
+                          [{"asked": line["article"], "verdict": verdict} for line in
+                           reading["lines"]])
+        made.append((request_id, channel))
+
+    # One approved and placed, one approved and still to place, one turned down. The rest
+    # stay on the screen as what is waiting.
+    if len(made) >= 3:
+        gone, placing, refused = made[0], made[1], made[2]
+        gate.approve(database, gone[0], "ADMIN")
+        gate.mark_ordered(database, gone[0], "ADMIN", reference="FOUSSIER 77812")
+        baskets.clear(database, gone[1])
+        gate.approve(database, placing[0], "ADMIN")
+        gate.cancel(database, refused[0], "ADMIN", "the site has enough of it already")
+        baskets.clear(database, refused[1])
+
+    # What Plutus has drafted. The audit is where a draft is written down: it is not a
+    # gate, and it never touches the chain.
+    for back in range(6):
+        when = LAST_DAY - timedelta(days=back * 5 + rng.randint(0, 3))
+        db.write(database, """
+                INSERT INTO audit (happened_at, user_name, action, target, detail, address)
+                VALUES (?, 'ADMIN', 'order.draft', ?, 'by Plutus', '127.0.0.1')
+                """, (when, f"{rng.randint(2, 9)} line(s)"))
+
+    whole, broken, entries = gate.verify_chain(database)
+    return {"requests": len(made), "entries": entries, "whole": whole, "broken": broken}
+
+
 def fill_database(folder, year, where):
     """Pour the same year into a database, through the code the app itself uses."""
     sys.path.insert(0, str(HERE.parent))
@@ -309,6 +440,8 @@ def fill_database(folder, year, where):
     book = folder.parent.parent / "supplier-contacts.csv"
     if book.is_file():
         contacts.load_file(database, book, "SAMPLE")
+
+    fill_gate(database, random.Random(SEED + 7))
 
     db.write(database, "DELETE FROM places")
     db.write(database, """
