@@ -87,7 +87,7 @@
     <div class="home-logo" role="img" aria-label="Logistics Manager"></div>
     <!-- The window is WebKit, not a browser: these open outside it, so none is a link. -->
     <nav class="home-doors" id="home-doors" aria-label="Shortcuts">
-      <button type="button" class="door" data-door="slack" disabled>
+      <button type="button" class="door" data-door="slack">
         <span class="door-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <rect x="9.9" y="1.6" width="3.2" height="20.8" rx="1.6" fill="#e01e5a"/>
             <rect x="1.6" y="10.4" width="20.8" height="3.2" rx="1.6" fill="#36c5f0"/>
@@ -96,7 +96,7 @@
           </svg></span>
         <span class="door-name">Slack</span>
       </button>
-      <button type="button" class="door" data-door="discord" disabled>
+      <button type="button" class="door" data-door="discord">
         <span class="door-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path fill="#5865f2" d="M19.6 5.6A15.3 15.3 0 0 0 15.9 4.3l-.3.7a11.6 11.6 0 0 1 3 1.5 11 11 0 0 0-9.2 0 11.6 11.6 0 0 1 3-1.5l-.3-.7A15.3 15.3 0 0 0 8.4 5.6C5.5 9.6 4.6 13.5 5 17.2a15.3 15.3 0 0 0 4.6 2.3l.6-1a12 12 0 0 1-1.8-.9l.4-.4a10.8 10.8 0 0 0 9.4 0l.4.4a12 12 0 0 1-1.8.9l.6 1A15.3 15.3 0 0 0 22 17.2c.4-4.1-.6-8-2.4-11.6Z"/>
             <ellipse cx="9.3" cy="13.4" rx="1.6" ry="1.8" fill="#fff"/>
@@ -104,7 +104,7 @@
           </svg></span>
         <span class="door-name">Discord</span>
       </button>
-      <button type="button" class="door" data-door="outlook" disabled>
+      <button type="button" class="door" data-door="outlook">
         <span class="door-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <rect x="9" y="5.5" width="13.2" height="13" rx="1.2" fill="#0f6cbd"/>
             <path d="M9.4 6.6 15.6 12.4 21.8 6.6" fill="none" stroke="#cfe3f7" stroke-width="1.3"/>
@@ -113,14 +113,14 @@
           </svg></span>
         <span class="door-name">Outlook</span>
       </button>
-      <button type="button" class="door" data-door="proton" disabled>
+      <button type="button" class="door" data-door="proton">
         <span class="door-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path fill="#6d4aff" d="M2.3 7.6 12 14.3l9.7-6.7V18a1.7 1.7 0 0 1-1.7 1.7H4A1.7 1.7 0 0 1 2.3 18Z"/>
             <path fill="#a694ff" d="M4 4.3h16A1.7 1.7 0 0 1 21.7 6v1.1L12 13.8 2.3 7.1V6A1.7 1.7 0 0 1 4 4.3Z"/>
           </svg></span>
         <span class="door-name">Proton Mail</span>
       </button>
-      <button type="button" class="door" data-door="contacts" disabled>
+      <button type="button" class="door" data-door="contacts">
         <span class="door-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path fill="#fff" stroke="#8d9196" stroke-width="1.1" d="M4.8 2.6h8.6L19.2 8.4v13H4.8Z"/>
             <path fill="#c8ccd0" stroke="#8d9196" stroke-width="1.1" d="M13.4 2.6 19.2 8.4h-5.8Z"/>
@@ -4548,24 +4548,15 @@ document.addEventListener("keydown", (event) => {
 // are fixed on the server side; nothing here sends it a url or a path of its own.
 async function wireHomeDoors() {
   const note = $("home-doors-note");
-  let known;
-  try {
-    known = (await api("/api/shortcuts")).shortcuts ?? [];
-  } catch (e) {
-    notice(note, "bad", e.message);
-    return;
-  }
-  const byKey = new Map(known.map((door) => [door.key, door]));
-  for (const button of $("home-doors").querySelectorAll(".door")) {
-    const door = byKey.get(button.dataset.door);
-    if (!door) continue;
-    button.disabled = false;
-    // The contact sheet can be missing; the mailboxes and the chats are always there.
-    button.title = door.ready ? door.where : `not there: ${door.where}`;
+  const buttons = [...$("home-doors").querySelectorAll(".door")];
+
+  // Wired before anything is asked of the server, so a window left open across an
+  // install still answers the click, with whatever went wrong, instead of sitting dead.
+  for (const button of buttons) {
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
-        const opened = await api(`/api/shortcuts/${door.key}`, { method: "POST" });
+        const opened = await api(`/api/shortcuts/${button.dataset.door}`, { method: "POST" });
         notice(note, "ok", `${opened.name} is opening outside this window.`);
       } catch (e) {
         notice(note, "bad", e.message);
@@ -4573,6 +4564,22 @@ async function wireHomeDoors() {
         button.disabled = false;
       }
     });
+  }
+
+  // The listing only says where each one goes, and which file is not there yet.
+  let known;
+  try {
+    known = (await api("/api/shortcuts")).shortcuts ?? [];
+  } catch (e) {
+    notice(note, "bad", `${e.message} - restart Stock Manager if it was open during an update.`);
+    return;
+  }
+  const byKey = new Map(known.map((door) => [door.key, door]));
+  for (const button of buttons) {
+    const door = byKey.get(button.dataset.door);
+    if (!door) continue;
+    // The contact sheet can be missing; the mailboxes and the chats are always there.
+    button.title = door.ready ? door.where : `not there: ${door.where}`;
   }
 }
 

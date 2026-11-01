@@ -208,7 +208,7 @@ section.panel {
 #panel-home { display: flex; flex-direction: column; height: 100%; }
 #gate-card { flex: 0 1 auto; margin-bottom: 8px; overflow-y: auto; }
 .home {
-  align-items: center;
+  align-items: stretch;
   display: flex;
   flex: 1 1 auto;
   gap: 14px;
@@ -217,6 +217,7 @@ section.panel {
 }
 .home-logo {
   background: url("/landing.png") center / contain no-repeat;
+  align-self: center;
   flex: 0 1 620px;
   height: 100%;
   max-height: 420px;
@@ -229,13 +230,13 @@ section.panel {
    No box is drawn around any of them: the mark itself is the button, as big as its fifth
    allows, with its name under it. */
 .home-doors {
-  align-self: center;
+  align-self: stretch;
   display: grid;
-  flex: 0 0 170px;
+  flex: 0 0 180px;
   gap: 10px;
   grid-template-rows: repeat(5, 1fr);
   height: 100%;
-  max-height: 460px;
+  min-height: 0;
 }
 .home-doors .door {
   align-items: center;
@@ -270,9 +271,11 @@ section.panel {
 }
 .home-doors .door:hover .door-icon svg { transform: scale(1.08); }
 .home-doors .door:hover .door-name { color: var(--accent); text-decoration: underline; }
-.home-doors .door[disabled] { color: #9a9a9a; cursor: not-allowed; }
-.home-doors .door[disabled] .door-icon { opacity: .45; }
+/* Nothing here is ever dimmed: a mark is drawn at full strength whatever its state, and
+   a door that is busy says so by not moving rather than by fading. */
+.home-doors .door[disabled] { cursor: progress; }
 .home-doors .door[disabled]:hover .door-icon svg { transform: none; }
+.home-doors .door[disabled]:hover .door-name { color: var(--ink); text-decoration: none; }
 
 /* ---- group boxes --------------------------------------------------- */
 
