@@ -1559,19 +1559,35 @@ class OrderDraft(BaseModel):
     only: list[str] | None = None
 
 
+def _named(rows, asked_for):
+    """The planner's rows for the articles a person typed, exact names first."""
+    wanted = [name.upper() for name in asked_for]
+    exact = [row for row in rows if row["article"].upper() in wanted]
+    if exact:
+        return exact
+    return [row for row in rows
+            if any(name in row["article"].upper() for name in wanted)]
+
+
 @app.post("/api/forecast/draft")
 async def draft_order(request: Request, body: OrderDraft):
     """Plutus turns the planner's numbers into an order, for a person to sign."""
     lead, service, horizon = _planner_settings(body.lead, body.service, body.horizon)
     plan = forecast.summary(config.db_path, lead, service, horizon)
     rows = plan["articles"]
-    if body.only:
-        wanted = {name.strip().upper() for name in body.only}
-        rows = [row for row in rows if row["article"].upper() in wanted]
+    asked_for = [name.strip() for name in (body.only or []) if name.strip()]
+    if asked_for:
+        # Typed by hand, so the whole name is rarely typed: "rondelle m8" finds the one
+        # the shelf calls RONDELLE M8, and the exact name still wins over a part of it.
+        rows = _named(rows, asked_for)
+        if not rows:
+            raise HTTPException(422, "No article on the shelf matches "
+                                     + ", ".join(asked_for) + ".")
     else:
         rows = plan["shortlist"]
-    if not rows:
-        raise HTTPException(422, "Nothing worth ordering: no article is under its reorder point.")
+        if not rows:
+            raise HTTPException(422,
+                                "Nothing worth ordering: no article is under its reorder point.")
 
     keep = ("article", "designation", "reference", "supplier", "per_week", "on_hand", "on_order",
             "lead_demand", "safety_stock", "reorder_point", "cover_days", "suggested", "state",
@@ -1581,6 +1597,8 @@ async def draft_order(request: Request, body: OrderDraft):
         "window": plan["window"],
         "counted_articles": plan["counts"]["counted"],
         "history_is_thin": plan["thin"],
+        # Named by the person, which is a different question from "what should we order?"
+        "asked_for_by_name": asked_for,
         "articles": [{key: row[key] for key in keep} for row in rows[:60]],
     }
 
@@ -1605,8 +1623,10 @@ async def draft_order(request: Request, body: OrderDraft):
     event(request, "order.draft", f"{len(lines)} line(s)", "by Plutus")
     return {"lines": lines, "note": str(answer.get("note") or ""),
             "model": config.model or "claude", "agent": agents.PLUTUS,
-            "drafted_from": len(planner["articles"]), "site": body.site,
-            "work_item": body.work_item}
+            "drafted_from": len(planner["articles"]),
+            "asked_for": asked_for,
+            "read": [row["article"] for row in rows[:60]],
+            "site": body.site, "work_item": body.work_item}
 
 
 @app.get("/api/errors")

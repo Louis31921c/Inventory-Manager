@@ -3006,7 +3006,7 @@ def test_the_purchase_card_is_plutus_now():
     from inventory import server as server_module
 
     page = server_module.PAGE.read_text()
-    assert "<h2>Plutus</h2>" in page
+    assert "<h2>Plutus orders</h2>" in page
     assert 'id="ask-agent"' in page and 'id="agent-note"' in page
     # The button asked for a route that does not exist, so it only ever answered 404.
     assert "/api/forecast/dotsDraft" not in page
@@ -3045,3 +3045,75 @@ def test_an_empty_draft_is_an_answer_not_a_failure(tmp_path, monkeypatch):
         assert answer.status_code == 200
         assert answer.json()["lines"] == []
         assert "comfortable" in answer.json()["note"]
+
+
+def test_an_article_typed_by_hand_finds_the_one_the_shelf_calls_it(tmp_path, monkeypatch):
+    """Nobody types "343546 - CHEVILLE SPIT FIX 3 10X95/36-26MT BTE50" into a box."""
+    from inventory import server as server_module
+
+    rows = [{"article": "RONDELLE M8"}, {"article": "RONDELLE M6"},
+            {"article": "343546 - CHEVILLE SPIT FIX 3 10X95"}]
+
+    assert [row["article"] for row in server_module._named(rows, ["rondelle m8"])] == \
+        ["RONDELLE M8"]
+    # A part of the name is enough when nothing matches it exactly.
+    assert [row["article"] for row in server_module._named(rows, ["spit fix"])] == \
+        ["343546 - CHEVILLE SPIT FIX 3 10X95"]
+    assert [row["article"] for row in server_module._named(rows, ["rondelle"])] == \
+        ["RONDELLE M8", "RONDELLE M6"]
+    assert server_module._named(rows, ["nothing like it"]) == []
+
+
+def test_naming_an_article_asks_plutus_for_that_one(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import agents
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+        db.save_note(server.config.db_path,
+                     make_note(lines=[Line(article="RONDELLE M8", quantity=5000)]), "a", "a.jpg")
+
+        handed = {}
+
+        async def spy(planner, model=None):
+            handed.update(planner)
+            return {"lines": [{"article": "RONDELLE M8", "quantity": 500, "unit": "piece",
+                               "supplier": "ACME", "reference": None, "reason": "asked for"}],
+                    "note": "the one you named."}
+
+        monkeypatch.setattr(agents, "draft_order", spy)
+        answer = client.post("/api/forecast/draft", headers=mine,
+                             json={"only": ["rondelle m8"]}).json()
+
+        # The agent is told these were named, which is not the same as being thin.
+        assert handed["asked_for_by_name"] == ["rondelle m8"]
+        assert [row["article"] for row in handed["articles"]] == ["RONDELLE M8"]
+        assert answer["asked_for"] == ["rondelle m8"]
+        assert answer["read"] == ["RONDELLE M8"]
+
+        missing = client.post("/api/forecast/draft", headers=mine,
+                              json={"only": ["unobtainium"]})
+        assert missing.status_code == 422
+        assert "unobtainium" in missing.json()["detail"]
+
+
+def test_the_plutus_card_asks_for_an_article_too():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    card = page[page.index('id="plutus-card"'):page.index('id="ask-agent"')]
+    for box in ['id="order-site"', 'id="order-work"', 'id="order-article"']:
+        assert box in card

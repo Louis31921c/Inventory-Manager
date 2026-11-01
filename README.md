@@ -261,6 +261,13 @@ and gets a purchase order back: article, quantity rounded to how the trade buys,
 and one clause saying why. Check it, change any quantity, then `save as purchase order` and it
 lands in the Purchase orders tab like any other sheet.
 
+Leave the **article** box empty and Plutus picks what is thin. Name one — or several, comma
+apart — and it reads those instead. Part of a name is enough: `rondelle m8` finds whatever
+the shelf calls it, and an exact name still wins over a part of one. An article asked for by
+name is a different question from "what should we buy?", so Plutus is told which ones you
+typed and orders them unless there is a reason not to, in which case the note says which one
+and why. **site** and **work item** are the header of the order it writes, not a filter.
+
 An empty draft is an answer, not a failure. The agent is told to leave out what is
 comfortable, so a shelf in good order comes back with no lines and a note saying what it left
 out and why.

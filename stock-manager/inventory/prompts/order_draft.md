@@ -14,8 +14,15 @@ What the numbers mean:
   uncounted (no count, so the shelf is a guess).
 - backorders: times this article arrived short.
 
+When asked_for_by_name is not empty, somebody has typed those articles in because they
+want them ordered. That is a different question from "what should we buy?": put a line in
+for each of them unless there is a real reason not to, and if you leave one out say in the
+note which one and why. The articles are still listed with all their numbers below, so the
+quantity is yours to judge.
+
 How to write the order:
-- Put a line in only when buying now is justified. Leave out what is comfortable.
+- Put a line in only when buying now is justified. Leave out what is comfortable. This is
+  the rule for articles the planner put forward, not for ones asked for by name.
 - Round to how the trade actually buys: fasteners and washers by the hundred or the
   box, sheets and profiles by the piece, sealant by the cartridge. Never order a
   fraction of a unit.

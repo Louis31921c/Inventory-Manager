@@ -298,7 +298,7 @@
 
 <section class="panel" id="panel-quotes" role="tabpanel" hidden>
   <div class="card">
-    <h2>new quote (dots)</h2>
+    <h2>new quote</h2>
     <div class="row">
       <label class="field grow"><span>supplier</span><input id="quote-supplier"></label>
       <label class="field grow"><span>site</span><input id="quote-site"></label>
@@ -508,8 +508,8 @@
     <div id="buffer-note"></div>
   </div>
 
-  <div class="card">
-    <h2>Plutus</h2>
+  <div class="card" id="plutus-card">
+    <h2>Plutus orders</h2>
     <div class="row">
       <label class="field grow">
         <span>site</span>
@@ -518,6 +518,13 @@
       <label class="field grow">
         <span>work item</span>
         <input id="order-work">
+      </label>
+    </div>
+    <div class="row">
+      <label class="field grow">
+        <span>article</span>
+        <input id="order-article" autocomplete="off"
+               placeholder="leave empty and Plutus picks what is thin; or name them, comma apart">
       </label>
     </div>
     <div class="row">
@@ -878,10 +885,12 @@ try {
 } catch {
 }
 
-// A card of another screen, named the way its menu names it.
-function openCard(menu, title) {
+// A card of another screen, by its id where it has one, by its heading otherwise. The
+// id, because a heading is the sort of thing that gets reworded.
+function openCard(menu, key) {
   const spec = ALL_MENUS.find((one) => one.menu === menu);
-  const card = spec && menuCards(spec).find((one) => cardName(one) === title);
+  const cards = spec ? menuCards(spec) : [];
+  const card = cards.find((one) => one.id === key) ?? cards.find((one) => cardName(one) === key);
   if (!card) return;
   if (spec.go) spec.go(); else openTab(spec.tab);
   showOnly(spec, card);
@@ -896,7 +905,7 @@ $("tree-new-quote").addEventListener("click", () => {
 
 $("tree-plutus").addEventListener("click", () => {
   treePick = null;
-  openCard("tools-menu", "Plutus");
+  openCard("tools-menu", "plutus-card");
   say("DDMRP · Plutus");
 });
 
@@ -2878,14 +2887,20 @@ $("ask-agent").addEventListener("click", async () => {
   try {
     // The route is /api/forecast/draft. It was being asked for /api/forecast/orderDraft,
     // which is no route at all, so the button answered 404 and nothing was ever drafted.
+    // An empty article field leaves Plutus to pick; naming one asks for that one.
+    const named = $("order-article").value.split(",")
+      .map((name) => name.trim()).filter(Boolean);
     orderDraft = await api("/api/forecast/draft", postJson({
       site: $("order-site").value.trim() || null,
       work_item: $("order-work").value.trim() || null,
+      only: named.length ? named : null,
     }));
+    const read = (orderDraft.read ?? []).join(", ");
     notice($("agent-note"), orderDraft.lines.length ? "ok" : "warn",
       orderDraft.lines.length
-        ? `${orderDraft.lines.length} line(s) drafted. Check them, then save.`
-        : `Nothing worth ordering. ${orderDraft.note}`);
+        ? `${orderDraft.lines.length} line(s) drafted from ${orderDraft.drafted_from} `
+          + `article(s). Check them, then save.`
+        : `Nothing worth ordering${read ? ` in ${read}` : ""}. ${orderDraft.note}`);
     renderDraft();
   } catch (e) {
     notice($("agent-note"), "bad", e.message);
@@ -2918,7 +2933,7 @@ $("save-draft").addEventListener("click", async () => {
         list_date: new Date().toISOString().slice(0, 10),
         site: $("order-site").value.trim() || null,
         work_item: $("order-work").value.trim() || null,
-        drafter: "DOTS",
+        drafter: "PLUTUS",
         lines,
       },
     }));

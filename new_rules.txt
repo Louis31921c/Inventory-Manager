@@ -108,3 +108,8 @@ functionnalities to developp :
                       - create a small window on the landing page for me to approve
                       - no expiry on the approval, but a cancel button
                       - an approved gate let the bot place the order
+
+- DONE: Plutus takes an article as well as a site and a work item. Empty and it picks what
+        is thin; named and it reads those, part of a name being enough. An article you
+        typed is ordered unless there is a reason not to, and then the note says which and
+        why. Site and work item are the header of the order, not a filter
