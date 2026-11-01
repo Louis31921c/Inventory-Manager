@@ -245,13 +245,13 @@ def history(db_path, limit=40):
 # The round the app actually walks, as the Blockchain screen draws it. Two of these are
 # not built: nothing here places an order with a supplier, and there is no wallet.
 STEPS = [
-    (1, "reading what was asked", "a basket is being filled in the chat"),
-    (2, "checking the shelf", "what is already standing there, against what is asked for"),
-    (3, "Terminus reads the names", "is this an article we already know?"),
-    (4, "the decision", "whether it can go through, or has to be put to a person"),
-    (5, "waiting for you", "nothing is bought until a person approves it"),
-    (6, "the wallet", "not built: nothing here holds funds or bills anything"),
-    (7, "placing the order", "not built: an approved order is placed by hand"),
+    (1, "reading input", "a basket is being filled in the chat"),
+    (2, "Iventory check", "what is already standing there, against what is asked for"),
+    (3, "Control", "is this an article we already know?"),
+    (4, "Decision", "whether it can go through, or has to be put to a person"),
+    (5, "Manual check", "nothing is bought until a person approves it"),
+    (6, "Wallet check", "not built: nothing here holds funds or bills anything"),
+    (7, "Placing order", "not built: an approved order is placed by hand"),
 ]
 
 UNBUILT = (6, 7)

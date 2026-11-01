@@ -277,7 +277,7 @@ svg.round .wedge-icon {
 svg.round .wedge-icon.unbuilt, svg.round .wedge-icon.ahead { stroke: var(--ink-soft); }
 svg.round .wedge-number { fill: #fff; font-size: 13px; font-weight: 700; }
 svg.round .wedge-number.unbuilt, svg.round .wedge-number.ahead { fill: var(--ink-soft); }
-svg.round .wedge-label { fill: var(--ink-soft); font-size: 11.5px; }
+svg.round .wedge-label { fill: var(--ink-soft); font-size: 14px; font-weight: 700; }
 svg.round .wedge-label.pending { fill: var(--amber); font-weight: 700; }
 svg.round .wedge-label.fault { fill: var(--red); font-weight: 700; }
 svg.round .wedge-label.unbuilt { font-style: italic; }
