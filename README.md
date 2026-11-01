@@ -390,9 +390,15 @@ asks for, the screen names the article and by how much, since buying more of wha
 there is the easiest mistake to make and the hardest to see. Approve and Cancel are on the
 step itself, so a round can be ended where it is being read.
 
-Above the round, how many baskets are held, waiting and approved; below it, the drafts Plutus
-has written. Nothing in flight says nothing — an empty round is its own answer — but a sealed
-entry changed behind its back still shouts, naming the one where the chain stops holding.
+Above the round, how many baskets are held, waiting and approved. Nothing in flight says
+nothing — an empty round is its own answer — but a sealed entry changed behind its back still
+shouts, naming the one where the chain stops holding.
+
+The name on the bar rolls down to what sits under the round. **Waiting on you** is the held
+baskets, each with why it is held, what Terminus made of it, and an Approve and a Cancel on
+the row; under them, the baskets `/basket` filled that `/purchase` never took — a basket is
+emptied the moment it becomes an order, so whatever is still in one is something nobody
+bought. **What Plutus drafted** is the other.
 
 What an article usually costs is the middle of its recent prices, kept as each order goes
 through. Early on there is no history and the price rules simply do not fire; the first

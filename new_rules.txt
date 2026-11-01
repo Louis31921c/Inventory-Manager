@@ -129,6 +129,10 @@ functionnalities to developp :
           without being pretended. Step 5's "send me a message" is the message the chat
           already gets when a basket is held; say the word for a DM instead ] 
 
-- in blockchain , add a cell with what needs approval and baskets made with the command "/basket" that the bot didn't purchase.
+- DONE: a Waiting on you cell in blockchain: the held baskets with why each is held, what
+        Terminus made of it, and an Approve and a Cancel on the row; under them the baskets
+        /basket filled that /purchase never took (a basket is emptied when it becomes an
+        order, so whatever is still in one is whatever nobody bought)
 
-- put "what plutus drafted" in a second rolling menu within the blockchain icon
+- DONE: the Blockchain name rolls down, the round staying as the screen itself: the menu
+        lists Waiting on you and What Plutus drafted
