@@ -28,7 +28,7 @@ from . import (account, agents, alerts, audit, backorders, backup, baskets, bill
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, llm,
                mail_oauth, mailbox, models_info, pg, prices, quotes, routing, sheets,
-               slack_bot, stock, verify, vocabulary)
+               shortcuts, slack_bot, stock, verify, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
 
@@ -1475,6 +1475,27 @@ def read_audit(limit: int = 100, user: str | None = None):
 
 class ModelChoice(BaseModel):
     id: str
+
+
+@app.get("/api/shortcuts")
+def read_shortcuts():
+    """The five doors on the landing page: Slack, Discord, the mailboxes, the contact sheet."""
+    return {"shortcuts": shortcuts.listing(config.data_dir)}
+
+
+@app.post("/api/shortcuts/{key}")
+def open_shortcut(request: Request, key: str):
+    """Open one of them outside this window. The page sends a name, never a path."""
+    try:
+        opened = shortcuts.open_it(key, config.data_dir)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(422, str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(501, str(e)) from e
+    event(request, "shortcut.open", key, opened["where"])
+    return opened
 
 
 @app.get("/api/models")

@@ -375,6 +375,28 @@ buys, supplier, and one line saying why. Check it, change any quantity, then
 
 Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
 
+## The five doors on the landing page
+
+Down the right of the logo, a fifth of its height each, with an icon and a name:
+
+| Door | Opens |
+|---|---|
+| Slack | `app.slack.com/client` |
+| Discord | `discord.com/channels/@me` |
+| Outlook | `outlook.office.com/mail/` |
+| Proton Mail | `mail.proton.me` |
+| Supplier contacts | the contact sheet, in whatever opens a csv here |
+
+The window is WebKit and not a browser, so none of them is a link: following one would walk
+the app off its own page. The page asks the server by the door's name and the server hands
+the target to the desktop, which opens the browser for the four and the spreadsheet for the
+csv. The five names are fixed in `inventory/shortcuts.py`; the page never sends a url or a
+path of its own, so there is nothing here to point at a file somebody else chose.
+
+The contact sheet is `CONTACTS_CSV` in the settings file, and `supplier-contacts.csv` beside
+the database when that is empty. A door whose file is not there says so rather than opening
+nothing.
+
 ## Where things are stored
 
 | What | Path |
@@ -433,6 +455,7 @@ device` to the Admin. Repeats are muted.
 | `inventory/quotes.py` | quote requests and their units |
 | `inventory/routing.py` | the yard, the stops, and the shortest run |
 | `inventory/vocabulary.py` | shared article names, aliases, merges |
+| `inventory/shortcuts.py` | the five doors on the landing page |
 | `inventory/audit.py`, `alerts.py` | who did what, and what broke |
 
 ## Contributions / Updates

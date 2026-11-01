@@ -3454,3 +3454,67 @@ def test_red_is_only_ever_something_actually_wrong(tmp_path, monkeypatch):
         assert edited["log"]["whole"] is False
         at = str(edited["now"]["step"])
         assert "broken" in edited["faults"][at]
+
+
+# ---- the five doors on the landing page ------------------------------------
+
+def test_the_landing_page_offers_the_five_doors_in_the_order_they_are_drawn(tmp_path,
+                                                                            monkeypatch):
+    from inventory import shortcuts
+
+    monkeypatch.delenv("CONTACTS_CSV", raising=False)
+    doors = shortcuts.listing(tmp_path)
+    assert [door["key"] for door in doors] == ["slack", "discord", "outlook", "proton",
+                                               "contacts"]
+    assert [door["name"] for door in doors] == ["Slack", "Discord", "Outlook", "Proton Mail",
+                                                "Supplier contacts"]
+    # The four outside ones are always there; the sheet is only there when the file is.
+    assert all(door["ready"] for door in doors[:4])
+    assert doors[-1]["ready"] is False
+
+
+def test_the_contact_sheet_is_the_setting_first_and_the_data_folder_after(tmp_path,
+                                                                          monkeypatch):
+    from inventory import shortcuts
+
+    beside = tmp_path / "supplier-contacts.csv"
+    beside.write_text("company,person\n", encoding="utf-8")
+    monkeypatch.delenv("CONTACTS_CSV", raising=False)
+    assert shortcuts.contacts_path(tmp_path) == beside
+
+    named = tmp_path / "elsewhere" / "contacts.csv"
+    named.parent.mkdir()
+    named.write_text("company,person\n", encoding="utf-8")
+    monkeypatch.setenv("CONTACTS_CSV", str(named))
+    assert shortcuts.contacts_path(tmp_path) == named
+    assert shortcuts.listing(tmp_path)[-1]["ready"] is True
+
+
+def test_a_door_hands_its_own_target_to_the_desktop_and_nothing_else(tmp_path, monkeypatch):
+    from inventory import shortcuts
+
+    handed = []
+    monkeypatch.setattr(shortcuts, "_opener", lambda: ["xdg-open"])
+    monkeypatch.setattr(shortcuts.subprocess, "Popen",
+                        lambda command, **kw: handed.append(command))
+    monkeypatch.setattr(shortcuts.os, "name", "posix")
+
+    assert shortcuts.open_it("slack", tmp_path)["name"] == "Slack"
+    assert handed == [["xdg-open", "https://app.slack.com/client"]]
+
+    # Nothing but the five names can be asked for, so a path cannot be smuggled in.
+    with pytest.raises(ValueError):
+        shortcuts.open_it("/etc/passwd", tmp_path)
+    assert len(handed) == 1
+
+
+def test_a_contact_sheet_that_is_not_there_says_so_rather_than_opening_nothing(tmp_path,
+                                                                               monkeypatch):
+    from inventory import shortcuts
+
+    monkeypatch.setenv("CONTACTS_CSV", str(tmp_path / "gone.csv"))
+    monkeypatch.setattr(shortcuts.subprocess, "Popen",
+                        lambda *a, **kw: pytest.fail("nothing should be opened"))
+    with pytest.raises(FileNotFoundError) as refused:
+        shortcuts.open_it("contacts", tmp_path)
+    assert "CONTACTS_CSV" in str(refused.value)

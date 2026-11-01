@@ -211,16 +211,58 @@ section.panel {
   align-items: center;
   display: flex;
   flex: 1 1 auto;
+  gap: 14px;
   justify-content: center;
   min-height: 0;
 }
 .home-logo {
   background: url("/landing.png") center / contain no-repeat;
+  flex: 0 1 620px;
   height: 100%;
   max-height: 420px;
-  max-width: 620px;
+  min-width: 0;
   opacity: .65;
-  width: 100%;
+}
+
+/* The five doors beside the logo: Slack, Discord, the two mailboxes, the contact sheet.
+   They share the logo's height, a fifth of it each, so the column never outgrows it. */
+.home-doors {
+  align-self: center;
+  display: grid;
+  flex: 0 0 150px;
+  gap: 6px;
+  grid-template-rows: repeat(5, 1fr);
+  height: 100%;
+  max-height: 420px;
+}
+.home-doors .door {
+  align-items: center;
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid #8d9196;
+  border-radius: 2px;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--font);
+  font-size: 12px;
+  gap: 8px;
+  min-height: 0;
+  padding: 4px 8px;
+  text-align: left;
+}
+.home-doors .door:hover {
+  background: linear-gradient(180deg, #fff, #cfe0f2);
+  border-color: var(--accent);
+}
+.home-doors .door[disabled] { color: #9a9a9a; cursor: not-allowed; }
+.home-doors .door[disabled] .door-icon { opacity: .45; }
+.door-icon { flex: 0 0 26px; height: 26px; width: 26px; }
+.door-icon svg { display: block; height: 100%; width: 100%; }
+.door-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- group boxes --------------------------------------------------- */

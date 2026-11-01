@@ -139,3 +139,11 @@ functionnalities to developp :
 
 - DONE: the Blockchain name rolls down, the round staying as the screen itself: the menu
         lists Waiting on you and What Plutus drafted
+
+- DONE: five shortcuts on the landing page, down the right of the logo, a fifth of its
+        height each, icon and name: Slack, Discord, Outlook, Proton Mail and the supplier
+        contact sheet. The window is WebKit, so none of them is a link: the page asks the
+        server by name and the server hands the target to the desktop (xdg-open), which
+        opens the browser for the four and LibreOffice for the csv. The names are fixed
+        server side, so the page never sends a url or a path of its own. The sheet's path
+        is CONTACTS_CSV in the settings, and beside the database when that is empty
