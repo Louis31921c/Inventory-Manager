@@ -641,18 +641,30 @@ def read_chain(limit: int = 200):
     rows = gate.chain(config.db_path)[-min(max(limit, 1), 500):]
     held = gate.waiting(config.db_path)
     in_flight = {str(row["channel"]) for row in held if row["channel"]}
+    now = gate.where_we_are(config.db_path)
+    standing = agents.status()
+
+    faults = {}
+    if not whole:
+        # A seal that does not hold is a fault of the whole round, so it lands on the step
+        # the round is standing on, which is where somebody is looking.
+        faults[str(now["step"] or 1)] = f"the sealed log is broken at entry {broken}"
+    if not standing["ready"]:
+        faults["3"] = "Terminus cannot be reached: " + standing["detail"]
     return {
         "log": {"whole": whole, "broken_at": broken, "entries": entries,
                 "last_seal": gate.last_seal(config.db_path)},
         "entries": list(reversed(rows)),
         "doings": gate.doings(config.db_path),
-        "agents": agents.status(),
+        "agents": standing,
         "rules": {"ceiling": gate.CEILING, "dear": gate.DEAR, "drift": gate.DRIFT},
         "words": gate.REASON_WORDS,
         "steps": [{"number": number, "name": name, "detail": detail,
                    "built": number not in gate.UNBUILT}
                   for number, name, detail in gate.STEPS],
-        "now": gate.where_we_are(config.db_path),
+        "now": now,
+        # Red is for something being wrong, so it only ever comes from something that is.
+        "faults": faults,
         "approval": held,
         # A basket is emptied when it becomes an order, so whatever is still in one is
         # whatever nobody has bought — except the ones already held, which are in flight

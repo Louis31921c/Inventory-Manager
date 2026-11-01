@@ -258,9 +258,10 @@ code.seal { color: var(--ink-soft); font-size: 11px; }
    dashed grey for the two steps that are not built. */
 svg.round { margin: 0 auto; max-width: 620px; }
 svg.round .wedge { stroke: var(--paper); stroke-width: 1.5; }
-svg.round .wedge.even { fill: #57b894; }
-svg.round .wedge.odd { fill: #edc14a; }
-svg.round .wedge.here { fill: #d9534f; }
+svg.round .wedge.done { fill: #57b894; }
+svg.round .wedge.pending { fill: #edc14a; }
+svg.round .wedge.fault { fill: #d9534f; }
+svg.round .wedge.ahead { fill: #dfe3e7; }
 svg.round .wedge.unbuilt {
   fill: #f1f2f3;
   stroke: var(--line-soft);
@@ -273,11 +274,12 @@ svg.round .wedge-icon {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-svg.round .wedge-icon.unbuilt { stroke: var(--ink-soft); }
+svg.round .wedge-icon.unbuilt, svg.round .wedge-icon.ahead { stroke: var(--ink-soft); }
 svg.round .wedge-number { fill: #fff; font-size: 13px; font-weight: 700; }
-svg.round .wedge-number.unbuilt { fill: var(--ink-soft); }
+svg.round .wedge-number.unbuilt, svg.round .wedge-number.ahead { fill: var(--ink-soft); }
 svg.round .wedge-label { fill: var(--ink-soft); font-size: 11.5px; }
-svg.round .wedge-label.here { fill: var(--red); font-weight: 700; }
+svg.round .wedge-label.pending { fill: var(--amber); font-weight: 700; }
+svg.round .wedge-label.fault { fill: var(--red); font-weight: 700; }
 svg.round .wedge-label.unbuilt { font-style: italic; }
 
 svg.round .hub-ring { fill: var(--paper); stroke: var(--line-soft); stroke-width: 1.5; }
@@ -288,6 +290,7 @@ svg.round .hub-glyph {
   stroke-width: 1.8;
   stroke-linecap: round;
 }
+svg.round .hub-word.fault { fill: var(--red); }
 svg.round .hub-word {
   fill: var(--ink);
   font-size: 12px;

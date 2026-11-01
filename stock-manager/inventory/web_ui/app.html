@@ -3713,7 +3713,7 @@ function turnedIcon(path, x, y, size, className) {
   });
 }
 
-function roundDiagram(steps, atStep) {
+function roundDiagram(steps, atStep, faults = {}) {
   // A ring of wedges, the way a process circle is drawn on a slide: a thick band cut into
   // one segment a step, a notch pointing at the hub, the name outside it. Colour carries
   // the state — green behind, red where we are, yellow ahead, grey for what is not built.
@@ -3739,17 +3739,19 @@ function roundDiagram(steps, atStep) {
     const [ix2, iy2] = at(inner, to);
     const [ix1, iy1] = at(inner, from);
 
-    // Red is spoken for: it is where we are. The rest take the green and the yellow in
-    // turn, which is what gives a ring of wedges its rhythm, and the unbuilt two stay pale.
-    const state = step.number === atStep ? "here"
+    // Green is behind, yellow is the one being waited on, red is something wrong. What
+    // has not come round yet stays pale, and so do the two that are not built.
+    const wrong = faults[String(step.number)];
+    const state = wrong ? "fault"
       : !step.built ? "unbuilt"
-      : (index % 2 === 0 ? "even" : "odd");
+      : step.number === atStep ? "pending"
+      : (atStep && step.number < atStep) ? "done" : "ahead";
 
     const wedge = tip(svg("path", {
       class: `wedge ${state}`,
       d: `M ${ox1} ${oy1} A ${outer} ${outer} 0 0 1 ${ox2} ${oy2}`
          + ` L ${ix2} ${iy2} A ${inner} ${inner} 0 0 0 ${ix1} ${iy1} Z`,
-    }), `${step.number}. ${step.name}\n${step.detail}`);
+    }), `${step.number}. ${step.name}\n${wrong ?? step.detail}`);
     parts.push(wedge);
 
     // The notch: a tongue of the same colour reaching in towards the hub, which is what
@@ -3784,8 +3786,10 @@ function roundDiagram(steps, atStep) {
   parts.push(svg("circle", { class: "hub-dot", cx, cy: cy - 12, r: 28 }));
   parts.push(turnedIcon(HUB_GLYPH, cx, cy - 12, 28, "hub-glyph"));
   const here = steps.find((one) => one.number === atStep);
-  parts.push(svg("text", { class: "hub-word", x: cx, y: cy + 36, "text-anchor": "middle" },
-                 [here ? `STEP ${here.number}` : "AT REST"]));
+  const broken = Object.keys(faults).length > 0;
+  parts.push(svg("text", { class: `hub-word ${broken ? "fault" : ""}`, x: cx, y: cy + 36,
+                           "text-anchor": "middle" },
+                 [broken ? "SEE BELOW" : here ? `STEP ${here.number}` : "AT REST"]));
 
   return svg("svg", { viewBox: `0 0 ${wide} ${tall}`, class: "round", role: "img" }, parts);
 }
@@ -3826,7 +3830,8 @@ async function loadChain() {
 
   const steps = data.steps ?? [];
   const now = data.now ?? {};
-  $("chain-round").replaceChildren(roundDiagram(steps, now.step ?? 0));
+  const faults = data.faults ?? {};
+  $("chain-round").replaceChildren(roundDiagram(steps, now.step ?? 0, faults));
 
   const step = steps.find((one) => one.number === now.step);
   // Nothing in flight says nothing: an empty round is its own answer.
@@ -3836,15 +3841,15 @@ async function loadChain() {
     : "";
   $("chain-now").className = step ? "legend here" : "legend";
 
-  // A broken seal is the one thing on this screen that still has to shout.
-  if (!log.whole) {
-    notice($("chain-warn"), "bad", `THE CHAIN IS BROKEN at entry ${log.broken_at}: that `
-      + "line, or one before it, was changed after it was written.");
-  }
-
-  // Buying more of what is already standing there is the easy mistake; it is said out loud.
+  // One line under the round, and the worse of the two things it could say. A fault
+  // outranks a full shelf, and both outrank saying nothing.
+  const wrong = Object.entries(faults)
+    .map(([number, why]) => `Step ${number}: ${why}.`).join(" ");
   const full = now.dwelling ?? [];
-  if (full.length) {
+  if (wrong) {
+    notice($("chain-warn"), "bad", wrong);
+  } else if (full.length) {
+    // Buying more of what is already standing there is the easy mistake; it is said out loud.
     notice($("chain-warn"), "warn", "Already on the shelf: "
       + full.map((one) => `${one.article}, ${showNum(one.on_hand)} for `
                           + `${showNum(one.asked)} asked (${one.times}×)`).join(" · "));

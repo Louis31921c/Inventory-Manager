@@ -123,7 +123,10 @@ functionnalities to developp :
         seconds while the screen is open. Step 2 names an article the shelf already holds
         more than twice over, and Approve and Cancel sit on the step itself.
         Numbered the way it is walked: read, check the shelf, Terminus, the decision,
-        waiting for you, the wallet, place the order.
+        waiting for you, the wallet, place the order. Drawn as a ring of wedges, and the
+        colour says one thing each: green is done, yellow is the one pending, red is a
+        fault (the seal not holding, or Terminus with no command line), pale is not
+        reached yet.
         [ 6 (the wallet) and 7 (placing the order) are drawn dashed: nothing here holds
           money or places an order with a supplier, so they are shown as part of the round
           without being pretended. Step 5's "send me a message" is the message the chat

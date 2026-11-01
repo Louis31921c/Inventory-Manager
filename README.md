@@ -371,9 +371,10 @@ database here, not a network and not a coin: one local file, no peers, nothing t
 
 The screen draws the round the gate walks as a ring of wedges, one a step, each with its own
 glyph and its name outside it, redrawn every few seconds while you are looking at it. The
-colour is the state: the wedges take the green and the yellow in turn, the step the round is
-on is red, and the two that are not built are pale and dashed. The hub says which step that
-is.
+colour says one thing each: **green** is a step that is done, **yellow** is the one step
+being waited on, **red** is something wrong. What has not come round yet is pale, and the two
+steps that are not built are pale and dashed. The hub says which step the round is on, or
+sends you to the line underneath when there is a fault.
 
 | | | |
 |---|---|---|
@@ -387,6 +388,11 @@ is.
 
 The two steps that are not built are drawn dashed rather than left out, because they are part
 of the round even where the app does not walk them yet.
+
+Red is only ever something actually wrong, so it has to come from something that is. Two
+things turn a step red: the sealed log no longer holding, and Terminus having no command line
+to run. One line under the round says which step and why, rather than leaving the colour to
+be interpreted.
 
 Step 2 says its piece out loud: if the shelf already holds more than twice what the basket
 asks for, the screen names the article and by how much, since buying more of what is standing

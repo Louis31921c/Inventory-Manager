@@ -3408,3 +3408,48 @@ def test_a_held_basket_is_not_also_counted_as_one_nobody_bought(tmp_path, monkey
         # The held one is in flight and is answered for once, not twice.
         assert [row["channel"] for row in answer["approval"]] == ["C99"]
         assert [row["channel"] for row in answer["baskets"]] == ["C01"]
+
+
+def test_red_is_only_ever_something_actually_wrong(tmp_path, monkeypatch):
+    """Green is behind, yellow is the one pending, red is a fault and nothing else."""
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import agents
+    from inventory import config as config_module
+    from inventory import gate
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+        monkeypatch.setattr(agents, "claude_binary", lambda: "/somewhere/claude")
+
+        request_id = gate.ask(server.config.db_path,
+                              gate.look(server.config.db_path, [a_basket()]), asked_by="ALEX")
+        gate.record_check(server.config.db_path, request_id, "same", "known")
+
+        quiet = client.get("/api/chain").json()
+        assert quiet["faults"] == {}
+
+        # Terminus with no command line to run is a fault, and it belongs to its own step.
+        monkeypatch.setattr(agents, "claude_binary", lambda: None)
+        missing = client.get("/api/chain").json()
+        assert "3" in missing["faults"] and "Terminus" in missing["faults"]["3"]
+
+        # A seal that does not hold is a fault of the round, wherever it is standing.
+        monkeypatch.setattr(agents, "claude_binary", lambda: "/somewhere/claude")
+        db.write(server.config.db_path,
+                 "UPDATE gate_log SET body = ? WHERE entry_id = 1", ('{"tampered": true}',))
+        edited = client.get("/api/chain").json()
+        assert edited["log"]["whole"] is False
+        at = str(edited["now"]["step"])
+        assert "broken" in edited["faults"][at]
