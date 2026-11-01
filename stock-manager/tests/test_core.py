@@ -3499,8 +3499,10 @@ def test_a_door_hands_its_own_target_to_the_desktop_and_nothing_else(tmp_path, m
                         lambda command, **kw: handed.append(command))
     monkeypatch.setattr(shortcuts.os, "name", "posix")
 
+    # The link itself is the workshop's own and gets edited; what is pinned here is that
+    # the door hands over exactly what it holds, and nothing it was passed.
     assert shortcuts.open_it("slack", tmp_path)["name"] == "Slack"
-    assert handed == [["xdg-open", "https://app.slack.com/client"]]
+    assert handed == [["xdg-open", shortcuts.DOORS["slack"]["url"]]]
 
     # Nothing but the five names can be asked for, so a path cannot be smuggled in.
     with pytest.raises(ValueError):

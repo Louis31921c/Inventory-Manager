@@ -225,45 +225,54 @@ section.panel {
 }
 
 /* The five doors beside the logo: Slack, Discord, the two mailboxes, the contact sheet.
-   They share the logo's height, a fifth of it each, so the column never outgrows it. */
+   They share the logo's height, a fifth of it each, so the column never outgrows it.
+   No box is drawn around any of them: the mark itself is the button, as big as its fifth
+   allows, with its name under it. */
 .home-doors {
   align-self: center;
   display: grid;
-  flex: 0 0 150px;
-  gap: 6px;
+  flex: 0 0 170px;
+  gap: 10px;
   grid-template-rows: repeat(5, 1fr);
   height: 100%;
-  max-height: 420px;
+  max-height: 460px;
 }
 .home-doors .door {
   align-items: center;
-  background: linear-gradient(180deg, var(--button-from), var(--button-to));
-  border: 1px solid #8d9196;
-  border-radius: 2px;
+  background: none;
+  border: 0;
   color: var(--ink);
   cursor: pointer;
   display: flex;
+  flex-direction: column;
   font-family: var(--font);
   font-size: 12px;
-  gap: 8px;
+  gap: 4px;
+  justify-content: center;
   min-height: 0;
-  padding: 4px 8px;
-  text-align: left;
+  padding: 0;
 }
-.home-doors .door:hover {
-  background: linear-gradient(180deg, #fff, #cfe0f2);
-  border-color: var(--accent);
+/* The mark takes whatever the row has left once the name is set, and stays square. */
+.door-icon { flex: 1 1 auto; max-width: 100%; min-height: 0; }
+.door-icon svg {
+  display: block;
+  height: 100%;
+  transition: transform .12s;
+  width: auto;
 }
-.home-doors .door[disabled] { color: #9a9a9a; cursor: not-allowed; }
-.home-doors .door[disabled] .door-icon { opacity: .45; }
-.door-icon { flex: 0 0 26px; height: 26px; width: 26px; }
-.door-icon svg { display: block; height: 100%; width: 100%; }
 .door-name {
+  flex: 0 0 auto;
   font-weight: 700;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.home-doors .door:hover .door-icon svg { transform: scale(1.08); }
+.home-doors .door:hover .door-name { color: var(--accent); text-decoration: underline; }
+.home-doors .door[disabled] { color: #9a9a9a; cursor: not-allowed; }
+.home-doors .door[disabled] .door-icon { opacity: .45; }
+.home-doors .door[disabled]:hover .door-icon svg { transform: none; }
 
 /* ---- group boxes --------------------------------------------------- */
 

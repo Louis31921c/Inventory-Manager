@@ -22,10 +22,10 @@ from pathlib import Path
 # Where each door goes. A `url` is handed to the desktop as it is; `file` is read from the
 # settings at the time of asking, since it is a path on this machine and not ours to fix.
 DOORS = {
-    "slack": {"name": "Slack", "url": "https://app.slack.com/client"},
+    "slack": {"name": "Slack", "url": "https://app.slack.com/client/T0CDDRRKFT9/C0CDDRT54LF"},
     "discord": {"name": "Discord", "url": "https://discord.com/channels/@me"},
-    "outlook": {"name": "Outlook", "url": "https://outlook.office.com/mail/"},
-    "proton": {"name": "Proton Mail", "url": "https://mail.proton.me/"},
+    "outlook": {"name": "Outlook", "url": "https://outlook.live.com/mail/?bO=1&login_hint=M%24EjZ4nOM4Nav7wt5ta35ECYkn5ySWpRZlpubkl2YWO6TnJmbm6CXn50ocOPRn0e__QMAIAApUF8A"},
+    "proton": {"name": "Proton Mail", "url": "https://mail.proton.me/u/11/inbox/pq3s00YFcvy1JzRBo1Cp_3pkPIFDXwdCToNXf4kJpmriI70M5txO8HiFzTtEYFWSx7d4gzOcGefMhtO8l9mqCA==#category=primary"},
     "contacts": {"name": "Supplier contacts", "file": "CONTACTS_CSV",
                  "default": "supplier-contacts.csv"},
 }
