@@ -20,7 +20,10 @@ dependencies = [
 [project.optional-dependencies]
 gemini = ["google-genai>=2.24"]
 discord = ["discord.py>=2.3"]
-slack = ["slack-bolt>=1.18"]
+# Brotli is pinned up because some distributions ship a 1.1.0 whose Decompressor.process
+# takes only the data, while aiohttp calls it with a length as well: any brotli answer
+# from Slack then dies in the socket rather than in anything you can see.
+slack = ["slack-bolt>=1.18", "Brotli>=1.2"]
 outlook = ["msal>=1.28"]
 dev = ["pytest", "pytest-asyncio", "pillow", "httpx"]
 
@@ -29,6 +32,7 @@ stock-manager = "inventory.desktop:main"
 stock = "inventory.cli:main"
 stock-tui = "inventory.cli:main"
 stock-bot = "inventory.discord_bot:main"
+stock-slack = "inventory.slack_bot:main"
 
 [project.urls]
 Source = "https://github.com/Louis31921c/Inventory-Manager"

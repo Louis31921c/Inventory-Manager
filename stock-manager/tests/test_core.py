@@ -3155,10 +3155,17 @@ def test_a_slack_test_that_works_names_the_bot_and_never_the_token(monkeypatch):
 
     monkeypatch.setattr(slack_sdk.WebClient, "auth_test",
                         lambda self: {"user": "plutus", "team": "the workshop"})
-    monkeypatch.setattr(slack_sdk.WebClient, "apps_connections_open",
-                        lambda self, **kw: {"url": "wss://nowhere"})
+    opened = {}
+
+    def connections_open(self, app_token=None, **kw):
+        # Slack wants the app token as an argument here, not as the client's own token.
+        opened["app_token"] = app_token
+        return {"url": "wss://nowhere"}
+
+    monkeypatch.setattr(slack_sdk.WebClient, "apps_connections_open", connections_open)
 
     ok, said = slack_bot.check()
+    assert opened["app_token"] == "xapp-secret"
     assert ok is True
     assert "plutus in the workshop" in said and "C01" in said
     assert "xoxb-secret" not in said and "xapp-secret" not in said

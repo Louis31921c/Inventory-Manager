@@ -124,8 +124,9 @@ def check():
     if not kept["app_token"]:
         return False, "The app token (xapp-) is missing, so the socket cannot open."
     try:
-        # This hands back a socket address, which proves the token without holding it open.
-        WebClient(token=kept["app_token"]).apps_connections_open()
+        # The app token goes as an argument, not as the client's own: this call is the one
+        # place Slack asks for it that way.
+        WebClient().apps_connections_open(app_token=kept["app_token"])
         said.append("the socket opens")
     except SlackApiError as e:
         return False, f"The app token was refused: {e.response.get('error', e)}"

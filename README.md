@@ -327,6 +327,12 @@ after it reads the line straight.
 pip install 'stock-manager[discord,slack]'
 ```
 
+If the socket dies with a `ContentEncodingError` the moment it connects, the machine's
+`brotli` is older than the `aiohttp` using it: some distributions ship a 1.1.0 whose
+`Decompressor.process` takes only the data, while aiohttp calls it with a length as well.
+`pip install --upgrade 'Brotli>=1.2'` into the same environment settles it, and the slack
+extra asks for that version for exactly this reason.
+
 ## The purchase gate
 
 A basket is free: anyone in the chat can fill one, and `/basket` now takes the price off the
