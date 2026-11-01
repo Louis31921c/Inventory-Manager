@@ -369,8 +369,11 @@ which entry. Nothing is ever deleted — a cancel is an entry of its own.
 **Blockchain**, on the menu bar, is where that log is watched. It is a hash chain kept in the
 database here, not a network and not a coin: one local file, no peers, nothing to mine.
 
-The screen draws the round the gate walks, seven steps on a circle, with the live one in red
-and the drawing redrawn every few seconds while you are looking at it:
+The screen draws the round the gate walks as a ring of wedges, one a step, each with its own
+glyph and its name outside it, redrawn every few seconds while you are looking at it. The
+colour is the state: the wedges take the green and the yellow in turn, the step the round is
+on is red, and the two that are not built are pale and dashed. The hub says which step that
+is.
 
 | | | |
 |---|---|---|

@@ -253,22 +253,47 @@ code.seal { color: var(--ink-soft); font-size: 11px; }
 
 /* ---- the round the gate walks -------------------------------------- */
 
-svg.round { margin: 0 auto; max-width: 600px; }
-svg.round .round-step {
-  fill: var(--paper);
-  stroke: var(--line);
-  stroke-width: 2;
+/* A ring of wedges, the way a process circle is drawn on a slide. Colour is the state:
+   green for what is behind, red for where we are, yellow for what is ahead, and a pale
+   dashed grey for the two steps that are not built. */
+svg.round { margin: 0 auto; max-width: 620px; }
+svg.round .wedge { stroke: var(--paper); stroke-width: 1.5; }
+svg.round .wedge.even { fill: #57b894; }
+svg.round .wedge.odd { fill: #edc14a; }
+svg.round .wedge.here { fill: #d9534f; }
+svg.round .wedge.unbuilt {
+  fill: #f1f2f3;
+  stroke: var(--line-soft);
+  stroke-dasharray: 5 4;
 }
-/* Not built yet: drawn, because it is part of the round, but not pretended. */
-svg.round .round-step.unbuilt { stroke-dasharray: 4 3; stroke: var(--line-soft); }
-svg.round .round-step.here { fill: var(--red); stroke: var(--red); }
-svg.round .round-number { fill: var(--ink); font-size: 14px; font-weight: 700; }
-svg.round .round-number.here { fill: #fff; }
-svg.round .round-label { fill: var(--ink-soft); font-size: 11px; }
-svg.round .round-label.unbuilt { font-style: italic; }
-svg.round .round-label.here { fill: var(--red); font-weight: 700; }
-svg.round .round-arrow { stroke: var(--line); stroke-width: 1.5; }
-svg.round .round-arrow-tip { fill: var(--line); }
+svg.round .wedge-icon {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+svg.round .wedge-icon.unbuilt { stroke: var(--ink-soft); }
+svg.round .wedge-number { fill: #fff; font-size: 13px; font-weight: 700; }
+svg.round .wedge-number.unbuilt { fill: var(--ink-soft); }
+svg.round .wedge-label { fill: var(--ink-soft); font-size: 11.5px; }
+svg.round .wedge-label.here { fill: var(--red); font-weight: 700; }
+svg.round .wedge-label.unbuilt { font-style: italic; }
+
+svg.round .hub-ring { fill: var(--paper); stroke: var(--line-soft); stroke-width: 1.5; }
+svg.round .hub-dot { fill: #3b4147; }
+svg.round .hub-glyph {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+svg.round .hub-word {
+  fill: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
 .legend.here { color: var(--red); font-weight: 700; }
 /* The code Microsoft gives out loud, for typing into a browser on another screen. */
 .device-code {

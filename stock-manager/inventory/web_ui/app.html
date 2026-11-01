@@ -3689,73 +3689,105 @@ const CHAIN_WORDS = {
   ordered: "the order was placed",
 };
 
+// A glyph a step, drawn in a 24 box so they can all be placed the same way.
+const STEP_ICONS = {
+  1: "M3 5h18v11H8l-5 4z M7 9h10 M7 12h7",
+  2: "M3 7l9-4 9 4v10l-9 4-9-4z M3 7l9 4 9-4 M12 11v10",
+  3: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M16 16l5 5",
+  4: "M12 3v18 M4 8h16 M4 8l-2 6h4z M20 8l-2 6h4z",
+  5: "M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M4 21c0-4 4-7 8-7s8 3 8 7",
+  6: "M3 7a2 2 0 0 1 2-2h12v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M17 10h4v5h-4z",
+  7: "M2 6h3l3 10h10 M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M18 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"
+     + " M8 8h13l-2 6H9",
+};
+
+// The chain in the middle, which is the one thing the round is about.
+const HUB_GLYPH = "M9 13a4 4 0 0 1 0-6l2-2a4 4 0 0 1 6 6l-1 1 M15 11a4 4 0 0 1 0 6l-2 2a4 4"
+  + " 0 0 1-6-6l1-1";
+
+function turnedIcon(path, x, y, size, className) {
+  const scale = size / 24;
+  return svg("path", {
+    class: className, d: path,
+    transform: `translate(${x - size / 2} ${y - size / 2}) scale(${scale})`,
+  });
+}
+
 function roundDiagram(steps, atStep) {
-  // Seven steps on a circle, each one pointing at the next, the live one in red. The
-  // numbers run clockwise from the top, which is where a round is read from.
-  // Wider than it is tall: the labels sit outside the ring and need the room, or the
-  // ones at three and nine o'clock are cut off by the edge of the box.
-  const wide = 640;
-  const tall = 460;
-  const middleX = wide / 2;
-  const middleY = tall / 2;
-  const ring = 135;
-  const node = 26;
+  // A ring of wedges, the way a process circle is drawn on a slide: a thick band cut into
+  // one segment a step, a notch pointing at the hub, the name outside it. Colour carries
+  // the state — green behind, red where we are, yellow ahead, grey for what is not built.
+  const wide = 760;
+  const tall = 620;
+  const cx = wide / 2;
+  const cy = tall / 2;
+  const inner = 118;
+  const outer = 205;
+  const gap = 0.045;          // radians of daylight between two wedges
   const parts = [];
 
-  const place = (index) => {
-    const turn = (index / steps.length) * Math.PI * 2 - Math.PI / 2;
-    return [middleX + Math.cos(turn) * ring, middleY + Math.sin(turn) * ring];
-  };
-
-  // The arrows first, so no line is drawn over a step.
-  steps.forEach((step, index) => {
-    const [fromX, fromY] = place(index);
-    const [toX, toY] = place((index + 1) % steps.length);
-    const span = Math.hypot(toX - fromX, toY - fromY);
-    const clear = (node + 7) / span;
-    parts.push(svg("line", {
-      class: "round-arrow",
-      x1: fromX + (toX - fromX) * clear, y1: fromY + (toY - fromY) * clear,
-      x2: toX - (toX - fromX) * clear, y2: toY - (toY - fromY) * clear,
-      "marker-end": "url(#round-tip)",
-    }));
-  });
+  const at = (radius, angle) => [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)];
+  const slice = (Math.PI * 2) / steps.length;
 
   steps.forEach((step, index) => {
-    const [x, y] = place(index);
-    const here = step.number === atStep;
-    const classes = ["round-step", here ? "here" : "", step.built ? "" : "unbuilt"]
-      .filter(Boolean).join(" ");
-    const dot = tip(svg("circle", { class: classes, cx: x, cy: y, r: node }),
-                    `${step.number}. ${step.name}\n${step.detail}`);
-    parts.push(dot);
-    parts.push(svg("text", { class: `round-number ${here ? "here" : ""}`,
-                             x, y: y + 5, "text-anchor": "middle" }, [String(step.number)]));
+    const from = -Math.PI / 2 + index * slice + gap / 2;
+    const to = from + slice - gap;
+    const middle = (from + to) / 2;
 
-    // The label sits further out than the step, on the side the step is on.
-    const away = 1 + (node + 14) / ring;
-    const labelX = middleX + (x - middleX) * away;
-    const labelY = middleY + (y - middleY) * away;
-    const anchor = Math.abs(labelX - middleX) < 30 ? "middle"
-      : (labelX > middleX ? "start" : "end");
-    const lines = wrapLabel(step.name);
-    lines.forEach((text, line) => {
-      // Stacked away from the middle, so a two-line label never sits on its own step.
-      const first = labelY < middleY ? -(lines.length - 1) * 12 - 4 : 12;
+    const [ox1, oy1] = at(outer, from);
+    const [ox2, oy2] = at(outer, to);
+    const [ix2, iy2] = at(inner, to);
+    const [ix1, iy1] = at(inner, from);
+
+    // Red is spoken for: it is where we are. The rest take the green and the yellow in
+    // turn, which is what gives a ring of wedges its rhythm, and the unbuilt two stay pale.
+    const state = step.number === atStep ? "here"
+      : !step.built ? "unbuilt"
+      : (index % 2 === 0 ? "even" : "odd");
+
+    const wedge = tip(svg("path", {
+      class: `wedge ${state}`,
+      d: `M ${ox1} ${oy1} A ${outer} ${outer} 0 0 1 ${ox2} ${oy2}`
+         + ` L ${ix2} ${iy2} A ${inner} ${inner} 0 0 0 ${ix1} ${iy1} Z`,
+    }), `${step.number}. ${step.name}\n${step.detail}`);
+    parts.push(wedge);
+
+    // The notch: a tongue of the same colour reaching in towards the hub, which is what
+    // makes a ring of wedges read as a round rather than a pie.
+    const [nx, ny] = at(inner - 20, middle);
+    const [ax, ay] = at(inner, middle - slice * 0.16);
+    const [bx, by] = at(inner, middle + slice * 0.16);
+    parts.push(svg("path", { class: `wedge ${state}`,
+                             d: `M ${ax} ${ay} L ${nx} ${ny} L ${bx} ${by} Z` }));
+
+    const [gx, gy] = at((inner + outer) / 2, middle);
+    parts.push(turnedIcon(STEP_ICONS[step.number] ?? STEP_ICONS[1], gx, gy - 6, 30,
+                          `wedge-icon ${state}`));
+    parts.push(svg("text", { class: `wedge-number ${state}`, x: gx, y: gy + 30,
+                             "text-anchor": "middle" }, [String(step.number)]));
+
+    // The name outside the band, turned to the side of the circle it is on.
+    const [lx, ly] = at(outer + 16, middle);
+    const side = Math.cos(middle);
+    const anchor = Math.abs(side) < 0.25 ? "middle" : (side > 0 ? "start" : "end");
+    const lines = wrapLabel(step.name, 16);
+    lines.forEach((line, row) => {
       parts.push(svg("text", {
-        class: `round-label ${here ? "here" : ""} ${step.built ? "" : "unbuilt"}`,
-        x: labelX, y: labelY + first + line * 12, "text-anchor": anchor,
-      }, [text]));
+        class: `wedge-label ${state}`, x: lx,
+        y: ly + (row - (lines.length - 1) / 2) * 13 + 4, "text-anchor": anchor,
+      }, [line]));
     });
   });
 
-  const tipMark = svg("marker", {
-    id: "round-tip", viewBox: "0 0 10 10", refX: 9, refY: 5,
-    markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse",
-  }, [svg("path", { d: "M 0 0 L 10 5 L 0 10 z", class: "round-arrow-tip" })]);
+  // The hub, white and plain, so the colour around it is the thing that is read.
+  parts.push(svg("circle", { class: "hub-ring", cx, cy, r: inner - 26 }));
+  parts.push(svg("circle", { class: "hub-dot", cx, cy: cy - 12, r: 28 }));
+  parts.push(turnedIcon(HUB_GLYPH, cx, cy - 12, 28, "hub-glyph"));
+  const here = steps.find((one) => one.number === atStep);
+  parts.push(svg("text", { class: "hub-word", x: cx, y: cy + 36, "text-anchor": "middle" },
+                 [here ? `STEP ${here.number}` : "AT REST"]));
 
-  return svg("svg", { viewBox: `0 0 ${wide} ${tall}`, class: "round", role: "img" },
-             [svg("defs", {}, [tipMark]), ...parts]);
+  return svg("svg", { viewBox: `0 0 ${wide} ${tall}`, class: "round", role: "img" }, parts);
 }
 
 function wrapLabel(text, most = 18) {
