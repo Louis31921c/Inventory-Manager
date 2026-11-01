@@ -266,7 +266,7 @@ section.panel {
   padding: 0;
 }
 /* The mark takes whatever the row has left once the name is set, less ten, and stays
-   square, at 85% of it. It sits back at half strength until the pointer is on it. */
+   square, at 64% of it. It sits back at half strength until the pointer is on it. */
 .door-icon {
   flex: 1 1 auto;
   max-width: 100%;
@@ -276,7 +276,7 @@ section.panel {
 }
 .door-icon svg {
   display: block;
-  height: calc((100% - 10px) * .85);
+  height: calc((100% - 10px) * .64);
   transition: transform .12s;
   width: auto;
 }
