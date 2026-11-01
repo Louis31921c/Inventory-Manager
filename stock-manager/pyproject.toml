@@ -25,6 +25,8 @@ discord = ["discord.py>=2.3"]
 # from Slack then dies in the socket rather than in anything you can see.
 slack = ["slack-bolt>=1.18", "Brotli>=1.2"]
 outlook = ["msal>=1.28"]
+# The sample documents: PDFs of the year's paperwork and the gate's proofs.
+documents = ["reportlab>=4.0"]
 dev = ["pytest", "pytest-asyncio", "pillow", "httpx"]
 
 [project.scripts]

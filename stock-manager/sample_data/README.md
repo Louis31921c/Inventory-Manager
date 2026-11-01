@@ -50,14 +50,43 @@ left on the shelf is of the same order as a buffer rather than a year of stock: 
 screen comes out with articles in every zone, not all of them over the top of green.
 
 The year ends with the gate in the middle of its work, so the Blockchain screen has
-something on it: eight channels with a basket, three of them held and waiting on you, one
-approved and ordered, one turned down, and three nobody has run `/purchase` on at all. The
-reasons are spread — a first article, a supplier it has not come from, a line at three times
-the usual price, a line with no price, a basket over the ceiling — so no single rule looks
-like the only one. Six drafts sit under Plutus.
+something on it: fourteen channels with a basket, three of them held and waiting on you, six
+approved and ordered, two turned down, one approved and still to place, and the rest nobody
+has run `/purchase` on at all. The reasons are spread — a first article, a supplier it has
+not come from, a line at three times the usual price, a line with no price, a basket over the
+ceiling — so no single rule looks like the only one. Six drafts sit under Plutus, and the
+round stands on step 5 with four steps behind it in green.
 
 All of it goes in through the app's own gate, so the log seals the way it would in earnest:
 `verify_chain` holds on a freshly built demo, and the screen says so.
+
+## Running it
+
+```bash
+sample_data/run-demo.sh
+```
+
+That sets `DATA_DIR` and nothing else: the real database in `~/.local/share/stock-manager`
+is not opened, not read and not written to. The demo keeps its own config folder too, so its
+password and settings are not the real ones.
+
+## The paperwork
+
+`--db` also writes the documents the year would have left behind, into
+`sample_data/demo/documents/`:
+
+| Folder | What is in it |
+|---|---|
+| `delivery-notes/` | a PDF a note: supplier, site, what arrived, what is on backorder |
+| `bills/` | a PDF a bill, priced off the month's notes, paid or to pay or disputed |
+| `purchase-orders/` | a PDF an order: site, work item, lines, incoterm, ship-by |
+| `proofs/` | a PDF for every basket the gate decided: what was asked, why it was held, what Terminus made of it, who approved it, and the sealed entries with their hashes |
+| `the-year.xlsx` | a sheet a table, for whoever would rather have a spreadsheet |
+
+The proofs are the ones worth looking at. A sealed log is meant to be checkable by somebody
+who was not there, which is hard from inside the app that keeps it — so each proof carries
+the entries, each one's seal and the seal it was sealed against, and the rule for working
+them out again. `--no-documents` skips the lot, which is most of the build time.
 
 ## The files on their own
 

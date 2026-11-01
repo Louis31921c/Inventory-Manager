@@ -256,6 +256,12 @@ CHANNELS = [
     ("C0ARTIGUES", "ARTIGUES", "COUVERTINES", "bati-formes.fr", "SOFIANE"),
     ("C0MARNE", "SQUARE DE LA MARNE", "GC BALCONS BAT C", "decoupacier.fr", "LUC"),
     ("C0BENAUGE", "LA BENAUGE", "GC TYPE 02", "lr-etanco.fr", "ALEX"),
+    ("C0CHARTRONS", "ECRIN DES CHARTRONS", "HABILLAGE JARDINIERE", "vaco.fr", "MARIE"),
+    ("C0HUMANITIES", "HUMANITIES", "GRILLE RESEAUX", "metaleco.fr", "LUC"),
+    ("C0VIAVIGNA", "VIA VIGNA", "GC", "prolians.fr", "SOFIANE"),
+    ("C0TASSIGNY", "TASSIGNY", "PM", "wurth.fr", "ALEX"),
+    ("C01003", "1003", "ATELIER", "lyreco.fr", "MARIE"),
+    ("C0NOUAUX", "MARC NOUAUX", "PM ET GC", "foussier.fr", "LUC"),
 ]
 
 # Something the shelf has never seen, so a basket asking for it is held on its first line.
@@ -353,16 +359,25 @@ def fill_gate(database, rng):
                            reading["lines"]])
         made.append((request_id, channel))
 
-    # One approved and placed, one approved and still to place, one turned down. The rest
-    # stay on the screen as what is waiting.
-    if len(made) >= 3:
-        gone, placing, refused = made[0], made[1], made[2]
-        gate.approve(database, gone[0], "ADMIN")
-        gate.mark_ordered(database, gone[0], "ADMIN", reference="FOUSSIER 77812")
-        baskets.clear(database, gone[1])
-        gate.approve(database, placing[0], "ADMIN")
-        gate.cancel(database, refused[0], "ADMIN", "the site has enough of it already")
-        baskets.clear(database, refused[1])
+    # A year of rounds already walked, and three still standing. Most were approved and
+    # placed, a few turned down: a screen where nothing has ever finished teaches nothing
+    # about what finishing looks like.
+    refusals = ["the site has enough of it already", "the price is not the one we agreed",
+                "ordered on last week's sheet, this is a double",
+                "wrong size: the drawing says M10"]
+    references = ["FOUSSIER 77812", "METALECO 4471", "WURTH 90233", "VACO 1180",
+                  "PROLIANS 55310", "LR ETANCO 7742"]
+    for index, (request_id, channel) in enumerate(made[:-3] if len(made) > 3 else []):
+        if index % 4 == 3:
+            gate.cancel(database, request_id, "ADMIN", refusals[index % len(refusals)])
+        else:
+            gate.approve(database, request_id, "ADMIN")
+            # One of the approved ones is left unplaced, so the round has somewhere to
+            # stand at the step nothing here can walk.
+            if index % 5 != 4:
+                gate.mark_ordered(database, request_id, "ADMIN",
+                                  reference=references[index % len(references)])
+        baskets.clear(database, channel)
 
     # What Plutus has drafted. The audit is where a draft is written down: it is not a
     # gate, and it never touches the chain.
@@ -463,6 +478,8 @@ def main():
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--days", type=int, default=DAYS,
                         help="how far back to start (default: a year)")
+    parser.add_argument("--no-documents", action="store_true",
+                        help="skip the PDFs and the workbook, which take the longest")
     chosen = parser.parse_args()
 
     rng = random.Random(chosen.seed)
@@ -480,6 +497,17 @@ def main():
             where = HERE / where
         database = fill_database(HERE, year, where)
         print(f"\ndatabase {database}")
+        if not chosen.no_documents:
+            try:
+                import make_documents
+
+                made = make_documents.build(database)
+                print(f"documents {made['folder']}"
+                      f"  {made['notes']} note(s), {made['bills']} bill(s), "
+                      f"{made['orders']} order(s), {made['proofs']} gate proof(s), "
+                      f"the-year.xlsx")
+            except ImportError:
+                print("documents skipped: pip install 'stock-manager[documents]'")
         print(f'DATA_DIR="{where}" "$HOME/Desktop/Stock Manager/venv/bin/stock-manager"')
 
 
