@@ -238,10 +238,11 @@ section.panel {
   gap: 10px;
   grid-template-rows: repeat(5, 1fr);
   justify-items: end;
-  /* Out of the flow and out through the panel's own padding, so the marks sit on the
-     border itself rather than near the middle of a wide screen. */
+  /* Out of the flow, so the marks keep to the right edge rather than drifting towards
+     the middle of a wide screen. They stand a tenth of the column's own width off the
+     border: 18px of the 180px, less the 10px of padding the panel already has. */
   position: absolute;
-  right: -10px;
+  right: 8px;
   top: 0;
   width: 180px;
 }
@@ -264,7 +265,7 @@ section.panel {
   padding: 0;
 }
 /* The mark takes whatever the row has left once the name is set, less ten, and stays
-   square. It sits back at half strength until the pointer is on it. */
+   square, at 85% of it. It sits back at half strength until the pointer is on it. */
 .door-icon {
   flex: 1 1 auto;
   max-width: 100%;
@@ -274,7 +275,7 @@ section.panel {
 }
 .door-icon svg {
   display: block;
-  height: calc(100% - 10px);
+  height: calc((100% - 10px) * .85);
   transition: transform .12s;
   width: auto;
 }
