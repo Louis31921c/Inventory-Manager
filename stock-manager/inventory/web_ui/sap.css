@@ -234,10 +234,13 @@ section.panel {
    No box is drawn around any of them: the mark itself is the button, as big as its fifth
    allows, with its name under it. */
 .home-doors {
+  /* The five sit together in the middle of the screen rather than spread down it: the
+     rows take only what they need, and the group is centred in the height. */
+  align-content: center;
   bottom: 0;
   display: grid;
-  gap: 10px;
-  grid-template-rows: repeat(5, 1fr);
+  gap: 12px;
+  grid-template-rows: repeat(5, auto);
   justify-items: end;
   /* Out of the flow, so the marks keep to the right edge rather than drifting towards
      the middle of a wide screen. They stand three tenths of the column's own width off
@@ -265,10 +268,10 @@ section.panel {
   min-height: 0;
   padding: 0;
 }
-/* The mark takes whatever the row has left once the name is set, less ten, and stays
-   square, at 64% of it. It sits back at half strength until the pointer is on it. */
+/* The mark is 55 square, the size it had worked out to when the rows still shared the
+   whole height. It sits back at half strength until the pointer is on it. */
 .door-icon {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   max-width: 100%;
   min-height: 0;
   opacity: .5;
@@ -276,7 +279,7 @@ section.panel {
 }
 .door-icon svg {
   display: block;
-  height: calc((100% - 10px) * .64);
+  height: 55px;
   transition: transform .12s;
   width: auto;
 }
