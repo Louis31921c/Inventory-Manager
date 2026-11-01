@@ -366,11 +366,33 @@ Every turn of the gate is written to a sealed log: each entry carries the hash o
 before it, so a line edited afterwards breaks the chain from there on and the card says at
 which entry. Nothing is ever deleted — a cancel is an entry of its own.
 
-**Blockchain**, on the menu bar, is where that log is read. It is a hash chain kept in the
-database here, not a network and not a coin: one local file, no peers, nothing to mine. The
-screen holds three things — what the two agents are and what each has done, the chain itself
-with the head of every seal, and the drafts Plutus has written. If an entry is changed behind
-its back, the screen says at which one the chain stops holding.
+**Blockchain**, on the menu bar, is where that log is watched. It is a hash chain kept in the
+database here, not a network and not a coin: one local file, no peers, nothing to mine.
+
+The screen draws the round the gate walks, seven steps on a circle, with the live one in red
+and the drawing redrawn every few seconds while you are looking at it:
+
+| | | |
+|---|---|---|
+| 1 | reading what was asked | a basket is being filled in the chat |
+| 2 | checking the shelf | what is already standing there, against what is asked for |
+| 3 | placing the order | *not built: an approved order is placed by hand* |
+| 4 | Terminus reads the names | is this an article we already know? |
+| 5 | the decision | whether it can go through, or has to be put to a person |
+| 6 | the wallet | *not built: nothing here holds funds or bills anything* |
+| 7 | waiting for you | nothing is bought until a person approves it |
+
+The two steps that are not built are drawn dashed rather than left out, because they are part
+of the round even where the app does not walk them yet.
+
+Step 2 says its piece out loud: if the shelf already holds more than twice what the basket
+asks for, the screen names the article and by how much, since buying more of what is standing
+there is the easiest mistake to make and the hardest to see. Approve and Cancel are on the
+step itself, so a round can be ended where it is being read.
+
+Above the round, what the two agents are and what each has done; below it, the drafts Plutus
+has written. If a sealed entry is changed behind its back, the line under the round says at
+which one the chain stops holding.
 
 What an article usually costs is the middle of its recent prices, kept as each order goes
 through. Early on there is no history and the price rules simply do not fire; the first

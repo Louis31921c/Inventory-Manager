@@ -242,6 +242,74 @@ def history(db_path, limit=40):
     return [_row(row) for row in rows]
 
 
+# The round the app actually walks, as the Blockchain screen draws it. Two of these are
+# not built: nothing here places an order with a supplier, and there is no wallet.
+STEPS = [
+    (1, "reading what was asked", "a basket is being filled in the chat"),
+    (2, "checking the shelf", "what is already standing there, against what is asked for"),
+    (3, "placing the order", "not built: an approved order is placed by hand"),
+    (4, "Terminus reads the names", "is this an article we already know?"),
+    (5, "the decision", "whether it can go through, or has to be put to a person"),
+    (6, "the wallet", "not built: nothing here holds funds or bills anything"),
+    (7, "waiting for you", "nothing is bought until a person approves it"),
+]
+
+UNBUILT = (3, 6)
+
+# How much of an article counts as plenty already on the shelf.
+DWELLING_WEEKS = 8
+
+
+def dwelling(db_path, lines):
+    """Articles a basket asks for that the shelf is already full of.
+
+    Buying more of what is standing there is the cheapest mistake to make and the easiest
+    to miss, so it is said out loud rather than left in the numbers.
+    """
+    from . import stock
+
+    on_hand = stock.on_hand_map(db_path)
+    out = []
+    for line in lines:
+        article = normalize_name(line.get("article"))
+        have = float(on_hand.get(article) or 0)
+        asked = float(line.get("quantity") or 0)
+        if article and asked > 0 and have >= asked * 2:
+            out.append({"article": article, "on_hand": have, "asked": asked,
+                        "times": round(have / asked, 1)})
+    return out
+
+
+def where_we_are(db_path):
+    """Which step of the round is live, for the one request that is in flight."""
+    open_now = [row for row in waiting(db_path)]
+    approved = db.read(db_path, f"""
+            SELECT request_id FROM gate_requests WHERE state = '{APPROVED}'
+            ORDER BY request_id DESC LIMIT 1
+            """)
+    baskets = db.read(db_path, "SELECT count(*) FROM baskets")[0][0]
+
+    if open_now:
+        held = open_now[-1]
+        step = 4 if held["agent_verdict"] is None else 7
+        return {"step": step, "request_id": held["request_id"], "state": held["state"],
+                "reasons": held["reasons"], "verdict": held["agent_verdict"],
+                "said": held["agent_said"], "total": held["total"],
+                "dwelling": dwelling(db_path, held["lines"]),
+                "why": ("Terminus is reading the names." if step == 4
+                        else "It is yours to approve or to cancel.")}
+    if approved:
+        return {"step": 3, "request_id": approved[0][0], "state": APPROVED,
+                "reasons": [], "verdict": None, "said": None, "total": None, "dwelling": [],
+                "why": "Approved. Nothing here places it, so it is placed by hand."}
+    if baskets:
+        return {"step": 1, "request_id": None, "state": None, "reasons": [], "verdict": None,
+                "said": None, "total": None, "dwelling": [],
+                "why": f"{baskets} line(s) in a basket, not asked for yet."}
+    return {"step": 0, "request_id": None, "state": None, "reasons": [], "verdict": None,
+            "said": None, "total": None, "dwelling": [], "why": "Nothing is in flight."}
+
+
 def doings(db_path, limit=40):
     """What the two of them have done, for the screen that watches the chain.
 

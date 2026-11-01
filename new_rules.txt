@@ -117,3 +117,12 @@ functionnalities to developp :
         is thin; named and it reads those, part of a name being enough. An article you
         typed is ordered unless there is a reason not to, and then the note says which and
         why. Site and work item are the header of the order, not a filter
+
+- DONE: the blockchain icon shows the round, not the log. The sealed log table is gone;
+        the seven steps are drawn on a circle, the live one in red, redrawn every few
+        seconds while the screen is open. Step 2 names an article the shelf already holds
+        more than twice over, and Approve and Cancel sit on the step itself.
+        [ steps 3 (place the order) and 6 (the wallet) are drawn dashed: nothing here
+          places an order with a supplier or holds any money, so they are shown as part of
+          the round without being pretended. Step 7's "send me a message" is the message
+          the chat already gets when a basket is held; say the word for a DM instead ] 

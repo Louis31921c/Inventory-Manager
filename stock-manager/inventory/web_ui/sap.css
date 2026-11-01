@@ -258,6 +258,26 @@ p { margin: 0; }
 p.bad { color: var(--red); font-weight: 700; }
 /* A seal is only ever shown by its head: enough to tell two apart, no more. */
 code.seal { color: var(--ink-soft); font-size: 11px; }
+
+/* ---- the round the gate walks -------------------------------------- */
+
+svg.round { margin: 0 auto; max-width: 600px; }
+svg.round .round-step {
+  fill: var(--paper);
+  stroke: var(--line);
+  stroke-width: 2;
+}
+/* Not built yet: drawn, because it is part of the round, but not pretended. */
+svg.round .round-step.unbuilt { stroke-dasharray: 4 3; stroke: var(--line-soft); }
+svg.round .round-step.here { fill: var(--red); stroke: var(--red); }
+svg.round .round-number { fill: var(--ink); font-size: 14px; font-weight: 700; }
+svg.round .round-number.here { fill: #fff; }
+svg.round .round-label { fill: var(--ink-soft); font-size: 11px; }
+svg.round .round-label.unbuilt { font-style: italic; }
+svg.round .round-label.here { fill: var(--red); font-weight: 700; }
+svg.round .round-arrow { stroke: var(--line); stroke-width: 1.5; }
+svg.round .round-arrow-tip { fill: var(--line); }
+.legend.here { color: var(--red); font-weight: 700; }
 /* The code Microsoft gives out loud, for typing into a browser on another screen. */
 .device-code {
   font-family: monospace;

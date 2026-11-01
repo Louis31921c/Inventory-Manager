@@ -3188,8 +3188,11 @@ def test_the_bar_carries_the_blockchain_screen():
     assert 'id="menu-chain"' in bar and ">Blockchain<" in bar
     screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
     assert "<h2>The two bots</h2>" in screen
-    assert "<h2>The sealed log</h2>" in screen
+    assert "<h2>The round</h2>" in screen
     assert "<h2>What Plutus drafted</h2>" in screen
+    # The round is drawn, with somewhere to say which step is live and a way out of it.
+    assert 'id="chain-round"' in screen and 'id="chain-now"' in screen
+    assert 'id="chain-doing"' in screen and 'id="chain-warn"' in screen
 
 
 def test_the_chain_screen_counts_what_each_bot_has_done(db_path):
@@ -3243,3 +3246,50 @@ def test_the_chain_route_answers_with_the_log_and_the_bots(tmp_path, monkeypatch
         assert [row["event"] for row in answer["entries"]] == ["approved", "requested"]
         assert answer["doings"]["requests"] == {"approved": 1}
         assert {one["name"] for one in answer["agents"]["agents"]} == {"plutus", "terminus"}
+
+
+def test_the_round_has_seven_steps_and_says_which_are_not_built():
+    from inventory import gate
+
+    assert [number for number, _, _ in gate.STEPS] == [1, 2, 3, 4, 5, 6, 7]
+    # Nothing here places an order with a supplier, and nothing holds money.
+    assert gate.UNBUILT == (3, 6)
+    for number, _, detail in gate.STEPS:
+        if number in gate.UNBUILT:
+            assert detail.startswith("not built")
+
+
+def test_the_round_says_where_a_request_has_got_to(db_path):
+    from inventory import gate
+
+    assert gate.where_we_are(db_path)["step"] == 0
+
+    request_id = gate.ask(db_path, gate.look(db_path, [a_basket()]), asked_by="ALEX")
+    waiting = gate.where_we_are(db_path)
+    assert waiting["step"] == 4 and waiting["request_id"] == request_id
+
+    gate.record_check(db_path, request_id, "unsure", "cannot tell")
+    asked = gate.where_we_are(db_path)
+    assert asked["step"] == 7 and "yours" in asked["why"]
+
+    gate.approve(db_path, request_id, "ALEX")
+    # Approved and nothing places it, so the round stops at the step that is not built.
+    placing = gate.where_we_are(db_path)
+    assert placing["step"] == 3 and "by hand" in placing["why"]
+
+    gate.mark_ordered(db_path, request_id, "ALEX")
+    assert gate.where_we_are(db_path)["step"] == 0
+
+
+def test_a_shelf_already_full_of_it_is_said_out_loud(db_path):
+    from inventory import gate
+
+    db.save_note(db_path, make_note(lines=[Line(article="RONDELLE M8", quantity=1000)]),
+                 "a", "a.jpg")
+
+    plenty = gate.dwelling(db_path, [{"article": "RONDELLE M8", "quantity": 100}])
+    assert plenty and plenty[0]["times"] == 10.0
+
+    # Asking for about what is there is not dwelling stock, it is restocking.
+    assert gate.dwelling(db_path, [{"article": "RONDELLE M8", "quantity": 900}]) == []
+    assert gate.dwelling(db_path, [{"article": "NOT HERE", "quantity": 5}]) == []

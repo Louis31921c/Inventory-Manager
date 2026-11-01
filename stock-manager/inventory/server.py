@@ -647,6 +647,10 @@ def read_chain(limit: int = 200):
         "agents": agents.status(),
         "rules": {"ceiling": gate.CEILING, "dear": gate.DEAR, "drift": gate.DRIFT},
         "words": gate.REASON_WORDS,
+        "steps": [{"number": number, "name": name, "detail": detail,
+                   "built": number not in gate.UNBUILT}
+                  for number, name, detail in gate.STEPS],
+        "now": gate.where_we_are(config.db_path),
     }
 
 

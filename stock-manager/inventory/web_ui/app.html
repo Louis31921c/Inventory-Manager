@@ -218,12 +218,12 @@
   </div>
 
   <div class="card">
-    <h2>The sealed log</h2>
-    <p class="muted" id="chain-state"></p>
-    <p class="legend">Every entry carries the hash of the one before it, so a line changed
-      afterwards breaks the chain from there on and this screen says where. Nothing is
-      deleted: a cancel is an entry of its own.</p>
-    <div class="scroll-x"><table id="table-chain"></table></div>
+    <h2>The round</h2>
+    <div id="chain-round"></div>
+    <p class="legend" id="chain-now"></p>
+    <div id="chain-warn"></div>
+    <div class="row tight" id="chain-doing"></div>
+    <p class="legend" id="chain-state"></p>
   </div>
 
   <div class="card">
@@ -880,6 +880,7 @@ function openTab(name) {
   for (const other of TABS) {
     $(`panel-${other}`).hidden = other !== name;
   }
+  if (name !== "chain") watchChain(false);
   // Browsing a site is reading, not scanning: the capture cards stay out of the way.
   if (treePick) {
     orderCard = "stored-po";
@@ -954,7 +955,19 @@ function say(message, kind = "") {
 }
 
 $("menu-route").addEventListener("click", () => { openTab("route"); loadRoute(); });
-$("menu-chain").addEventListener("click", () => { openTab("chain"); loadChain(); });
+let chainWatch = null;
+
+function watchChain(on) {
+  // The round is only worth redrawing while somebody is looking at it.
+  clearInterval(chainWatch);
+  chainWatch = on ? setInterval(loadChain, 4000) : null;
+}
+
+$("menu-chain").addEventListener("click", () => {
+  openTab("chain");
+  loadChain();
+  watchChain(true);
+});
 $("menu-goto").addEventListener("click", () => openTab("query"));
 $("menu-help").addEventListener("click", () => { window.location.href = "/license"; });
 
@@ -3688,23 +3701,88 @@ function botCard(name, what, ready, lines) {
   return box;
 }
 
-function chainRows(entries) {
-  renderTable($("table-chain"), [
-    { label: "#", numeric: true, cell: (row) => String(row.entry_id) },
-    { label: "What", cell: (row) => {
-      const box = el("span", {}, [
-        el("strong", { textContent: CHAIN_WORDS[row.event] ?? row.event })]);
-      const said = row.body?.said ?? row.body?.why ?? row.body?.reference ?? "";
-      if (said) box.append(el("div", { className: "desig", textContent: short(said, 80) }));
-      return box;
-    } },
-    { label: "Request", numeric: true,
-      cell: (row) => (row.request_id == null ? "—" : `#${row.request_id}`) },
-    { label: "Who", cell: (row) => row.who ?? "—" },
-    { label: "When", cell: (row) => (row.made_at ?? "").replace("T", " ") },
-    { label: "Seal", cell: (row) => el("code", { className: "seal", textContent:
-      `${row.seal.slice(0, 8)}…` }) },
-  ], entries, "Nothing has been held yet, so the chain has no entry.");
+function roundDiagram(steps, atStep) {
+  // Seven steps on a circle, each one pointing at the next, the live one in red. The
+  // numbers run clockwise from the top, which is where a round is read from.
+  // Wider than it is tall: the labels sit outside the ring and need the room, or the
+  // ones at three and nine o'clock are cut off by the edge of the box.
+  const wide = 640;
+  const tall = 460;
+  const middleX = wide / 2;
+  const middleY = tall / 2;
+  const ring = 135;
+  const node = 26;
+  const parts = [];
+
+  const place = (index) => {
+    const turn = (index / steps.length) * Math.PI * 2 - Math.PI / 2;
+    return [middleX + Math.cos(turn) * ring, middleY + Math.sin(turn) * ring];
+  };
+
+  // The arrows first, so no line is drawn over a step.
+  steps.forEach((step, index) => {
+    const [fromX, fromY] = place(index);
+    const [toX, toY] = place((index + 1) % steps.length);
+    const span = Math.hypot(toX - fromX, toY - fromY);
+    const clear = (node + 7) / span;
+    parts.push(svg("line", {
+      class: "round-arrow",
+      x1: fromX + (toX - fromX) * clear, y1: fromY + (toY - fromY) * clear,
+      x2: toX - (toX - fromX) * clear, y2: toY - (toY - fromY) * clear,
+      "marker-end": "url(#round-tip)",
+    }));
+  });
+
+  steps.forEach((step, index) => {
+    const [x, y] = place(index);
+    const here = step.number === atStep;
+    const classes = ["round-step", here ? "here" : "", step.built ? "" : "unbuilt"]
+      .filter(Boolean).join(" ");
+    const dot = tip(svg("circle", { class: classes, cx: x, cy: y, r: node }),
+                    `${step.number}. ${step.name}\n${step.detail}`);
+    parts.push(dot);
+    parts.push(svg("text", { class: `round-number ${here ? "here" : ""}`,
+                             x, y: y + 5, "text-anchor": "middle" }, [String(step.number)]));
+
+    // The label sits further out than the step, on the side the step is on.
+    const away = 1 + (node + 14) / ring;
+    const labelX = middleX + (x - middleX) * away;
+    const labelY = middleY + (y - middleY) * away;
+    const anchor = Math.abs(labelX - middleX) < 30 ? "middle"
+      : (labelX > middleX ? "start" : "end");
+    const lines = wrapLabel(step.name);
+    lines.forEach((text, line) => {
+      // Stacked away from the middle, so a two-line label never sits on its own step.
+      const first = labelY < middleY ? -(lines.length - 1) * 12 - 4 : 12;
+      parts.push(svg("text", {
+        class: `round-label ${here ? "here" : ""} ${step.built ? "" : "unbuilt"}`,
+        x: labelX, y: labelY + first + line * 12, "text-anchor": anchor,
+      }, [text]));
+    });
+  });
+
+  const tipMark = svg("marker", {
+    id: "round-tip", viewBox: "0 0 10 10", refX: 9, refY: 5,
+    markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse",
+  }, [svg("path", { d: "M 0 0 L 10 5 L 0 10 z", class: "round-arrow-tip" })]);
+
+  return svg("svg", { viewBox: `0 0 ${wide} ${tall}`, class: "round", role: "img" },
+             [svg("defs", {}, [tipMark]), ...parts]);
+}
+
+function wrapLabel(text, most = 18) {
+  const lines = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    if (line && (line + " " + word).length > most) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 async function loadChain() {
@@ -3757,7 +3835,50 @@ async function loadChain() {
       + "changed after it was written.";
   $("chain-state").className = log.whole ? "muted" : "bad";
 
-  chainRows(data.entries ?? []);
+  const steps = data.steps ?? [];
+  const now = data.now ?? {};
+  $("chain-round").replaceChildren(roundDiagram(steps, now.step ?? 0));
+
+  const step = steps.find((one) => one.number === now.step);
+  $("chain-now").textContent = step
+    ? `Step ${step.number}, ${step.name} — ${now.why ?? step.detail}`
+      + (now.request_id ? ` (request #${now.request_id})` : "")
+    : (now.why ?? "Nothing is in flight.");
+  $("chain-now").className = step ? "legend here" : "legend";
+
+  // Buying more of what is already standing there is the easy mistake; it is said out loud.
+  const full = now.dwelling ?? [];
+  if (full.length) {
+    notice($("chain-warn"), "warn", "Already on the shelf: "
+      + full.map((one) => `${one.article}, ${showNum(one.on_hand)} for `
+                          + `${showNum(one.asked)} asked (${one.times}×)`).join(" · "));
+  } else {
+    notice($("chain-warn"), "", "");
+  }
+
+  const doing = $("chain-doing");
+  doing.replaceChildren();
+  if (now.request_id && (now.state === "waiting" || now.state === "checked")) {
+    const approve = el("button", { className: "action", textContent: "Approve" });
+    approve.addEventListener("click", async () => {
+      await gateSay(now.request_id, "approve");
+      await loadChain();
+    });
+    const cancel = el("button", { className: "action ghost", textContent: "Cancel" });
+    cancel.addEventListener("click", async () => {
+      await gateSay(now.request_id, "cancel");
+      await loadChain();
+    });
+    doing.append(approve, cancel);
+  } else if (now.request_id && now.state === "approved") {
+    const cancel = el("button", { className: "action ghost",
+                                  textContent: "Cancel the approval" });
+    cancel.addEventListener("click", async () => {
+      await gateSay(now.request_id, "cancel");
+      await loadChain();
+    });
+    doing.append(cancel);
+  }
 
   renderTable($("table-plutus"), [
     { label: "When", cell: (row) => (row.at ?? "").replace("T", " ") },
