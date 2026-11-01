@@ -3317,3 +3317,56 @@ def test_the_command_line_is_found_even_when_the_path_misses_it(monkeypatch, tmp
     # A file that is there but cannot be run is not a command line.
     pretend.chmod(0o644)
     assert agents.claude_binary() is None
+
+
+def test_the_blockchain_name_rolls_down_to_what_sits_under_the_round():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    bar = page[page.index('<nav class="menubar"'):page.index("</nav>")]
+    assert 'id="chain-drop"' in bar and ">Blockchain<" in bar
+
+    screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
+    assert 'id="chain-card"' in screen          # the round, always there
+    assert "<h2>Waiting on you</h2>" in screen
+    assert "<h2>What Plutus drafted</h2>" in screen
+    assert 'id="table-approval"' in screen and 'id="table-unbought"' in screen
+
+
+def test_the_chain_answers_with_what_waits_and_what_nobody_bought(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import baskets
+    from inventory import config as config_module
+    from inventory import gate
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+
+        request_id = gate.ask(server.config.db_path,
+                              gate.look(server.config.db_path, [a_basket()]), asked_by="ALEX")
+        gate.record_check(server.config.db_path, request_id, "unsure", "cannot tell")
+        baskets.add(server.config.db_path, "C01",
+                    baskets.parse_items("12 vis th 6x25 @ 0.11"), "foussier.fr", who="SOFIANE")
+
+        answer = client.get("/api/chain").json()
+        assert [row["request_id"] for row in answer["approval"]] == [request_id]
+        assert answer["approval"][0]["agent_verdict"] == "unsure"
+
+        # A basket is emptied when it becomes an order, so this one is unbought.
+        assert [row["channel"] for row in answer["baskets"]] == ["C01"]
+        assert answer["baskets"][0]["lines"] == 1
+
+        baskets.to_purchase_order(server.config.db_path, "C01", "ALEX")
+        assert client.get("/api/chain").json()["baskets"] == []

@@ -128,3 +128,7 @@ functionnalities to developp :
           money or places an order with a supplier, so they are shown as part of the round
           without being pretended. Step 5's "send me a message" is the message the chat
           already gets when a basket is held; say the word for a DM instead ] 
+
+- in blockchain , add a cell with what needs approval and baskets made with the command "/basket" that the bot didn't purchase.
+
+- put "what plutus drafted" in a second rolling menu within the blockchain icon

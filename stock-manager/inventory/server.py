@@ -651,6 +651,10 @@ def read_chain(limit: int = 200):
                    "built": number not in gate.UNBUILT}
                   for number, name, detail in gate.STEPS],
         "now": gate.where_we_are(config.db_path),
+        "approval": gate.waiting(config.db_path),
+        # A basket is emptied when it becomes an order, so whatever is still in one is
+        # whatever nobody has bought.
+        "baskets": baskets.open_baskets(config.db_path),
     }
 
 

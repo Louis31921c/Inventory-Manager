@@ -29,7 +29,10 @@
     <button type="button" id="menu-ddmrp" aria-haspopup="true" aria-expanded="false">DDMRP</button>
     <div class="menu-drop" id="tools-drop" role="menu"></div>
   </span>
-  <button type="button" id="menu-chain">Blockchain</button>
+  <span class="menu" id="chain-menu">
+    <button type="button" id="menu-chain" aria-haspopup="true" aria-expanded="false">Blockchain</button>
+    <div class="menu-drop" id="chain-drop" role="menu"></div>
+  </span>
   <button type="button" id="menu-goto">SQL</button>
   <span class="menubar-gap"></span>
   <span class="menu right" id="system-menu">
@@ -208,7 +211,7 @@
  </section>
 
 <section class="panel" id="panel-chain" role="tabpanel" hidden>
-  <div class="card">
+  <div class="card" id="chain-card">
     <h2>blockchain</h2>
     <div class="row" id="chain-stats"></div>
     <div id="chain-round"></div>
@@ -217,7 +220,18 @@
     <div class="row tight" id="chain-doing"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="chain-approval">
+    <h2>Waiting on you</h2>
+    <p class="eyebrow">Held baskets</p>
+    <div class="scroll-x short-box"><table id="table-approval"></table></div>
+    <p class="eyebrow">Baskets nobody has bought</p>
+    <p class="legend">A basket is emptied when it becomes an order, so anything still in
+      one is something <code>/basket</code> asked for and <code>/purchase</code> never
+      took.</p>
+    <div class="scroll-x short-box"><table id="table-unbought"></table></div>
+  </div>
+
+  <div class="card" id="chain-drafted">
     <h2>What Plutus drafted</h2>
     <div class="scroll-x short-box"><table id="table-plutus"></table></div>
   </div>
@@ -954,11 +968,11 @@ function watchChain(on) {
   chainWatch = on ? setInterval(loadChain, 4000) : null;
 }
 
-$("menu-chain").addEventListener("click", () => {
+function openChain() {
   openTab("chain");
   loadChain();
   watchChain(true);
-});
+}
 $("menu-goto").addEventListener("click", () => openTab("query"));
 $("menu-help").addEventListener("click", () => { window.location.href = "/license"; });
 
@@ -3834,6 +3848,50 @@ async function loadChain() {
     doing.append(cancel);
   }
 
+  renderTable($("table-approval"), [
+    { label: "#", numeric: true, cell: (row) => String(row.request_id) },
+    { label: "Where", cell: (row) => el("span", {}, [
+      el("strong", { textContent: row.shop || "no shop named" }),
+      el("div", { className: "desig", textContent:
+        [row.site, row.work_item, row.asked_by].filter(Boolean).join(" · ") || "—" }),
+    ]) },
+    { label: "Total", numeric: true,
+      cell: (row) => `${Number(row.total ?? 0).toFixed(2)}` },
+    { label: "Why it is held", cell: (row) => el("span", { className: "desig",
+      textContent: (row.reasons ?? []).map((one) => gateWords[one] ?? one).join(" · ") }) },
+    { label: "Terminus", cell: (row) => (row.agent_verdict
+      ? el("span", { className: `pill ${row.agent_verdict === "same" ? "green" : "yellow"}`,
+                     textContent: row.agent_verdict })
+      : el("span", { className: "muted", textContent: "not read yet" })) },
+    { label: "", cell: (row) => {
+      const box = el("span", { className: "row tight" });
+      const approve = el("button", { className: "mini", textContent: "Approve" });
+      approve.addEventListener("click", async () => {
+        await gateSay(row.request_id, "approve");
+        await loadChain();
+      });
+      const cancel = el("button", { className: "mini", textContent: "Cancel" });
+      cancel.addEventListener("click", async () => {
+        await gateSay(row.request_id, "cancel");
+        await loadChain();
+      });
+      box.append(approve, cancel);
+      return box;
+    } },
+  ], data.approval ?? [], "Nothing is waiting on you.");
+
+  renderTable($("table-unbought"), [
+    { label: "Channel", cell: (row) => String(row.channel) },
+    { label: "Shop", cell: (row) => row.shop || "—" },
+    { label: "Lines", numeric: true, cell: (row) => showNum(row.lines) },
+    { label: "What", cell: (row) => el("span", { className: "desig", textContent:
+      (row.items ?? []).map((one) => `${showNum(one.quantity)} × ${one.article}`)
+        .join(", ") || "—" }) },
+    { label: "Site", cell: (row) => row.site || "—" },
+    { label: "Last added", cell: (row) => (row.last_at ?? "").replace("T", " ") },
+    { label: "By", cell: (row) => row.last_by ?? "—" },
+  ], data.baskets ?? [], "Every basket has been turned into an order.");
+
   renderTable($("table-plutus"), [
     { label: "When", cell: (row) => (row.at ?? "").replace("T", " ") },
     { label: "Asked by", cell: (row) => row.by ?? "—" },
@@ -4174,6 +4232,10 @@ const SCREEN_MENUS = [
   { menu: "input-menu", drop: "input-drop", button: "menu-note",
     panel: "panel-capture", tab: "capture", key: "capture-card", title: "Input",
     skip: ["review", "mapping"] },
+  { menu: "chain-menu", drop: "chain-drop", button: "menu-chain",
+    panel: "panel-chain", tab: "chain", key: "chain-card-shown", title: "Blockchain",
+    // The round is the screen itself, so the menu lists what sits under it.
+    skip: ["chain-card"], go: openChain },
   { menu: "tools-menu", drop: "tools-drop", button: "menu-ddmrp",
     panel: "panel-ddmrp", tab: "ddmrp", key: "ddmrp-card", title: "DDMRP",
     // The buffers are the screen itself, so the menu lists what sits under them.
