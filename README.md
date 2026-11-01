@@ -243,14 +243,27 @@ time, and the reorder point is the lead time demand on top of it; the sheet is w
 a 7 day lead time at 95% service, or pass your own with
 `/export/safety-stock.xlsx?lead=14&service=99`.
 
-### Dots orders for you
+### The two agents
 
-With `OPENAI_API_KEY` in `~/.config/stock-manager/settings.env`, `ask dots` hands the planner's
-numbers to Dots, which writes a purchase order back: article, quantity rounded to how the trade
-buys, supplier, and one line saying why. Check it, change any quantity, then
-`save as purchase order` and it lands in the Purchase orders tab like any other sheet.
+The app runs two agents, both of them Claude, both of them narrow. They go out through one
+door, so there is one timeout and one way for either to fail, and neither needs an API key:
+they run the Claude Code command line that is already signed in on this machine.
 
-Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
+| Agent | Asks | Cannot |
+|---|---|---|
+| buying | what does the planner's arithmetic say we should order? | sign anything — a draft is a draft until you save it |
+| verification | is this article one we already know under another wording? | approve anything — the gate still waits for you |
+
+`draft the order`, on the Purchase agent card, hands the buying agent the planner's numbers
+and gets a purchase order back: article, quantity rounded to how the trade buys, supplier,
+and one clause saying why. Check it, change any quantity, then `save as purchase order` and it
+lands in the Purchase orders tab like any other sheet.
+
+An empty draft is an answer, not a failure. The agent is told to leave out what is
+comfortable, so a shelf in good order comes back with no lines and a note saying what it left
+out and why.
+
+Nothing is sent to a supplier. The agent drafts, you sign, and the order stays in the app.
 
 ### Outlook without a password
 

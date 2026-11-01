@@ -1262,7 +1262,7 @@ def test_planner_routes(tmp_path, monkeypatch):
 
         assert "Predictions" in client.get("/").text
         page = client.get("/").text
-        assert 'id="ask-dots"' in page and 'id="table-movements"' in page
+        assert 'id="ask-agent"' in page and 'id="table-movements"' in page
         assert "/export/safety-stock.sql" in page
 
         moves = client.get("/api/movements?period=month").json()
@@ -1277,9 +1277,26 @@ def test_planner_routes(tmp_path, monkeypatch):
         half = client.get("/api/movements?period=half").json()
         assert [row["label"] for row in half["rows"]] == ["2026 H2"]
 
+        # The buying agent is not called for real here: a draft is a Claude run.
+        from inventory import agents
+
+        async def no_agent(planner, model=None):
+            raise llm.ExtractionError("The buying agent needs the Claude command line.")
+
+        monkeypatch.setattr(agents, "draft_order", no_agent)
         answer = client.post("/api/forecast/draft", json={}, headers=mine)
         assert answer.status_code == 502
-        assert "key" in answer.json()["detail"]
+        assert "Claude" in answer.json()["detail"]
+
+        async def drafted(planner, model=None):
+            return {"lines": [{"article": "BOLT M6", "quantity": 200, "unit": "piece",
+                               "supplier": "ACME", "reference": None, "reason": "thin"}],
+                    "note": "one line."}
+
+        monkeypatch.setattr(agents, "draft_order", drafted)
+        answer = client.post("/api/forecast/draft", json={}, headers=mine).json()
+        assert answer["agent"] == agents.BUYING
+        assert answer["lines"][0]["article"] == "BOLT M6"
 
         for dataset in ("inventory", "purchase_orders", "safety-stock"):
             for fmt in ("csv", "xlsx", "sql"):
@@ -2923,3 +2940,108 @@ def test_the_mailbox_card_asks_for_the_microsoft_sign_in():
     for box in ['id="mail-oauth"', 'id="mail-client-id"', 'id="mail-tenant"',
                 'id="mail-oauth-start"', 'id="mail-oauth-digits"']:
         assert box in card
+
+
+# ---- the two agents -------------------------------------------------------
+
+def test_the_app_runs_two_agents_and_says_what_each_one_does():
+    from inventory import agents
+
+    now = agents.status()
+    assert {one["name"] for one in now["agents"]} == {agents.BUYING, agents.VERIFICATION}
+    # There is no key to show: the agents run the command line on this machine.
+    assert "key" not in str(now).lower()
+
+
+def test_the_buying_agent_asks_claude_and_hands_back_what_it_said(monkeypatch):
+    from inventory import agents
+
+    asked = {}
+
+    async def fake(prompt, schema, system=None, model=None, timeout=agents.TIMEOUT):
+        asked.update({"prompt": prompt, "schema": schema, "system": system})
+        return {"lines": [{"article": "RONDELLE M8", "quantity": 500, "unit": "piece",
+                           "supplier": "FOUSSIER", "reference": None,
+                           "reason": "under the reorder point"}],
+                "note": "one line, the thin one."}
+
+    monkeypatch.setattr(agents, "ask", fake)
+    monkeypatch.setattr(agents, "available", lambda: True)
+    answer = asyncio.run(agents.draft_order({"articles": [{"article": "RONDELLE M8"}]}))
+
+    assert answer["lines"][0]["article"] == "RONDELLE M8"
+    assert "RONDELLE M8" in asked["prompt"]
+    # The buyer's own instructions ride as the system prompt, not inside the question.
+    assert "purchase order" in asked["system"].lower()
+    assert asked["schema"] is llm.ORDER_SCHEMA
+
+
+def test_the_buying_agent_says_so_when_the_command_line_is_not_there(monkeypatch):
+    from inventory import agents
+
+    monkeypatch.setattr(agents, "available", lambda: False)
+    with pytest.raises(llm.ExtractionError) as raised:
+        asyncio.run(agents.draft_order({"articles": []}))
+    assert "claude" in str(raised.value).lower()
+
+
+def test_both_agents_go_out_through_the_same_door(monkeypatch, db_path):
+    from inventory import agents, verify
+
+    seen = []
+
+    async def fake(prompt, schema, system=None, model=None, timeout=agents.TIMEOUT):
+        seen.append(schema)
+        return {"lines": [], "note": "", "verdict": "new"}
+
+    monkeypatch.setattr(agents, "ask", fake)
+    monkeypatch.setattr(agents, "available", lambda: True)
+    asyncio.run(verify.check(db_path, [{"article": "RONDELLE M8"}]))
+    asyncio.run(agents.draft_order({"articles": []}))
+    # One door, two questions: the verification schema, then the order one.
+    assert seen == [verify.SCHEMA, llm.ORDER_SCHEMA]
+
+
+def test_the_purchase_card_is_the_agent_s_now():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    assert "<h2>Purchase agent</h2>" in page
+    assert 'id="ask-agent"' in page and 'id="agent-note"' in page
+    # The button asked for a route that does not exist, so it only ever answered 404.
+    assert "/api/forecast/dotsDraft" not in page
+    assert '"/api/forecast/draft"' in page
+
+
+def test_an_empty_draft_is_an_answer_not_a_failure(tmp_path, monkeypatch):
+    """The agent is told to leave out what is comfortable, so nothing is a real reply."""
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import agents
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+        db.save_note(server.config.db_path,
+                     make_note(lines=[Line(article="BOLT M6", quantity=500)]), "a", "a.jpg")
+
+        async def nothing(planner, model=None):
+            return {"lines": [], "note": "Every shelf is comfortable."}
+
+        monkeypatch.setattr(agents, "draft_order", nothing)
+        answer = client.post("/api/forecast/draft", headers=mine,
+                             json={"only": ["BOLT M6"]})
+        assert answer.status_code == 200
+        assert answer.json()["lines"] == []
+        assert "comfortable" in answer.json()["note"]

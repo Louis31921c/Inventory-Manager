@@ -91,6 +91,11 @@ functionnalities to developp :
 
 - DONE: System and Help sit at the far end of the menu bar, over Remember me and Exit
 
+- DONE: two Claude agents instead of Dots: a buying one that drafts the purchase order
+        from the planner's numbers, and the verification one on the gate. One door, no API
+        key, the Claude command line this machine is signed in to. The ask button had been
+        calling /api/forecast/dotsDraft, which is no route, so it had only ever answered 404
+
 - DONE, as specified below: dots purchase gate
                       [ still open: a spend ceiling per day or per week as a backstop, and
                         what "place the order" is — a checkout Dots drives on the shop site,

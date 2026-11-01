@@ -13,7 +13,7 @@ holds: it never falls open.
 
 import re
 
-from . import llm, vocabulary
+from . import agents, llm, vocabulary
 from .models import normalize_name
 
 # How many known names a line is held up against. More than this and the prompt is noise.
@@ -115,9 +115,8 @@ async def check(db_path, lines, model=None):
     or slow comes back as "unsure", which leaves the gate shut.
     """
     known = vocabulary.known_articles(db_path)
-    agent = llm.ClaudeCodeBackend(model=model)
     try:
-        answer = await agent.answer(_question(lines, known), SCHEMA)
+        answer = await agents.ask(_question(lines, known), SCHEMA, model=model)
     except llm.ExtractionError as e:
         return {"verdict": UNSURE, "note": f"The verification agent could not answer: {e}",
                 "lines": []}

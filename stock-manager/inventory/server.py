@@ -24,8 +24,8 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, alerts, audit, backorders, backup, baskets, bills, catalog, contacts,
-               db, ddmrp, discord_bot,
+from . import (account, agents, alerts, audit, backorders, backup, baskets, bills, catalog,
+               contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, llm,
                mail_oauth, mailbox, models_info, pg, prices, quotes, routing, sheets,
                slack_bot, stock, verify, vocabulary)
@@ -624,6 +624,12 @@ class GateAsk(BaseModel):
 
 class GateWord(BaseModel):
     why: str | None = None
+
+
+@app.get("/api/agents")
+def read_agents():
+    """The two agents and whether they can run. There is no key to show."""
+    return agents.status()
 
 
 @app.get("/api/gate")
@@ -1555,7 +1561,7 @@ class OrderDraft(BaseModel):
 
 @app.post("/api/forecast/draft")
 async def draft_order(request: Request, body: OrderDraft):
-    """Dots turns the planner's numbers into a purchase order for someone to approve."""
+    """The buying agent turns the planner's numbers into an order, for a person to sign."""
     lead, service, horizon = _planner_settings(body.lead, body.service, body.horizon)
     plan = forecast.summary(config.db_path, lead, service, horizon)
     rows = plan["articles"]
@@ -1578,9 +1584,8 @@ async def draft_order(request: Request, body: OrderDraft):
         "articles": [{key: row[key] for key in keep} for row in rows[:60]],
     }
 
-    dots = llm.planner_backend(config)
     try:
-        answer = await dots.draft_order(planner)
+        answer = await agents.draft_order(planner, model=config.model or None)
     except llm.ExtractionError as e:
         report(request, "draft", str(e), "Predictions window")
         raise HTTPException(502, str(e)) from e
@@ -1595,11 +1600,11 @@ async def draft_order(request: Request, body: OrderDraft):
                       "unit": line.get("unit"), "supplier": line.get("supplier"),
                       "reference": line.get("reference"),
                       "reason": str(line.get("reason") or "")})
-    if not lines:
-        raise HTTPException(502, "Dots came back with no line.")
-
-    event(request, "order.draft", f"{len(lines)} line(s)", f"by Dots, {dots.model}")
-    return {"lines": lines, "note": str(answer.get("note") or ""), "model": dots.model,
+    # No line is an answer, not a failure: the agent is told to leave out what is
+    # comfortable, so a shelf in good order is meant to come back empty.
+    event(request, "order.draft", f"{len(lines)} line(s)", "by the buying agent")
+    return {"lines": lines, "note": str(answer.get("note") or ""),
+            "model": config.model or "claude", "agent": agents.BUYING,
             "drafted_from": len(planner["articles"]), "site": body.site,
             "work_item": body.work_item}
 

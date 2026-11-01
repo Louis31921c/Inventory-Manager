@@ -66,7 +66,7 @@
   <button type="button" data-goes="settings">Settings</button>
   <button type="button" data-goes="ddmrp">DDMRP buffers</button>
   <button type="button" id="tree-new-quote">New quote</button>
-  <button type="button" id="tree-dots">Dots order</button>
+  <button type="button" id="tree-dots">Purchase agent</button>
   </div>
 </aside>
 
@@ -509,7 +509,7 @@
   </div>
 
   <div class="card">
-    <h2>Dots orders</h2>
+    <h2>Purchase agent</h2>
     <div class="row">
       <label class="field grow">
         <span>site</span>
@@ -521,10 +521,10 @@
       </label>
     </div>
     <div class="row">
-      <button class="action" id="ask-dots">ask dots</button>
+      <button class="action" id="ask-agent">draft the order</button>
       <button class="action ghost" id="drop-draft" hidden>discard</button>
     </div>
-    <div id="dots-note"></div>
+    <div id="agent-note"></div>
     <div id="draft" hidden>
       <div class="scroll-x"><table id="table-draft"></table></div>
       <p class="legend" id="draft-reason"></p>
@@ -896,8 +896,8 @@ $("tree-new-quote").addEventListener("click", () => {
 
 $("tree-dots").addEventListener("click", () => {
   treePick = null;
-  openCard("tools-menu", "Dots orders");
-  say("DDMRP · dots orders");
+  openCard("tools-menu", "Purchase agent");
+  say("DDMRP · purchase agent");
 });
 
 for (const node of document.querySelectorAll(".tree button[data-goes]")) {
@@ -2487,7 +2487,7 @@ function countCell(row) {
 
 let plan = null;
 let moves = null;
-let dotsDraft = null;
+let orderDraft = null;
 let period = "week";
 
 function columnChart(points, label, value) {
@@ -2786,19 +2786,20 @@ $("buffer-all").addEventListener("click", () => { bufferAll = true; drawBuffers(
 $("buffer-risky").addEventListener("click", () => { bufferAll = false; drawBuffers(); });
 
 function renderDraft() {
-  $("draft").hidden = dotsDraft == null;
-  $("drop-draft").hidden = dotsDraft == null;
-  if (!dotsDraft) return;
+  const drawn = orderDraft != null && orderDraft.lines.length > 0;
+  $("draft").hidden = !drawn;
+  $("drop-draft").hidden = !drawn;
+  if (!drawn) return;
 
   const head = ["Article", "Quantity", "Unit", "Supplier", "Why"];
   $("table-draft").replaceChildren(
     el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
-    el("tbody", {}, dotsDraft.lines.map((line, index) => {
+    el("tbody", {}, orderDraft.lines.map((line, index) => {
       const quantity = el("input", {
         className: "cell", type: "number", step: "any", min: "0", value: line.quantity,
       });
       quantity.addEventListener("change", () => {
-        dotsDraft.lines[index].quantity = Number(quantity.value) || 0;
+        orderDraft.lines[index].quantity = Number(quantity.value) || 0;
       });
       return el("tr", {}, [
         el("td", {}, [
@@ -2814,18 +2815,19 @@ function renderDraft() {
       ]);
     })),
   );
-  $("draft-reason").textContent = dotsDraft.note
-    ? `${dotsDraft.note} — drafted by ${dotsDraft.model} from ${dotsDraft.drafted_from} article(s).`
-    : `Drafted by ${dotsDraft.model} from ${dotsDraft.drafted_from} article(s).`;
+  $("draft-reason").textContent = orderDraft.note
+    ? `${orderDraft.note} — drafted by ${orderDraft.model} from ${orderDraft.drafted_from} article(s).`
+    : `Drafted by ${orderDraft.model} from ${orderDraft.drafted_from} article(s).`;
 }
 
-async function renderDots() {
+async function renderAgents() {
+  // The agents run the Claude command line on this machine; there is no key to check.
   try {
-    const data = await api("/api/models");
-    const dots = (data.providers ?? []).find((provider) => provider.id === "openai");
-    $("ask-dots").disabled = !dots || dots.state === "missing";
+    const data = await api("/api/agents");
+    $("ask-agent").disabled = !data.ready;
+    if (!data.ready) notice($("agent-note"), "warn", data.detail);
   } catch {
-    $("ask-dots").disabled = true;
+    $("ask-agent").disabled = true;
   }
 }
 
@@ -2846,7 +2848,7 @@ async function loadPlan(options = {}) {
     notice($("ddmrp-notice"), "bad", e.message);
     return;
   }
-  if (!options.keepDraft) dotsDraft = null;
+  if (!options.keepDraft) orderDraft = null;
 
   renderCharts();
   renderDraft();
@@ -2854,11 +2856,11 @@ async function loadPlan(options = {}) {
 }
 
 function loadDdmrp(options) {
-  return Promise.all([loadPlan(options), loadMovements()]);
+  return Promise.all([loadPlan(options), loadMovements(), renderAgents()]);
 }
 
 $("ddmrp-reload").addEventListener("click", () => loadDdmrp());
-$("drop-draft").addEventListener("click", () => { dotsDraft = null; renderDraft(); });
+$("drop-draft").addEventListener("click", () => { orderDraft = null; renderDraft(); });
 
 function showPeriod(name) {
   period = name;
@@ -2869,28 +2871,33 @@ for (const name of ["week", "month", "half"]) {
   $(`period-${name}`).addEventListener("click", () => showPeriod(name));
 }
 
-$("ask-dots").addEventListener("click", async () => {
-  const button = $("ask-dots");
+$("ask-agent").addEventListener("click", async () => {
+  const button = $("ask-agent");
   button.disabled = true;
-  notice($("dots-note"), "", "Dots is reading the numbers...");
+  notice($("agent-note"), "", "The buying agent is reading the numbers...");
   try {
-    dotsDraft = await api("/api/forecast/dotsDraft", postJson({
+    // The route is /api/forecast/draft. It was being asked for /api/forecast/orderDraft,
+    // which is no route at all, so the button answered 404 and nothing was ever drafted.
+    orderDraft = await api("/api/forecast/draft", postJson({
       site: $("order-site").value.trim() || null,
       work_item: $("order-work").value.trim() || null,
     }));
-    notice($("dots-note"), "ok", `${dotsDraft.lines.length} line(s) drafted. Check them, then save.`);
+    notice($("agent-note"), orderDraft.lines.length ? "ok" : "warn",
+      orderDraft.lines.length
+        ? `${orderDraft.lines.length} line(s) drafted. Check them, then save.`
+        : `Nothing worth ordering. ${orderDraft.note}`);
     renderDraft();
   } catch (e) {
-    notice($("dots-note"), "bad", e.message);
+    notice($("agent-note"), "bad", e.message);
   } finally {
     button.disabled = false;
   }
 });
 
 $("save-draft").addEventListener("click", async () => {
-  if (!dotsDraft) return;
+  if (!orderDraft) return;
   const button = $("save-draft");
-  const lines = dotsDraft.lines
+  const lines = orderDraft.lines
     .filter((line) => line.quantity > 0)
     .map((line) => ({
       article: line.article,
@@ -2900,7 +2907,7 @@ $("save-draft").addEventListener("click", async () => {
       in_stock: false,
     }));
   if (!lines.length) {
-    notice($("dots-note"), "warn", "Every line is at zero. Nothing to save.");
+    notice($("agent-note"), "warn", "Every line is at zero. Nothing to save.");
     return;
   }
 
@@ -2915,13 +2922,13 @@ $("save-draft").addEventListener("click", async () => {
         lines,
       },
     }));
-    notice($("dots-note"), "ok",
+    notice($("agent-note"), "ok",
       `Saved as purchase order #${answer.list_id}. It is in the Purchase orders tab now.`);
-    dotsDraft = null;
+    orderDraft = null;
     renderDraft();
     await loadDdmrp();
   } catch (e) {
-    notice($("dots-note"), "bad", e.message);
+    notice($("agent-note"), "bad", e.message);
   } finally {
     button.disabled = false;
   }
