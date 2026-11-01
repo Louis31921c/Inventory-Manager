@@ -214,8 +214,9 @@ section.panel {
   gap: 14px;
   justify-content: center;
   min-height: 0;
-  /* The column is out of the flow, so the logo is kept clear of it by hand. */
-  padding-right: 190px;
+  /* The column is out of the flow, so the logo is kept clear of it by hand: the 180 it
+     is wide, plus the 54 it stands off the border, plus a little air. */
+  padding-right: 240px;
   position: relative;
 }
 .home-logo {
@@ -239,10 +240,10 @@ section.panel {
   grid-template-rows: repeat(5, 1fr);
   justify-items: end;
   /* Out of the flow, so the marks keep to the right edge rather than drifting towards
-     the middle of a wide screen. They stand a tenth of the column's own width off the
-     border: 18px of the 180px, less the 10px of padding the panel already has. */
+     the middle of a wide screen. They stand three tenths of the column's own width off
+     the border: 54px of the 180px, less the 10px of padding the panel already has. */
   position: absolute;
-  right: 8px;
+  right: 44px;
   top: 0;
   width: 180px;
 }
