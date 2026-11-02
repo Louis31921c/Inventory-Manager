@@ -695,6 +695,14 @@ def read_chain(limit: int = 200):
     }
 
 
+@app.get("/api/chain/step/{step}")
+def read_chain_step(step: int, limit: int = 60):
+    """What has happened in one wedge of the round: the audit behind a click on it."""
+    if step not in {number for number, _, _ in gate.STEPS}:
+        raise HTTPException(404, f"There is no step {step}.")
+    return gate.step_history(config.db_path, step, limit=min(max(limit, 1), 200))
+
+
 @app.get("/api/agents")
 def read_agents():
     """The two agents and whether they can run. There is no key to show."""

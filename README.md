@@ -403,6 +403,22 @@ Above the round, how many baskets are held, waiting and approved. Nothing in fli
 nothing — an empty round is its own answer — but a sealed entry changed behind its back still
 shouts, naming the one where the chain stops holding.
 
+Every wedge of the round is a button. Click one and a small window opens with the audit of
+that step, newest first, each row a time, a person, what happened and the detail:
+
+| Step | What the window lists |
+|---|---|
+| 1 reading input | lines waiting in a basket, and every basket read for `/purchase` |
+| 2 inventory check | each held basket, with the articles it flagged against what is known |
+| 3 control | what Terminus said, request by request |
+| 4 decision | every basket the gate stopped, and why |
+| 5 manual check | every approval and every cancel, and who gave it |
+| 6 wallet check | nothing: not built |
+| 7 placing order | the baskets that became purchase orders |
+
+`Esc`, the close button or a click outside shuts it. Only what was written down can be shown,
+so a basket that was emptied by an order leaves step 1 and appears in step 7.
+
 The name on the bar rolls down to what sits under the round. **Waiting on you** holds two
 lists that are easy to confuse and mean different things:
 

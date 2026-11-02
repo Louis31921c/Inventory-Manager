@@ -147,3 +147,12 @@ functionnalities to developp :
         opens the browser for the four and LibreOffice for the csv. The names are fixed
         server side, so the page never sends a url or a path of its own. The sheet's path
         is CONTACTS_CSV in the settings, and beside the database when that is empty
+
+- DONE: a click on any of the seven wedges opens a small window with the audit of that
+        step: reading input (what waits in a basket, every basket read for /purchase),
+        the inventory check, Terminus's verdicts, the decisions to hold, the approvals and
+        cancels by a person, and for placing order the baskets that became purchase
+        orders. Each row is when, who, what and the detail, newest first. It is built from
+        what is really written down, so the two unbuilt steps say so rather than invent a
+        past. The wheel is redrawn only when it changed, so a click is never lost to the
+        refresh that runs every few seconds

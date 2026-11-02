@@ -310,6 +310,125 @@ def where_we_are(db_path):
             "said": None, "total": None, "dwelling": [], "why": "Nothing is in flight."}
 
 
+# What each step has to say about its own past. A step with nothing built behind it still
+# answers, with the reason there is nothing to look back on.
+STEP_NOTES = {
+    1: "Lines that were put in a basket and are still waiting, and every basket that was "
+       "read for /purchase. A basket that is emptied leaves no line behind.",
+    2: "Each held basket as it was read against what the firm already knows and buys.",
+    3: "What Terminus made of the names, request by request.",
+    4: "Every basket the gate stopped, and the reasons it gave.",
+    5: "Every answer a person gave: approved, or cancelled.",
+    6: "Not built: nothing here holds funds or bills anything, so there is nothing to "
+       "look back on.",
+    7: "Not built as a purchase: nothing here orders from a supplier. These are the "
+       "baskets that became purchase orders, for a person to place.",
+}
+
+
+def _stamp(when):
+    return when.isoformat(timespec="seconds") if when else None
+
+
+def _log_rows(db_path, events, limit):
+    marks = ", ".join("?" for _ in events)
+    rows = db.read(db_path, f"""
+            SELECT request_id, event, body, who, made_at FROM gate_log
+            WHERE event IN ({marks}) ORDER BY entry_id DESC LIMIT ?
+            """, (*events, limit))
+    return [(request_id, event, json.loads(body), who, made_at)
+            for request_id, event, body, who, made_at in rows]
+
+
+def _line_word(count):
+    return f"{count} line" if count == 1 else f"{count} lines"
+
+
+def step_history(db_path, step, limit=60):
+    """What has happened in one step of the round, newest first.
+
+    Only what was written down can be shown: the sealed log for the gate's own turns, the
+    baskets for what is waiting in them, and the purchase orders the chat has made. Each
+    row is {at, who, title, detail, request_id}, so the screen can draw any step alike.
+    """
+    rows = []
+
+    def add(at, who, title, detail=None, request_id=None):
+        rows.append({"at": _stamp(at) if not isinstance(at, str) else at, "who": who,
+                     "title": title, "detail": detail, "request_id": request_id})
+
+    if step == 1:
+        for at, who, article, quantity, shop, site in db.read(db_path, """
+                SELECT added_at, added_by, article, quantity, shop, site FROM baskets
+                ORDER BY line_id DESC LIMIT ?
+                """, (limit,)):
+            add(at, who, f"{quantity:g} {article}" if quantity else article,
+                " · ".join(part for part in ("in a basket, not asked for yet", shop, site)
+                           if part))
+        for request_id, _, body, who, at in _log_rows(db_path, ("requested",), limit):
+            add(at, who, f"#{request_id}: a basket was read for /purchase",
+                " · ".join(part for part in (_line_word(len(body.get("lines", []))),
+                                             body.get("shop"), body.get("site")) if part),
+                request_id)
+
+    elif step == 2:
+        for request_id, _, body, who, at in _log_rows(db_path, ("requested",), limit):
+            lines = body.get("lines", [])
+            flagged = [f"{line.get('article')}: "
+                       + ", ".join(REASON_WORDS.get(one, one) for one in line["found"])
+                       for line in lines if line.get("found")]
+            add(at, who, f"#{request_id}: {_line_word(len(lines))} checked against the shelf "
+                         "and what is known",
+                "; ".join(flagged) if flagged else "every article already known and priced",
+                request_id)
+
+    elif step == 3:
+        for request_id, _, body, who, at in _log_rows(db_path, ("checked",), limit):
+            add(at, "Terminus", f"#{request_id}: Terminus says {body.get('verdict')}",
+                body.get("said"), request_id)
+
+    elif step == 4:
+        for request_id, _, body, who, at in _log_rows(db_path, ("requested",), limit):
+            why = said(body.get("reasons", []))
+            add(at, who, f"#{request_id}: held for a person "
+                         f"({float(body.get('total') or 0):.2f} EUR)",
+                " · ".join(why) if why else None, request_id)
+
+    elif step == 5:
+        for request_id, event, body, who, at in _log_rows(db_path, (APPROVED, CANCELLED), limit):
+            if event == APPROVED:
+                add(at, who, f"#{request_id}: approved",
+                    f"{float(body.get('total') or 0):.2f} EUR, "
+                    f"{_line_word(len(body.get('lines', [])))}", request_id)
+            else:
+                add(at, who, f"#{request_id}: cancelled",
+                    " · ".join(part for part in (f"it was {body.get('was')}", body.get("why"))
+                               if part), request_id)
+
+    elif step == 7:
+        for request_id, _, body, who, at in _log_rows(db_path, (ORDERED,), limit):
+            add(at, who, f"#{request_id}: order placed",
+                " · ".join(part for part in (body.get("reference"),
+                                             f"{float(body.get('total') or 0):.2f} EUR")
+                           if part), request_id)
+        for list_id, at, who, site, work_item, count in db.read(db_path, """
+                SELECT h.list_id, h.created_at, h.created_by, h.site, h.work_item, count(*)
+                FROM purchase_orders h JOIN purchase_order_lines l USING (list_id)
+                WHERE l.designation LIKE 'asked in chat%'
+                GROUP BY h.list_id, h.created_at, h.created_by, h.site, h.work_item
+                ORDER BY h.list_id DESC LIMIT ?
+                """, (limit,)):
+            add(at, who, f"purchase order #{list_id} from the chat",
+                f"{_line_word(count)}"
+                + "".join(f" · {part}" for part in (site, work_item) if part))
+
+    # Both sources are newest first on their own; the screen reads them as one history.
+    rows.sort(key=lambda row: row["at"] or "", reverse=True)
+    name, detail = next((name, detail) for number, name, detail in STEPS if number == step)
+    return {"step": step, "name": name, "detail": detail, "built": step not in UNBUILT,
+            "note": STEP_NOTES.get(step, ""), "rows": rows[:limit]}
+
+
 def doings(db_path, limit=40):
     """What the two of them have done, for the screen that watches the chain.
 

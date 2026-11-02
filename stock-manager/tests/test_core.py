@@ -3520,3 +3520,102 @@ def test_a_contact_sheet_that_is_not_there_says_so_rather_than_opening_nothing(t
     with pytest.raises(FileNotFoundError) as refused:
         shortcuts.open_it("contacts", tmp_path)
     assert "CONTACTS_CSV" in str(refused.value)
+
+
+# ---- the audit behind a click on one wedge ---------------------------------
+
+def test_each_step_of_the_round_remembers_what_happened_in_it(db_path):
+    from inventory import baskets, gate
+
+    baskets.add(db_path, "chan", [{"article": "VIS TH 6X25", "quantity": 12}],
+                shop="BRICO", site="LA GENETTE", who="ALEX")
+    first = gate.ask(db_path, gate.look(db_path, [a_basket()]), asked_by="ALEX")
+    gate.record_check(db_path, first, "same", "known")
+    gate.approve(db_path, first, "ALEX")
+    second = gate.ask(db_path, gate.look(db_path, [a_basket(article="NEW THING")]),
+                      asked_by="SAM")
+    gate.cancel(db_path, second, "ALEX", "too dear")
+
+    def titles(step):
+        return [row["title"] for row in gate.step_history(db_path, step)["rows"]]
+
+    # Reading: what waits in a basket, and every basket read for /purchase.
+    assert any("VIS TH 6X25" in title for title in titles(1))
+    assert sum("was read for /purchase" in title for title in titles(1)) == 2
+    # Each step answers for its own turn, newest first.
+    assert len(titles(2)) == 2 and len(titles(4)) == 2
+    assert titles(3) == [f"#{first}: Terminus says same"]
+    assert titles(5) == [f"#{second}: cancelled", f"#{first}: approved"]
+    cancelled = gate.step_history(db_path, 5)["rows"][0]
+    assert cancelled["who"] == "ALEX" and "too dear" in cancelled["detail"]
+    assert cancelled["request_id"] == second
+
+
+def test_the_steps_that_are_not_built_say_so_instead_of_inventing_a_past(db_path):
+    from inventory import gate
+
+    wallet = gate.step_history(db_path, 6)
+    assert wallet["built"] is False and wallet["rows"] == []
+    assert "not built" in wallet["note"].lower()
+    # Nothing here orders from a supplier: step 7 only ever shows the chat's own purchase
+    # orders, and a shelf with none has no orders to list.
+    assert gate.step_history(db_path, 7)["rows"] == []
+
+
+def test_a_basket_turned_into_a_purchase_order_is_an_order_the_chat_placed(db_path):
+    from inventory import baskets, gate
+
+    baskets.add(db_path, "chan", [{"article": "RONDELLE M8", "quantity": 40}],
+                shop="BRICO", site="ARTIGUES", who="SAM")
+    made = baskets.to_purchase_order(db_path, "chan", "SAM")
+
+    rows = gate.step_history(db_path, 7)["rows"]
+    assert [row["title"] for row in rows] == [f"purchase order #{made['list_id']} from the chat"]
+    assert rows[0]["who"] == "SAM" and "ARTIGUES" in rows[0]["detail"]
+    # The basket is emptied by the order, so it has left the first step.
+    assert not any("RONDELLE" in row["title"] for row in gate.step_history(db_path, 1)["rows"])
+
+
+def test_the_step_route_answers_for_each_wedge_and_refuses_one_that_is_not_there(tmp_path,
+                                                                                monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import gate
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+        request_id = gate.ask(server.config.db_path,
+                              gate.look(server.config.db_path, [a_basket()]), asked_by="ALEX")
+        gate.approve(server.config.db_path, request_id, "ALEX")
+
+        for number in range(1, 8):
+            answer = client.get(f"/api/chain/step/{number}").json()
+            assert answer["step"] == number and answer["name"] and "rows" in answer
+        approved = client.get("/api/chain/step/5").json()
+        assert [row["title"] for row in approved["rows"]] == [f"#{request_id}: approved"]
+        assert client.get("/api/chain/step/8").status_code == 404
+        assert client.get("/api/chain/step/0").status_code == 404
+
+
+def test_a_click_on_a_wedge_opens_its_history_in_a_window_of_its_own():
+    from inventory import server as server_module
+
+    page = server_module.PAGE.read_text()
+    screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
+    assert 'id="step-pop"' in screen and 'id="table-step"' in screen
+    # The wheel is handed the way to open one, and every wedge is one button.
+    assert "roundDiagram(steps, now.step ?? 0, faults, openStepAudit)" in page
+    assert '`/api/chain/step/${step.number}`' in page
+    assert 'class: "step", role: "button"' in page
