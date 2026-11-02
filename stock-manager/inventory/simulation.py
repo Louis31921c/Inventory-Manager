@@ -1,0 +1,481 @@
+"""A year of made-up paperwork, and what pours it into a new database.
+
+The firm is a metalwork and glazing shop around Bordeaux, written the way the real paperwork
+reads. Nothing in it belongs to a real company: every price, person and number is invented.
+
+Two things use it. `init` is what the app opens its database with: when the file does not
+exist yet it is built, and filled with this year rather than left blank, so there is
+something to look at on the first screen. SAMPLE_DATA=0 in the settings turns that off. And
+sample_data/make_sample_data.py writes the same year out as csv files and as a database
+to run a simulation on.
+
+The same seed gives the same year every time. The year ends on the day it is asked for, so
+a database built today ends today.
+"""
+import random
+from datetime import date, timedelta
+from pathlib import Path
+
+from . import audit, backorders, contacts, db
+from . import bills as bills_module
+from . import quotes as quotes_module
+from .models import Line, Note
+from .simulation_catalogue import ARTICLES, DEPOT, DRAFTERS, QUOTE_LINES, SITES, STOPS
+
+SEED = 2026
+LAST_DAY = date(2026, 10, 30)
+DAYS = 364
+# A new database is filled with half a year, not a whole one: it is built before the window
+# opens, and the year takes about twice as long for little more to look at.
+SEED_DAYS = 180
+
+# What the app knows: a bill is to pay, paid, or disputed. Late is worked out from
+# the day it falls due, so some of the ones left to pay are deliberately old.
+BILL_STATES = ("paid", "to pay", "disputed")
+VAT = 0.20
+
+
+def working_days(first, last):
+    day = first
+    while day <= last:
+        if day.weekday() < 5:
+            yield day
+        day += timedelta(days=1)
+
+
+def pick_place(rng):
+    site, items = rng.choice(SITES)
+    return site, rng.choice(items + [None])
+
+
+def quantity(rng, usual):
+    """Round numbers, the way a note is written: a box, a bundle, a few lengths."""
+    step = max(1, int(usual / 10))
+    return float(max(step, int(rng.triangular(usual * 0.3, usual * 1.6, usual)) // step * step))
+
+
+def build(rng, days=DAYS, last_day=LAST_DAY):
+    """The whole year at once: what came in, what went out, and the paper around it."""
+    first = last_day - timedelta(days=days)
+    diary = list(working_days(first, last_day))
+    by_supplier = {}
+    for article, designation, supplier, usual, price in ARTICLES:
+        by_supplier.setdefault(supplier, []).append((article, designation, usual, price))
+
+    notes, note_lines = [], []
+    orders, order_lines = [], []
+    quotes, quote_lines = [], []
+    bills = []
+    # What the notes have left standing at each site, so an order can be answered.
+    shelf = {}
+
+    note_id = order_id = quote_id = 0
+    for day in diary:
+        # A delivery or two a day, a little more in spring when the sites are busy.
+        deliveries = rng.choices([1, 2, 3], [4, 4, 2])[0]
+        if 3 <= day.month <= 7 and rng.random() < 0.3:
+            deliveries += 1
+        for _ in range(deliveries):
+            note_id += 1
+            # The big merchants deliver more often than the one-line specialists.
+            supplier = rng.choices(list(by_supplier),
+                                   [len(kinds) for kinds in by_supplier.values()])[0]
+            site, work_item = pick_place(rng)
+            ordered = day - timedelta(days=rng.randint(2, 21))
+            notes.append({"note_id": note_id, "supplier": supplier,
+                          "delivery_date": day.isoformat(), "order_date": ordered.isoformat(),
+                          "site": site, "work_item": work_item or ""})
+            wanted_lines = min(rng.randint(2, 7), len(by_supplier[supplier]))
+            for line_no, (article, designation, usual, _price) in enumerate(
+                    rng.sample(by_supplier[supplier], wanted_lines), 1):
+                amount = quantity(rng, usual)
+                late = rng.random() < 0.08
+                # Two in three of the missing lines have a day promised for the rest;
+                # some of those days have already gone by, which is what turns them red.
+                expected = ""
+                if late and rng.random() < 0.66:
+                    expected = (day + timedelta(days=rng.randint(-20, 45))).isoformat()
+                note_lines.append({"note_id": note_id, "line_no": line_no, "article": article,
+                                   "designation": designation, "quantity": amount,
+                                   "backorder": "yes" if late else "", "expected_on": expected,
+                                   "supplier": supplier, "delivery_date": day.isoformat(),
+                                   "order_date": ordered.isoformat(), "site": site,
+                                   "work_item": work_item or ""})
+                if not late:
+                    shelf.setdefault((site, work_item, article), 0.0)
+                    shelf[(site, work_item, article)] += amount
+
+        # Two orders or so a day from a customer, shipped inside the day after. Over a
+        # year they have to carry off most of what the notes brought, or the shelf only
+        # ever grows and every buffer ends up over the top of green.
+        for _ in range(rng.choices([1, 2, 3], [3, 4, 2])[0]):
+            site, work_item = pick_place(rng)
+            standing = [key for key in shelf if key[0] == site and shelf[key] > 0]
+            wanted = rng.randint(6, 18)
+            lines = []
+            # Most of what goes out was delivered for that site; some of it was never
+            # scanned in, which is what the "to order" word on a line is there to say.
+            for key in rng.sample(standing, min(len(standing), wanted)):
+                if rng.random() < 0.05:
+                    continue
+                article = key[2]
+                amount = float(max(1, int(shelf[key] * rng.uniform(0.8, 1.0))))
+                shelf[key] = max(0.0, shelf[key] - amount)
+                lines.append((article, _designation(article), amount))
+            # Now and then a line for something that was never scanned in at that site.
+            while len(lines) < wanted and rng.random() < 0.2:
+                article, designation, _supplier, usual, _price = rng.choice(ARTICLES)
+                lines.append((article, designation, quantity(rng, usual) / 2))
+            # A site with nothing standing on it and no stray line orders nothing: an
+            # order with no line at all is not a thing the app can store.
+            if not lines:
+                continue
+            order_id += 1
+            orders.append({"list_id": order_id, "list_date": day.isoformat(), "site": site,
+                           "work_item": work_item or "", "drafter": rng.choice(DRAFTERS)})
+            for line_no, (article, designation, amount) in enumerate(lines, 1):
+                order_lines.append({"list_id": order_id, "line_no": line_no, "article": article,
+                                    "designation": designation, "quantity": amount})
+
+        # A quote request about once a week, for what is not sold by the piece.
+        if rng.random() < 0.2:
+            quote_id += 1
+            site, work_item = pick_place(rng)
+            quotes.append({"quote_id": quote_id, "supplier": rng.choice(list(by_supplier)),
+                           "site": site, "work_item": work_item or "",
+                           "needed_by": (day + timedelta(days=rng.randint(7, 40))).isoformat(),
+                           "state": rng.choices(["open", "sent", "answered", "closed"],
+                                                [3, 4, 2, 2])[0],
+                           "note": "" if rng.random() < 0.7 else "Ask for the lead time as well."})
+            for line_no, (article, amount, unit) in enumerate(
+                    rng.sample(QUOTE_LINES, rng.randint(1, 3)), 1):
+                quote_lines.append({"quote_id": quote_id, "line_no": line_no, "article": article,
+                                    "quantity": amount, "unit": unit, "designation": ""})
+
+    bills = _bills(rng, note_lines, by_supplier)
+    counts = _counts(rng, shelf, last_day)
+    return {"notes": notes, "note_lines": note_lines, "orders": orders,
+            "order_lines": order_lines, "quotes": quotes, "quote_lines": quote_lines,
+            "bills": bills, "counts": counts}
+
+
+_DESIGNATIONS = {article: designation for article, designation, *_ in ARTICLES}
+
+
+def _designation(article):
+    return _DESIGNATIONS.get(article, "")
+
+
+def _bills(rng, note_lines, by_supplier):
+    """One bill a month per supplier, priced off what that month's notes carried."""
+    price = {article: money for article, _d, _s, _u, money in ARTICLES}
+    supplier_of = {article: supplier for article, _d, supplier, _u, _m in ARTICLES}
+    months = {}
+    for line in note_lines:
+        month = line["delivery_date"][:7]
+        supplier = supplier_of[line["article"]]
+        months.setdefault((supplier, month), []).append(
+            price[line["article"]] * float(line["quantity"]))
+
+    bills, number = [], 0
+    for (supplier, month), amounts in sorted(months.items(), key=lambda pair: pair[0][1]):
+        number += 1
+        year, mon = (int(part) for part in month.split("-"))
+        billed = date(year, mon, 28)
+        net = round(sum(amounts) * rng.uniform(0.9, 1.1), 2)
+        tax = round(net * VAT, 2)
+        state = rng.choices(BILL_STATES, [7, 4, 1])[0]
+        due = billed + timedelta(days=30)
+        bills.append({
+            "supplier": supplier, "number": f"{year}-{mon:02d}-{number:04d}",
+            "bill_date": billed.isoformat(), "due_date": due.isoformat(), "currency": "EUR",
+            "net": net, "tax": tax, "total": round(net + tax, 2), "site": "",
+            "order_ref": "", "state": state,
+            "paid_on": (due - timedelta(days=rng.randint(0, 8))).isoformat()
+                       if state == "paid" else "",
+            "note": "",
+        })
+    return bills
+
+
+def _counts(rng, shelf, last_day=LAST_DAY):
+    """The shelf counted by hand now and then, a little beside what the paper says."""
+    held = {}
+    for (_site, _work, article), amount in shelf.items():
+        held[article] = held.get(article, 0.0) + amount
+    counted = []
+    for article in rng.sample(sorted(held), min(25, len(held))):
+        out = held[article] * rng.uniform(0.85, 1.15)
+        counted.append({"article": article, "quantity": round(out, 1),
+                        "counted_on": (last_day - timedelta(days=rng.randint(0, 30))).isoformat(),
+                        "counted_by": rng.choice(DRAFTERS)})
+    return counted
+
+
+# The chat the gate watches: a channel a site, the way a real workshop splits them up.
+CHANNELS = [
+    ("C0GENETTE", "LA GENETTE", "PHASE 3", "foussier.fr", "SOFIANE"),
+    ("C0OSTREA", "OSTREA", "PORTAIL BAT C", "metaleco.fr", "MARIE"),
+    ("C0ARIANE", "ARIANE", "ESCALIER", "wurth.fr", "LUC"),
+    ("C0GRAVELOTS", "LES GRAVELOTS", "PORTE PAC", "foussier.fr", "ALEX"),
+    ("C0PULSATION", "PULSATION", "VITRAGE", "saint-gobain.fr", "MARIE"),
+    ("C0ARTIGUES", "ARTIGUES", "COUVERTINES", "bati-formes.fr", "SOFIANE"),
+    ("C0MARNE", "SQUARE DE LA MARNE", "GC BALCONS BAT C", "decoupacier.fr", "LUC"),
+    ("C0BENAUGE", "LA BENAUGE", "GC TYPE 02", "lr-etanco.fr", "ALEX"),
+    ("C0CHARTRONS", "ECRIN DES CHARTRONS", "HABILLAGE JARDINIERE", "vaco.fr", "MARIE"),
+    ("C0HUMANITIES", "HUMANITIES", "GRILLE RESEAUX", "metaleco.fr", "LUC"),
+    ("C0VIAVIGNA", "VIA VIGNA", "GC", "prolians.fr", "SOFIANE"),
+    ("C0TASSIGNY", "TASSIGNY", "PM", "wurth.fr", "ALEX"),
+    ("C01003", "1003", "ATELIER", "lyreco.fr", "MARIE"),
+    ("C0NOUAUX", "MARC NOUAUX", "PM ET GC", "foussier.fr", "LUC"),
+]
+
+# Something the shelf has never seen, so a basket asking for it is held on its first line.
+STRANGERS = [
+    ("CHEVILLE SPIT FIX 10X100", 0.71), ("JOINT EPDM 6MM", 52.0),
+    ("TOLE LARMEE 4MM", 96.0), ("PROFIL ALU 60X40", 31.5),
+    ("DISQUE DIAMANT 230", 28.0), ("GANT ANTI COUPURE T10", 6.4),
+]
+
+TERMINUS_SAID = {
+    "same": "the size and the grade match a name the shelf already has.",
+    "new": "nothing on the shelf is this article; it is a first purchase.",
+    "unsure": "the line gives no size, so two known names fit it equally well.",
+}
+
+
+def fill_gate(database, rng, last_day=LAST_DAY):
+    """A blockchain screen with something on it: baskets, held requests, Plutus drafts.
+
+    Every one of these goes in through the app's own gate, so the log seals the way it
+    would in earnest and verify_chain holds afterwards. Nothing is written straight into
+    gate_log, which would be a chain that only looks like one.
+    """
+    from . import baskets, db, gate, prices
+
+    # A price history first, or no article has a usual price to be judged against.
+    for article, _, supplier, _, price in ARTICLES[:24]:
+        for back in range(rng.randint(2, 5)):
+            prices.remember(database, article, round(price * rng.uniform(0.92, 1.08), 2),
+                            supplier=supplier, source="order",
+                            seen_on=last_day - timedelta(days=30 * back + rng.randint(0, 9)))
+
+    known = [(article, supplier, price) for article, _, supplier, _, price in ARTICLES[:24]]
+    made = []
+
+    for index, (channel, site, work_item, shop, who) in enumerate(CHANNELS):
+        # Each channel fills a basket: mostly things we buy, sometimes something new.
+        # A quantity the trade would actually ask for, so a basket of washers does not
+        # come to the same as a basket of glass and trip the ceiling every time.
+        def ask_for(price):
+            if price < 1:
+                return float(rng.choice([100, 200, 500]))
+            if price < 20:
+                return float(rng.choice([4, 6, 12, 24]))
+            return float(rng.randint(1, 4))
+
+        wanted = []
+        for _ in range(rng.randint(1, 3)):
+            article, supplier, price = rng.choice(known)
+            wanted.append({"article": article, "quantity": ask_for(price),
+                           "unit_price": round(price * rng.uniform(0.95, 1.1), 2),
+                           "supplier": supplier})
+
+        # Every reason the gate has, spread about, so no one of them looks like the rule.
+        flavour = index % 4
+        if flavour == 0:
+            stranger, price = rng.choice(STRANGERS)
+            wanted.append({"article": stranger, "quantity": float(rng.randint(2, 12)),
+                           "unit_price": price, "supplier": rng.choice(known)[1]})
+        elif flavour == 1:
+            article, _, price = rng.choice(known)
+            wanted.append({"article": article, "quantity": ask_for(price),
+                           "unit_price": round(price * rng.uniform(2.4, 3.2), 2),
+                           "supplier": rng.choice(known)[1]})
+        elif flavour == 2:
+            article, _, price = rng.choice(known)
+            wanted.append({"article": article, "quantity": ask_for(price),
+                           "unit_price": None, "supplier": rng.choice(known)[1]})
+        else:
+            article, supplier, price = rng.choice(known)
+            wanted.append({"article": article, "quantity": ask_for(price),
+                           "unit_price": round(price * rng.uniform(0.95, 1.1), 2),
+                           "supplier": "QUINCAILLERIE DU PONT"})
+
+        baskets.add(database, channel,
+                    [{"article": row["article"], "quantity": row["quantity"],
+                      "unit_price": row["unit_price"], "supplier": row["supplier"]}
+                     for row in wanted],
+                    shop, site, work_item, who, wanted[0]["supplier"])
+
+        # Two of the six are left alone: nobody has run /purchase on them at all.
+        if index >= len(CHANNELS) - 2:
+            continue
+
+        held = baskets.lines(database, channel)
+        reading = gate.look(database, held)
+        if not reading["held"]:
+            continue
+        request_id = gate.ask(database, reading, channel=channel, shop=shop, asked_by=who,
+                              site=site, work_item=work_item)
+        verdict = ("new" if any("first-article" in line["found"] for line in reading["lines"])
+                   else rng.choice(["same", "unsure"]))
+        gate.record_check(database, request_id, verdict, TERMINUS_SAID[verdict],
+                          [{"asked": line["article"], "verdict": verdict} for line in
+                           reading["lines"]])
+        made.append((request_id, channel))
+
+    # A year of rounds already walked, and three still standing. Most were approved and
+    # placed, a few turned down: a screen where nothing has ever finished teaches nothing
+    # about what finishing looks like.
+    refusals = ["the site has enough of it already", "the price is not the one we agreed",
+                "ordered on last week's sheet, this is a double",
+                "wrong size: the drawing says M10"]
+    references = ["FOUSSIER 77812", "METALECO 4471", "WURTH 90233", "VACO 1180",
+                  "PROLIANS 55310", "LR ETANCO 7742"]
+    for index, (request_id, channel) in enumerate(made[:-3] if len(made) > 3 else []):
+        if index % 4 == 3:
+            gate.cancel(database, request_id, "ADMIN", refusals[index % len(refusals)])
+        else:
+            gate.approve(database, request_id, "ADMIN")
+            # One of the approved ones is left unplaced, so the round has somewhere to
+            # stand at the step nothing here can walk.
+            if index % 5 != 4:
+                gate.mark_ordered(database, request_id, "ADMIN",
+                                  reference=references[index % len(references)])
+        baskets.clear(database, channel)
+
+    # What Plutus has drafted. The audit is where a draft is written down: it is not a
+    # gate, and it never touches the chain.
+    for back in range(6):
+        when = last_day - timedelta(days=back * 5 + rng.randint(0, 3))
+        db.write(database, """
+                INSERT INTO audit (happened_at, user_name, action, target, detail, address)
+                VALUES (?, 'ADMIN', 'order.draft', ?, 'by Plutus', '127.0.0.1')
+                """, (when, f"{rng.randint(2, 9)} line(s)"))
+
+    whole, broken, entries = gate.verify_chain(database)
+    return {"requests": len(made), "entries": entries, "whole": whole, "broken": broken}
+
+
+def pour(database, year, last_day=LAST_DAY, book=True):
+    """Pour a year into a database, through the code the app itself uses."""
+    lines_of = {}
+    for line in year["note_lines"]:
+        lines_of.setdefault(line["note_id"], []).append(line)
+    for head in year["notes"]:
+        note = Note(supplier=head["supplier"], delivery_date=head["delivery_date"],
+                    order_date=head["order_date"], site=head["site"],
+                    work_item=head["work_item"] or None,
+                    lines=[Line(article=line["article"], quantity=line["quantity"],
+                                designation=line["designation"],
+                                backorder=bool(line["backorder"]))
+                           for line in lines_of.get(head["note_id"], [])])
+        saved = db.save_note(database, note, f"sample-note-{head['note_id']}", "", "SAMPLE")
+        for line_no, line in enumerate(lines_of.get(head["note_id"], []), 1):
+            if line["expected_on"]:
+                backorders.expect(database, saved, line_no, line["expected_on"])
+
+    order_lines = {}
+    for line in year["order_lines"]:
+        order_lines.setdefault(line["list_id"], []).append(line)
+    for head in year["orders"]:
+        db.save_purchase_order(database, {
+            "list_date": date.fromisoformat(head["list_date"]), "site": head["site"],
+            "work_item": head["work_item"] or None, "drafter": head["drafter"],
+            "lines": [{"article": line["article"], "designation": line["designation"],
+                       "quantity": line["quantity"]}
+                      for line in order_lines.get(head["list_id"], [])],
+        }, f"sample-order-{head['list_id']}", "", "SAMPLE")
+
+    quote_lines = {}
+    for line in year["quote_lines"]:
+        quote_lines.setdefault(line["quote_id"], []).append(line)
+    for head in year["quotes"]:
+        quote_id = quotes_module.save(database, head, [
+            {"article": line["article"], "quantity": line["quantity"], "unit": line["unit"]}
+            for line in quote_lines.get(head["quote_id"], [])], "SAMPLE")
+        quotes_module.update(database, quote_id, {"state": head["state"]})
+
+    for bill in year["bills"]:
+        bills_module.save(database, bills_module.shape(bill, source="sample", user="SAMPLE"))
+
+    for count in year["counts"]:
+        db.save_stock_count(database, count["article"], count["quantity"], count["counted_by"])
+        db.write(database, "UPDATE stock_counts SET counted_on = ? WHERE article = ?",
+                 (date.fromisoformat(count["counted_on"]), count["article"]))
+
+    if book:
+        _contact_book(database)
+
+    fill_gate(database, random.Random(SEED + 7), last_day)
+
+    db.write(database, "DELETE FROM places")
+    db.write(database, """
+            INSERT INTO places (kind, label, address, lat, lon, added_by)
+            VALUES (?, ?, ?, ?, ?, 'SAMPLE')
+            """, ("depot", DEPOT[0], DEPOT[1], DEPOT[2], DEPOT[3]))
+    for label, address, lat, lon in STOPS:
+        db.write(database, """
+                INSERT INTO places (kind, label, address, lat, lon, added_by)
+                VALUES (?, ?, ?, ?, ?, 'SAMPLE')
+                """, ("stop", label, address, lat, lon))
+    return database
+
+
+FIRST_NAMES = ["Aurelie", "Celine", "Sandrine", "Marc", "Claire", "Julien", "Nadia", "Pierre"]
+LAST_NAMES = ["Fournier", "Guerin", "Dupont", "Bernard", "Roux", "Martin", "Lambert", "Petit"]
+
+
+def _contact_book(database):
+    """Someone to ring at every supplier the year buys from."""
+    rng = random.Random(SEED + 3)
+    suppliers = sorted({supplier for _a, _d, supplier, _u, _p in ARTICLES})
+    for number, supplier in enumerate(suppliers, 1):
+        slug = "".join(ch for ch in supplier.lower() if ch.isalnum())
+        contacts.save(database, {
+            "company": supplier,
+            "person": f"{rng.choice(FIRST_NAMES)} {rng.choice(LAST_NAMES)}",
+            "phone": f"05 99 00 {number:02d} {rng.randint(10, 99)}",
+            "email": f"contact@{slug}.example.com",
+            "address": f"{rng.randint(2, 180)} rue des Artisans, 33000 BORDEAUX",
+            "incoterm": rng.choice(["EXW", "FCA", "CPT", "DAP", "DDP"]),
+            "site": None, "note": "made up",
+        }, "SAMPLE")
+
+
+# ---- a database that is never left blank ----------------------------------
+
+def enabled():
+    """On unless SAMPLE_DATA says no: a new database is filled, not left empty."""
+    import os
+
+    return os.environ.get("SAMPLE_DATA", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def seed(db_path, today=None, days=None):
+    """Fill a database that has just been built with a year that ends today."""
+    last = today or date.today()
+    year = build(random.Random(SEED), days or SEED_DAYS, last)
+    with db.held(db_path):
+        pour(db_path, year, last)
+    audit.record(db_path, "SAMPLE", "sample.seed", None,
+                 f"{len(year['notes'])} delivery note(s), {len(year['orders'])} order(s) "
+                 f"made up, ending {last.isoformat()}")
+    return year
+
+
+def init(db_path):
+    """Open a database, building it first when there is none, and filling a new one.
+
+    Only a file that did not exist is filled. A database somebody already has is never
+    touched, so this is safe to call on every start.
+    """
+    path = Path(db_path)
+    fresh = not path.exists()
+    applied = db.init(path)
+    if fresh and enabled():
+        print("Building a sample database: half a year of made-up paperwork. "
+              "About 20 seconds, once.", flush=True)
+        seed(path)
+    return applied

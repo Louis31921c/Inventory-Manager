@@ -1,3 +1,4 @@
+import contextlib
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,8 +25,28 @@ class QueryError(Exception):
     pass
 
 
+# Opening a DuckDB file costs a few milliseconds a time, and filling a new database with a
+# year of paperwork opens it thousands of times. `held` keeps one connection open for the
+# duration, so every other open in this process joins it instead of starting over.
+_held = set()
+
+
+@contextlib.contextmanager
+def held(db_path):
+    key = str(db_path)
+    with duckdb.connect(key):
+        _held.add(key)
+        try:
+            yield
+        finally:
+            _held.discard(key)
+
+
 def read(db_path, sql, args=()):
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    # A file that is held open read-write cannot also be opened read-only in this process,
+    # so a read joins the connection that is already there.
+    kept = str(db_path) in _held
+    with duckdb.connect(str(db_path), read_only=not kept) as con:
         return con.execute(sql, list(args)).fetchall()
 
 

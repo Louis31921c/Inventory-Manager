@@ -31,7 +31,8 @@ def free_port():
         return probe.getsockname()[1]
 
 
-def wait_until_up(url, timeout=20):
+def wait_until_up(url, timeout=120):
+    # Long enough for the first start, when a new database is filled before the server opens.
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:

@@ -28,7 +28,7 @@ from . import (account, agents, alerts, audit, backorders, backup, baskets, bill
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, llm,
                mail_oauth, mailbox, models_info, pg, prices, quotes, routing, sheets,
-               shortcuts, slack_bot, stock, verify, vocabulary)
+               shortcuts, simulation, slack_bot, stock, verify, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
 
@@ -78,7 +78,7 @@ def report(request, kind, description, context=None):
 
 @app.on_event("startup")
 async def startup():
-    db.init(config.db_path)
+    simulation.init(config.db_path)
     config.images_dir.mkdir(parents=True, exist_ok=True)
     log.info("database: %s", config.db_path)
     log.info("error reports: %s", alerts.destination(config.sms))
@@ -2002,7 +2002,7 @@ def serve(host="127.0.0.1", port=8800, on_stop=None):
 
     logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s",
                         level=logging.WARNING)
-    db.init(config.db_path)
+    simulation.init(config.db_path)
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning"))
     stopper = on_stop or (lambda: setattr(server, "should_exit", True))
     server.run()

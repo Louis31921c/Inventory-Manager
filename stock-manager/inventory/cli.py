@@ -9,7 +9,7 @@ from pathlib import Path
 
 from dataclasses import replace
 
-from . import account, alerts, audit, backup, catalog, db, llm, sync, vocabulary
+from . import account, alerts, audit, backup, catalog, db, llm, simulation, sync, vocabulary
 from .config import load_config, settings_file
 from .tui import read_image
 
@@ -33,7 +33,7 @@ def ready(config, chosen_user=None):
     stored = account.read_account()
     if stored and not chosen_user:
         config = replace(config, user=stored["user"])
-    db.init(config.db_path)
+    simulation.init(config.db_path)
     config.images_dir.mkdir(parents=True, exist_ok=True)
     return config
 

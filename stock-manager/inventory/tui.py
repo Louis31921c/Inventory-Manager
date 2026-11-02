@@ -8,7 +8,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from . import alerts, audit, backup, catalog, db, llm, models_info, vocabulary
+from . import alerts, audit, backup, catalog, db, llm, models_info, simulation, vocabulary
 from .models import Note, Line, parse_date
 from .screen import BRIGHT, DIM, INVERT, KEY, NORMAL, TAB, TAB_ON, WARN, Screen, columns, pad, truncate
 
@@ -84,7 +84,7 @@ class App:
         self.painter = lambda: None
 
     def start(self):
-        db.init(self.config.db_path)
+        simulation.init(self.config.db_path)
         self.config.images_dir.mkdir(parents=True, exist_ok=True)
         audit.seen(self.config.db_path, self.config.user)
         self.reload()

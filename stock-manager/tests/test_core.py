@@ -63,6 +63,12 @@ def test_problems():
     assert "delivery date missing" in make_note(delivery_date=None).problems()
 
 
+@pytest.fixture(autouse=True)
+def no_sample_year(monkeypatch):
+    """A new database is filled with made-up paperwork. The suite wants to start empty."""
+    monkeypatch.setenv("SAMPLE_DATA", "0")
+
+
 @pytest.fixture
 def db_path(tmp_path):
     path = tmp_path / "t.duckdb"
@@ -3619,3 +3625,65 @@ def test_a_click_on_a_wedge_opens_its_history_in_a_window_of_its_own():
     assert "roundDiagram(steps, now.step ?? 0, faults, openStepAudit)" in page
     assert '`/api/chain/step/${step.number}`' in page
     assert 'class: "step", role: "button"' in page
+
+
+# ---- a new database is never left blank -------------------------------------
+
+def test_a_new_database_is_filled_with_a_year_that_ends_today(tmp_path, monkeypatch):
+    from inventory import gate, simulation
+
+    monkeypatch.setenv("SAMPLE_DATA", "1")
+    monkeypatch.setattr(simulation, "SEED_DAYS", 20)
+    path = tmp_path / "inventory.duckdb"
+    simulation.init(path)
+
+    assert db.read(path, "SELECT count(*) FROM inventory_lines")[0][0] > 0
+    assert db.read(path, "SELECT count(*) FROM purchase_orders")[0][0] > 0
+    assert db.read(path, "SELECT count(*) FROM contacts")[0][0] > 0
+    last = db.read(path, "SELECT max(delivery_date) FROM inventory_lines")[0][0]
+    assert date.today() - last < timedelta(days=5)
+    # The blockchain screen has a round with something on it, and its seal holds.
+    assert db.read(path, "SELECT count(*) FROM gate_requests")[0][0] > 0
+    assert gate.verify_chain(path)[0] is True
+    # It says it was made up, so it is not taken for the firm's own paperwork.
+    assert any(event["action"] == "sample.seed" for event in audit.events(path, limit=500))
+
+
+def test_a_database_that_already_exists_is_never_filled_or_touched(tmp_path, monkeypatch):
+    from inventory import simulation
+
+    path = tmp_path / "inventory.duckdb"
+    db.init(path)
+    db.save_note(path, make_note(), "sha-own", "", "ALEX")
+
+    monkeypatch.setenv("SAMPLE_DATA", "1")
+    monkeypatch.setattr(simulation, "SEED_DAYS", 20)
+    simulation.init(path)
+
+    # Only the firm's own note: nothing made up was added to a database somebody has.
+    assert db.read(path, "SELECT count(*) FROM notes")[0][0] == 1
+    assert db.read(path, "SELECT count(*) FROM gate_requests")[0][0] == 0
+
+
+def test_the_sample_year_can_be_switched_off_for_an_empty_start(tmp_path, monkeypatch):
+    from inventory import simulation
+
+    path = tmp_path / "inventory.duckdb"
+    for word in ("0", "false", "no", "off"):
+        monkeypatch.setenv("SAMPLE_DATA", word)
+        assert simulation.enabled() is False
+    monkeypatch.setenv("SAMPLE_DATA", "0")
+    simulation.init(path)
+    assert db.read(path, "SELECT count(*) FROM inventory_lines")[0][0] == 0
+    monkeypatch.delenv("SAMPLE_DATA")
+    assert simulation.enabled() is True      # on unless it is said no
+
+
+def test_a_held_connection_lets_reads_join_the_writer(tmp_path):
+    path = tmp_path / "t.duckdb"
+    db.init(path)
+    with db.held(path):
+        db.write(path, "INSERT INTO users (user_name) VALUES ('ALEX')")
+        assert db.read(path, "SELECT count(*) FROM users")[0][0] == 1
+    # Afterwards reads are read-only again, as they always were.
+    assert db.read(path, "SELECT user_name FROM users")[0][0] == "ALEX"

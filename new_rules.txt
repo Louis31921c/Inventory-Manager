@@ -156,3 +156,11 @@ functionnalities to developp :
         what is really written down, so the two unbuilt steps say so rather than invent a
         past. The wheel is redrawn only when it changed, so a click is never lost to the
         refresh that runs every few seconds
+
+- DONE: a database that does not exist yet is filled, not left blank: half a year of
+        made-up paperwork ending today (notes, orders, quotes, bills, counts, a contact a
+        supplier, baskets and held requests for the Blockchain screen), in about twenty
+        seconds, once. A database that exists is never touched, and SAMPLE_DATA=0 starts
+        empty. The generator moved into the package (inventory/simulation.py) so a pipx
+        install has it; sample_data/make_sample_data.py is now a wrapper around it. The
+        pour holds one connection open, which took it from 91 seconds to 15

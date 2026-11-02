@@ -459,6 +459,23 @@ The contact sheet is `CONTACTS_CSV` in the settings file, and `supplier-contacts
 the database when that is empty. A door whose file is not there says so rather than opening
 nothing.
 
+## A new database is never blank
+
+The first time the app opens a database file that does not exist yet, it fills it with half a
+year of made-up paperwork: delivery notes, customer orders, quotes, bills, hand counts, a
+contact per supplier, baskets and held requests on the Blockchain screen. It ends today,
+takes about twenty seconds, and happens once. Everything in it is invented, and the audit
+says so (`sample.seed`, user `SAMPLE`).
+
+A database that already exists is never touched, so this only ever runs on a new one.
+`SAMPLE_DATA=0` in the settings file starts it empty instead. To clear a filled one, stop the
+app and delete `~/.local/share/stock-manager/inventory.duckdb`, with `SAMPLE_DATA=0` set if
+the next start should be blank.
+
+`sample_data/make_sample_data.py` makes the same year, a whole one, as csv files and as a
+database of its own to run a simulation on; the year itself is written in
+`inventory/simulation.py`.
+
 ## Where things are stored
 
 | What | Path |

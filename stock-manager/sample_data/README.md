@@ -1,5 +1,9 @@
 # A year of made-up paperwork
 
+> The year itself is made in `inventory/simulation.py`, which is also what fills any
+> database the app builds for the first time (half a year, ending today). This script
+> writes a whole year, as csv files and as a database of its own.
+
 Everything here is invented, so the app can be driven hard without touching the real
 database: a year of delivery notes, customer orders, quote requests, bills, hand counts,
 contacts and delivery addresses for a metalwork and glazing shop around Bordeaux. The
