@@ -308,10 +308,16 @@ section.panel {
   white-space: nowrap;
 }
 /* Both come up together under the pointer: the mark and its name are one button. */
+/* A name takes the colour of the mark it stands next to, the way Discord's own
+   wordmark is set in its purple. */
+.door[data-door="outlook"] .door-name { color: #0f6cbd; }
+.door[data-door="proton"] .door-name { color: #6d4aff; }
+.door[data-door="contacts"] .door-name { color: #0a7a2f; }
+
 .home-doors .door:hover .door-icon,
 .home-doors .door:hover .door-name { opacity: 1; }
 .home-doors .door:hover .door-icon svg { transform: scale(1.08); }
-.home-doors .door:hover .door-name { color: var(--accent); text-decoration: underline; }
+.home-doors .door:hover .door-name { text-decoration: underline; }
 /* Nothing here is ever dimmed: a mark is drawn at full strength whatever its state, and
    a door that is busy says so by not moving rather than by fading. */
 .home-doors .door[disabled] { cursor: progress; }
