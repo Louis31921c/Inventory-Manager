@@ -338,8 +338,10 @@ def door_mark(name: str):
     path = (WEB / "doors" / name).resolve()
     if path.parent != (WEB / "doors").resolve() or not path.is_file() or path.suffix != ".png":
         raise HTTPException(404, "Mark not found.")
+    # Revalidated every time: these are swapped by hand, and a week in the cache would
+    # keep the old picture on the screen long after the file had changed.
     return FileResponse(path, media_type="image/png",
-                        headers={"Cache-Control": "max-age=604800"})
+                        headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/data")

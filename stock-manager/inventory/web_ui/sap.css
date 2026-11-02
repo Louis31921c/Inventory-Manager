@@ -216,7 +216,7 @@ section.panel {
   min-height: 0;
   /* The column is out of the flow, so the logo is kept clear of it by hand: the 180 it
      is wide, plus the 54 it stands off the border, plus a little air. */
-  padding-right: 320px;
+  padding-right: 240px;
   position: relative;
 }
 .home-logo {
@@ -230,16 +230,16 @@ section.panel {
 }
 
 /* The five doors beside the logo: Slack, Discord, the two mailboxes, the contact sheet.
-   They share the logo's height, a fifth of it each, so the column never outgrows it.
-   No box is drawn around any of them: the mark itself is the button, as big as its fifth
-   allows, with its name under it. */
+   No box is drawn around any of them: the mark itself is the button. Every one is the
+   same 180 by 48 box, drawn flush right, and each lockup inside it is scaled to cover
+   the same share of that box, so a long name and a short one weigh the same on the
+   screen rather than just sharing a height. */
 .home-doors {
-  /* The five sit together in the middle of the screen rather than spread down it: the
-     rows take only what they need, and the group is centred in the height. */
+  /* The five sit together in the middle of the screen rather than spread down it. */
   align-content: center;
   bottom: 0;
   display: grid;
-  gap: 18px;
+  gap: 14px;
   grid-template-rows: repeat(5, auto);
   justify-items: end;
   /* Out of the flow, so the marks keep to the right edge rather than drifting towards
@@ -248,81 +248,39 @@ section.panel {
   position: absolute;
   right: 44px;
   top: 0;
-  width: 260px;
+  width: 180px;
 }
 /* The first and the last stand off the top and the bottom of the screen. */
 .home-doors .door[data-door="slack"] { margin-top: 18px; }
 .home-doors .door[data-door="contacts"] { margin-bottom: 18px; }
-/* Every door is one lockup: the mark, then the name beside it, the way the Slack and
-   Discord pictures are drawn. Those two carry their name already and have no label. */
 .home-doors .door {
-  align-items: center;
   background: none;
   border: 0;
-  color: var(--ink);
   cursor: pointer;
-  display: flex;
-  font-family: var(--font);
-  gap: 8px;
-  justify-content: flex-end;
-  min-height: 0;
+  display: block;
+  height: 48px;
   padding: 0;
+  width: 180px;
 }
+/* Sat back at half strength until the pointer is on it. */
 .door-mark {
   display: block;
-  height: 30px;
+  height: 48px;
   opacity: .5;
   transition: opacity .12s, transform .12s;
-  width: auto;
+  transform-origin: right center;
+  width: 180px;
 }
 .home-doors .door:hover .door-mark { opacity: 1; transform: scale(1.08); }
-/* The drawn marks match the height of the pictures beside them. All of them sit back
-   at half strength until the pointer is on it. */
-.door-icon {
-  flex: 0 0 auto;
-  max-width: 100%;
-  min-height: 0;
-  opacity: .5;
-  transition: opacity .12s;
-}
-.door-icon svg {
-  display: block;
-  height: 30px;
-  transition: transform .12s;
-  width: auto;
-}
-/* A name set to read as a wordmark rather than a caption. Sized by measurement, not by
-   eye: at 18.5 Arial's ink stands 15 high, which is what the names built into the
-   pictures beside it come to. */
-.door-name {
-  flex: 0 0 auto;
-  font-size: 18.5px;
-  font-weight: 700;
-  letter-spacing: -.01em;
-  line-height: 1;
-  max-width: 100%;
-  opacity: .5;
-  overflow: hidden;
-  text-align: right;
-  text-overflow: ellipsis;
-  transition: opacity .12s;
-  white-space: nowrap;
-}
-/* Both come up together under the pointer: the mark and its name are one button. */
-/* A name takes the colour of the mark it stands next to, the way Discord's own
-   wordmark is set in its purple. */
-.door[data-door="outlook"] .door-name { color: #0f6cbd; }
-.door[data-door="contacts"] .door-name { color: #0a7a2f; }
-
-.home-doors .door:hover .door-icon,
-.home-doors .door:hover .door-name { opacity: 1; }
-.home-doors .door:hover .door-icon svg { transform: scale(1.08); }
-.home-doors .door:hover .door-name { text-decoration: underline; }
-/* Nothing here is ever dimmed: a mark is drawn at full strength whatever its state, and
-   a door that is busy says so by not moving rather than by fading. */
+/* The names of the two drawn doors. The general svg text rule further down would win over
+   attributes on the element, so their size and colour are set here, at the size that
+   makes Arial's ink stand as high as the names inside the pictures. */
+.door-mark text { font-weight: 700; }
+.door[data-door="outlook"] .door-mark text { fill: #0f6cbd; font-size: 36.3px; }
+.door[data-door="contacts"] .door-mark text { fill: #0a7a2f; font-size: 27.9px; }
+/* A door that is busy says so by not moving rather than by fading. */
 .home-doors .door[disabled] { cursor: progress; }
-.home-doors .door[disabled]:hover .door-icon svg { transform: none; }
-.home-doors .door[disabled]:hover .door-name { color: var(--ink); text-decoration: none; }
+.home-doors .door[disabled]:hover .door-mark { opacity: .5; transform: none; }
 
 /* ---- group boxes --------------------------------------------------- */
 
