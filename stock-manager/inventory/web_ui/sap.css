@@ -361,24 +361,12 @@ svg.round .step:focus-visible .wedge { stroke: var(--accent); stroke-width: 2.5;
   background: var(--paper);
   border: 1px solid var(--line);
   box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   max-height: 72vh;
   max-width: 94vw;
-  padding: 0 0 10px;
-  width: 720px;
+  overflow: auto;
+  padding: 8px;
+  width: 520px;
 }
-.pop-bar {
-  align-items: center;
-  background: linear-gradient(180deg, var(--title-from), var(--title-to));
-  color: #fff;
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 8px;
-}
-.pop > p { padding: 0 10px; }
-.pop-body { overflow: auto; padding: 0 10px; }
 
 svg.round .hub-ring { fill: var(--paper); stroke: var(--line-soft); stroke-width: 1.5; }
 svg.round .hub-dot { fill: #3b4147; }

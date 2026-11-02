@@ -275,13 +275,8 @@
 
   <!-- What has happened in one step of the round. Opened by a click on its wedge. -->
   <div class="pop-back" id="step-pop" hidden>
-    <div class="pop" role="dialog" aria-modal="true" aria-labelledby="step-pop-title">
-      <div class="pop-bar">
-        <strong id="step-pop-title"></strong>
-        <button type="button" class="mini" id="step-pop-close">close</button>
-      </div>
-      <p class="muted" id="step-pop-note"></p>
-      <div class="scroll-x pop-body"><table id="table-step"></table></div>
+    <div class="pop" id="step-dialog" role="dialog" aria-modal="true">
+      <div class="scroll-x"><table id="table-step"></table></div>
     </div>
   </div>
 </section>
@@ -3888,14 +3883,12 @@ function closeStepAudit() {
 }
 
 async function openStepAudit(step) {
-  $("step-pop-title").textContent = `${step.number}. ${step.name}`;
-  $("step-pop-note").textContent = "Reading what happened here...";
-  $("table-step").replaceChildren();
+  // Straight to the data: no title, no note. Esc or a click outside closes it.
+  $("step-dialog").setAttribute("aria-label", `${step.number}. ${step.name}`);
+  renderTable($("table-step"), [], [], "Reading...");
   stepPop().hidden = false;
-  $("step-pop-close").focus();
   try {
     const history = await api(`/api/chain/step/${step.number}`);
-    $("step-pop-note").textContent = history.note;
     renderTable($("table-step"), [
       { label: "When", cell: (row) => document.createTextNode(
         (row.at ?? "").replace("T", " ").slice(0, 16) || "-") },
@@ -3907,11 +3900,10 @@ async function openStepAudit(step) {
       ? "Nothing has happened in this step yet."
       : "Nothing to show: this step is not built.");
   } catch (e) {
-    $("step-pop-note").textContent = e.message;
+    renderTable($("table-step"), [], [], e.message);
   }
 }
 
-$("step-pop-close").addEventListener("click", closeStepAudit);
 // A click on the dimmed ground, outside the window, closes it as well.
 stepPop().addEventListener("click", (event) => {
   if (event.target === stepPop()) closeStepAudit();
