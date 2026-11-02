@@ -216,7 +216,7 @@ section.panel {
   min-height: 0;
   /* The column is out of the flow, so the logo is kept clear of it by hand: the 180 it
      is wide, plus the 54 it stands off the border, plus a little air. */
-  padding-right: 240px;
+  padding-right: 320px;
   position: relative;
 }
 .home-logo {
@@ -239,7 +239,7 @@ section.panel {
   align-content: center;
   bottom: 0;
   display: grid;
-  gap: 12px;
+  gap: 18px;
   grid-template-rows: repeat(5, auto);
   justify-items: end;
   /* Out of the flow, so the marks keep to the right edge rather than drifting towards
@@ -248,28 +248,36 @@ section.panel {
   position: absolute;
   right: 44px;
   top: 0;
-  width: 180px;
+  width: 260px;
 }
 /* The first and the last stand off the top and the bottom of the screen. */
 .home-doors .door[data-door="slack"] { margin-top: 18px; }
 .home-doors .door[data-door="contacts"] { margin-bottom: 18px; }
+/* Every door is one lockup: the mark, then the name beside it, the way the Slack and
+   Discord pictures are drawn. Those two carry their name already and have no label. */
 .home-doors .door {
-  align-items: flex-end;
+  align-items: center;
   background: none;
   border: 0;
   color: var(--ink);
   cursor: pointer;
   display: flex;
-  flex-direction: column;
   font-family: var(--font);
-  font-size: 12px;
-  gap: 4px;
-  justify-content: center;
+  gap: 9px;
+  justify-content: flex-end;
   min-height: 0;
   padding: 0;
 }
-/* The mark is 55 square, the size it had worked out to when the rows still shared the
-   whole height. It sits back at half strength until the pointer is on it. */
+.door-mark {
+  display: block;
+  height: 34px;
+  opacity: .5;
+  transition: opacity .12s, transform .12s;
+  width: auto;
+}
+.home-doors .door:hover .door-mark { opacity: 1; transform: scale(1.08); }
+/* The drawn marks match the height of the pictures beside them. All of them sit back
+   at half strength until the pointer is on it. */
 .door-icon {
   flex: 0 0 auto;
   max-width: 100%;
@@ -279,13 +287,18 @@ section.panel {
 }
 .door-icon svg {
   display: block;
-  height: 55px;
+  height: 34px;
   transition: transform .12s;
   width: auto;
 }
+/* A name set to read as a wordmark rather than a caption: the weight and the tight,
+   slightly wide setting the brand marks beside it have. */
 .door-name {
   flex: 0 0 auto;
+  font-size: 19px;
   font-weight: 700;
+  letter-spacing: -.01em;
+  line-height: 1;
   max-width: 100%;
   opacity: .5;
   overflow: hidden;

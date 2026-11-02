@@ -332,6 +332,16 @@ def font(name: str):
                         headers={"Cache-Control": "max-age=604800"})
 
 
+@app.get("/doors/{name}")
+def door_mark(name: str):
+    """The brand marks on the landing page, the ones that are pictures rather than drawn."""
+    path = (WEB / "doors" / name).resolve()
+    if path.parent != (WEB / "doors").resolve() or not path.is_file() or path.suffix != ".png":
+        raise HTTPException(404, "Mark not found.")
+    return FileResponse(path, media_type="image/png",
+                        headers={"Cache-Control": "max-age=604800"})
+
+
 @app.get("/api/data")
 def data(request: Request):
    
