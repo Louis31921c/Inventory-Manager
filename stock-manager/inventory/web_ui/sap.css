@@ -263,14 +263,14 @@ section.panel {
   cursor: pointer;
   display: flex;
   font-family: var(--font);
-  gap: 9px;
+  gap: 8px;
   justify-content: flex-end;
   min-height: 0;
   padding: 0;
 }
 .door-mark {
   display: block;
-  height: 34px;
+  height: 30px;
   opacity: .5;
   transition: opacity .12s, transform .12s;
   width: auto;
@@ -287,15 +287,16 @@ section.panel {
 }
 .door-icon svg {
   display: block;
-  height: 34px;
+  height: 30px;
   transition: transform .12s;
   width: auto;
 }
-/* A name set to read as a wordmark rather than a caption: the weight and the tight,
-   slightly wide setting the brand marks beside it have. */
+/* A name set to read as a wordmark rather than a caption. Sized by measurement, not by
+   eye: at 18.5 Arial's ink stands 15 high, which is what the names built into the
+   pictures beside it come to. */
 .door-name {
   flex: 0 0 auto;
-  font-size: 19px;
+  font-size: 18.5px;
   font-weight: 700;
   letter-spacing: -.01em;
   line-height: 1;
