@@ -344,6 +344,15 @@ def door_mark(name: str):
                         headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/vehicles/{name}")
+def vehicle_picture(name: str):
+    """The picture each truck card is drawn with, one per kind of vehicle."""
+    path = (WEB / "vehicles" / name).resolve()
+    if path.parent != (WEB / "vehicles").resolve() or not path.is_file() or path.suffix != ".png":
+        raise HTTPException(404, "Picture not found.")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/api/data")
 def data(request: Request):
    

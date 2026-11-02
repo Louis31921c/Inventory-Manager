@@ -534,9 +534,7 @@ input.cell:focus { border-color: var(--accent); outline: none; }
   padding: 6px 8px 8px;
 }
 .van > * + * { margin-top: 4px; }
-.van-shape { height: 56px; width: 100%; }
-.van-shape path { stroke: var(--ink); }
-.van-shape circle.wheel { fill: none; stroke: var(--ink); stroke-width: 3; }
+.van-shape { display: block; height: 56px; object-fit: contain; width: 100%; }
 .van-load { display: grid; gap: 2px; grid-template-columns: 1fr; }
 .van-stops { font-size: 11px; list-style: none; margin: 0; padding: 0; }
 .van-stops li { color: var(--ink-soft); padding: 2px 0; }

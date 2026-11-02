@@ -4115,22 +4115,12 @@ async function loadWaiting() {
 
 let vans = [];
 
-const VAN_SHAPES = {
-  van: "M6 54 L6 34 L26 34 L40 18 L84 18 L84 54 Z M26 34 L26 20",
-  truck: "M4 56 L4 20 L62 20 L62 56 Z M62 30 L78 30 L92 44 L92 56 L62 56 Z",
-};
+// One picture per kind of vehicle: the van is the Renault Partner, the truck the Iveco Daily.
+const VAN_PICTURES = { van: "van-renault", truck: "van-iveco" };
 
 function vanDrawing(shape) {
-  const body = svg("path", {
-    d: VAN_SHAPES[shape] ?? VAN_SHAPES.van, fill: "none",
-    "stroke-width": 3, "stroke-linejoin": "round",
-  });
-  const wheels = [["van", 30, 70], ["truck", 22, 80]][shape === "truck" ? 1 : 0];
-  return svg("svg", { viewBox: "0 0 100 70", class: "van-shape", role: "img" }, [
-    body,
-    svg("circle", { cx: wheels[1], cy: 58, r: 7, class: "wheel" }),
-    svg("circle", { cx: wheels[2], cy: 58, r: 7, class: "wheel" }),
-  ]);
+  const picture = VAN_PICTURES[shape] ?? VAN_PICTURES.van;
+  return el("img", { className: "van-shape", src: `/vehicles/${picture}.png`, alt: "" });
 }
 
 const vanBoxes = new Map();
