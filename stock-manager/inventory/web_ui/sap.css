@@ -311,7 +311,6 @@ section.panel {
 /* A name takes the colour of the mark it stands next to, the way Discord's own
    wordmark is set in its purple. */
 .door[data-door="outlook"] .door-name { color: #0f6cbd; }
-.door[data-door="proton"] .door-name { color: #6d4aff; }
 .door[data-door="contacts"] .door-name { color: #0a7a2f; }
 
 .home-doors .door:hover .door-icon,
