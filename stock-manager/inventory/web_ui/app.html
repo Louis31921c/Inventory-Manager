@@ -4118,7 +4118,7 @@ async function loadChain() {
 
 let gateWords = {};
 
-function gateLines(rows) {
+function gateLines(rows, total) {
   const table = el("table", { className: "order-table" });
   renderTable(table, [
     { label: "Article", cell: (row) => {
@@ -4135,6 +4135,15 @@ function gateLines(rows) {
     { label: "Usually", numeric: true, cell: (row) => (row.usual == null
       ? "—" : `${Number(row.usual).toFixed(2)}`) },
   ], rows, "Nothing on this one.");
+  // The sum of what the basket would cost, at the end of the lines.
+  if (rows.length && total != null) {
+    table.append(el("tfoot", {}, [el("tr", {}, [
+      el("td", {}, [el("strong", { textContent: "Total" })]),
+      el("td"), el("td"),
+      el("td", { className: "num" }, [el("strong", { textContent: `${Number(total).toFixed(2)} EUR` })]),
+      el("td"),
+    ])]));
+  }
   return table;
 }
 
@@ -4151,10 +4160,8 @@ function gateRow(held) {
 
   // The lines are behind a button: the card says why it was held, not what is in it.
   const detail = el("div", { hidden: true }, [
-    el("p", { className: "muted", textContent:
-      `${Number(held.total ?? 0).toFixed(2)} EUR` + (held.asked_by ? ` · ${held.asked_by}` : "") }),
     el("div", { className: "sheet-body" }, [
-      el("div", { className: "scroll-x" }, [gateLines(held.lines ?? [])])]),
+      el("div", { className: "scroll-x" }, [gateLines(held.lines ?? [], held.total)])]),
   ]);
 
   const buttons = el("div", { className: "row tight" });
