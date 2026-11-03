@@ -4682,6 +4682,13 @@ async function wireHomeDoors() {
   // install still answers the click, with whatever went wrong, instead of sitting dead.
   for (const button of buttons) {
     button.addEventListener("click", async () => {
+      // Inside the desktop window the window itself asks for it, which is what lets the
+      // page come to the front. In a plain browser the server opens it.
+      const asker = window.webkit?.messageHandlers?.door;
+      if (asker) {
+        asker.postMessage(button.dataset.door);
+        return;
+      }
       button.disabled = true;
       try {
         const opened = await api(`/api/shortcuts/${button.dataset.door}`, { method: "POST" });

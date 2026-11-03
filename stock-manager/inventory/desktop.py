@@ -177,6 +177,32 @@ def open_window(url, stop):
         bar.connect("response", lambda dialog, _response: dialog.destroy())
         bar.show()
 
+    def open_door(manager, result):
+        """A shortcut asked for by name, opened from this window.
+
+        The desktop only raises what a window that has the focus asks it to open: a
+        process started behind the server's back is let run, and its page stays hidden
+        behind this one. Asking through the window is what brings it to the front.
+        """
+        try:
+            value = result.get_js_value().to_string()
+        except AttributeError:
+            value = result.get_value().to_string()
+        try:
+            from . import audit, server, shortcuts
+
+            name, uri, ready = shortcuts.door_uri(value, server.config.data_dir)
+            if not ready:
+                return tell(f"{name} is not there: {uri}")
+            Gtk.show_uri_on_window(window, uri, Gdk.CURRENT_TIME)
+            audit.record(server.config.db_path, server.config.user, "shortcut.open", name)
+        except Exception as e:
+            tell(f"The shortcut did not open: {e}")
+
+    manager = view.get_user_content_manager()
+    manager.register_script_message_handler("door")
+    manager.connect("script-message-received::door", open_door)
+
     wire_downloads(view.get_context(), tell)
     view.connect("create", second_window)
     window.connect("key-press-event", window_keys(window, view))

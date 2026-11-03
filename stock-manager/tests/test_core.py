@@ -3909,3 +3909,16 @@ def test_a_photo_is_kept_upright_and_small_and_a_folder_can_be_shrunk(tmp_path):
     done = photos.shrink_folder(tmp_path)
     assert done["files"] == 1 and done["after"] < done["before"]
     assert (tmp_path / "b.pdf").read_bytes() == b"%PDF-1.4"
+
+
+def test_a_door_is_an_address_the_desktop_can_open(tmp_path, monkeypatch):
+    from inventory import shortcuts
+
+    monkeypatch.delenv("CONTACTS_CSV", raising=False)
+    name, uri, ready = shortcuts.door_uri("discord", tmp_path)
+    assert (name, uri.startswith("https://"), ready) == ("Discord", True, True)
+    (tmp_path / "supplier-contacts.csv").write_text("company\nA\n")
+    name, uri, ready = shortcuts.door_uri("contacts", tmp_path)
+    assert uri == (tmp_path / "supplier-contacts.csv").resolve().as_uri() and ready
+    with pytest.raises(ValueError):
+        shortcuts.door_uri("evil", tmp_path)

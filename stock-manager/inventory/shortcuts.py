@@ -52,6 +52,14 @@ def target(key, data_dir):
     return door["name"], str(path), path.is_file()
 
 
+def door_uri(key, data_dir):
+    """What `key` is as an address the desktop can be asked to open, and whether it is there."""
+    name, where, ready = target(key, data_dir)
+    if "url" not in DOORS[key]:
+        where = Path(where).resolve().as_uri()
+    return name, where, ready
+
+
 def listing(data_dir):
     """What the landing page draws: the five doors, in the order they are shown."""
     out = []
