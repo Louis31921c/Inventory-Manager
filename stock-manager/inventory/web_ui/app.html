@@ -304,7 +304,6 @@
       <input type="file" id="photo-list" accept="image/jpeg,image/png,image/webp" capture="environment">
       <img class="thumb" id="thumb-list" alt="" hidden>
       <span><strong id="photo-list-name">ENTER</strong></span>
-    </label>
     <div class="row">
       <button class="action" id="read-list" disabled>ENTER</button>
       <button class="action ghost" id="cancel-list" hidden>Stop</button>
@@ -330,7 +329,6 @@
       <button class="action" id="list-save">Save the list</button>
       <button class="action ghost" id="list-discard">Discard</button>
     </div>
-  </div>
 
   <div class="card" id="contacts-card">
     <h2>Contacts</h2>
@@ -3318,9 +3316,6 @@ $("mail-settings-check").addEventListener("click", async () => {
 // ---- Baskets filled from the group chat -----------------------------------
 
 async function loadBaskets() {
-  // The card these lines drew into has been taken off the screen. Nothing else reads
-  // them here, and reaching for it would throw inside the refresh that loads the lot.
-  if (!$("basket-card")) return;
   let data;
   try {
     data = await api("/api/baskets");
@@ -3679,8 +3674,9 @@ async function loadContacts() {
     const data = await api("/api/contacts");
     contactRows = data.contacts ?? [];
     incoterms = data.incoterms ?? [];
+    // Said only when there is nothing to ask: the path of a file that is there is noise.
     $("contact-file").textContent = data.file
-      ? `Asking ${data.file}`
+      ? ""
       : "No supplier-contacts.csv found on the disk.";
     renderOrders();
   } catch {
