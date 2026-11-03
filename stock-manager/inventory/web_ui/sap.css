@@ -209,8 +209,8 @@ section.panel {
 #panel-home { display: flex; flex-direction: column; height: 100%; position: relative; }
 /* Stops short of the shortcut column on the right, the same 240 the logo keeps clear of it,
    so a tall list of baskets never runs under Slack, Discord and the others. */
-#gate-card { flex: 0 1 auto; margin-bottom: 8px; margin-right: 240px; overflow-y: auto;
-             z-index: 1; }
+#gate-card { background: transparent; flex: 0 1 auto; margin-bottom: 8px; margin-right: 240px;
+             overflow-y: auto; z-index: 1; }
 .home {
   align-items: stretch;
   bottom: 10px;

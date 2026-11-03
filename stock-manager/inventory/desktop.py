@@ -194,8 +194,22 @@ def open_window(url, stop):
             name, uri, ready = shortcuts.door_uri(value, server.config.data_dir)
             if not ready:
                 return tell(f"{name} is not there: {uri}")
-            Gtk.show_uri_on_window(window, uri, Gdk.CURRENT_TIME)
             audit.record(server.config.db_path, server.config.user, "shortcut.open", name)
+
+            def open_new():
+                try:
+                    Gtk.show_uri_on_window(window, uri, Gdk.CURRENT_TIME)
+                except Exception as e:
+                    tell(f"The shortcut did not open: {e}")
+
+            # Already open in a browser: go back to that window rather than make a tab.
+            title = shortcuts.WINDOW_TITLES.get(value)
+            if title:
+                from . import windows
+
+                windows.raise_existing(title, lambda found: found or open_new())
+            else:
+                open_new()
         except Exception as e:
             tell(f"The shortcut did not open: {e}")
 

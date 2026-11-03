@@ -30,6 +30,11 @@ DOORS = {
                  "default": "supplier-contacts.csv"},
 }
 
+# What a browser window is titled once the page is open in it, so a second click can go
+# back to the window that has it instead of opening another tab. The sheet is not a page.
+WINDOW_TITLES = {"slack": "Slack", "discord": "Discord", "outlook": "Outlook",
+                 "proton": "Proton Mail"}
+
 ORDER = ("slack", "discord", "outlook", "proton", "contacts")
 
 

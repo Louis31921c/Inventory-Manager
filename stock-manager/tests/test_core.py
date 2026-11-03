@@ -3922,3 +3922,10 @@ def test_a_door_is_an_address_the_desktop_can_open(tmp_path, monkeypatch):
     assert uri == (tmp_path / "supplier-contacts.csv").resolve().as_uri() and ready
     with pytest.raises(ValueError):
         shortcuts.door_uri("evil", tmp_path)
+
+
+def test_only_the_doors_that_are_pages_have_a_window_title_to_go_back_to():
+    from inventory import shortcuts
+
+    assert set(shortcuts.WINDOW_TITLES) == {key for key, door in shortcuts.DOORS.items()
+                                            if "url" in door}
