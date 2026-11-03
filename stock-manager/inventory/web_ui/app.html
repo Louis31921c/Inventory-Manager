@@ -4138,44 +4138,38 @@ function gateLines(rows) {
   return table;
 }
 
-const AGENT_WORDS = {
-  same: ["ok", "every article is one we know"],
-  new: ["warn", "at least one article is genuinely new"],
-  unsure: ["warn", "not sure"],
-};
-
 function gateRow(held) {
   const title = el("div", { className: "sheet-title" }, [
     el("strong", { textContent: `#${held.request_id}` }),
     el("span", { className: "muted", textContent:
-      [held.shop, held.site, held.work_item, held.asked_by].filter(Boolean).join(" · ") }),
-    el("strong", { textContent: `${Number(held.total ?? 0).toFixed(2)} EUR` }),
+      [held.shop, held.site, held.work_item].filter(Boolean).join(" · ") }),
   ]);
 
   const why = el("div", { className: "row tight" },
     (held.reasons ?? []).map((one) => el("span", {
       className: "pill backorder", textContent: gateWords[one] ?? one })));
 
-  // The agent settles the names. It never says whether to buy: that is the line below.
-  const [kind, plain] = AGENT_WORDS[held.agent_verdict] ?? ["", "not checked yet"];
-  const agent = el("p", { className: `legend ${kind}` },
-    [`Terminus: ${plain}${held.agent_said ? ` — ${held.agent_said}` : ""}`]);
+  // The lines are behind a button: the card says why it was held, not what is in it.
+  const detail = el("div", { hidden: true }, [
+    el("p", { className: "muted", textContent:
+      `${Number(held.total ?? 0).toFixed(2)} EUR` + (held.asked_by ? ` · ${held.asked_by}` : "") }),
+    el("div", { className: "sheet-body" }, [
+      el("div", { className: "scroll-x" }, [gateLines(held.lines ?? [])])]),
+  ]);
 
   const buttons = el("div", { className: "row tight" });
   const approve = el("button", { className: "action", textContent: "Approve" });
   approve.addEventListener("click", () => gateSay(held.request_id, "approve"));
   const cancel = el("button", { className: "action ghost", textContent: "Cancel" });
   cancel.addEventListener("click", () => gateSay(held.request_id, "cancel"));
-  const check = el("button", { className: "mini", textContent: "Ask Terminus again" });
-  check.addEventListener("click", () => gateSay(held.request_id, "check"));
-  buttons.append(approve, cancel, el("span", { className: "grow" }), check);
+  const develop = el("button", { className: "mini", textContent: "Develop database" });
+  develop.addEventListener("click", () => {
+    detail.hidden = !detail.hidden;
+    develop.textContent = detail.hidden ? "Develop database" : "Fold database";
+  });
+  buttons.append(approve, cancel, el("span", { className: "grow" }), develop);
 
-  return el("div", { className: "sheet" }, [
-    title, why, agent,
-    el("div", { className: "sheet-body" }, [el("div", { className: "scroll-x" },
-      [gateLines(held.lines ?? [])])]),
-    buttons,
-  ]);
+  return el("div", { className: "sheet" }, [title, why, buttons, detail]);
 }
 
 async function gateSay(requestId, word) {
