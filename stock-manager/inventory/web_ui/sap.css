@@ -203,30 +203,36 @@ section.panel {
 
 /* ---- landing screen ------------------------------------------------ */
 
-/* The logo takes the room the screen has and no more, so its foot is never cut off.
-   What waits for approval sits over it and takes its own height first. */
-#panel-home { display: flex; flex-direction: column; height: 100%; }
+/* The logo and the doors fill the screen behind everything, the logo standing on the
+   bottom edge. What waits for approval sits over them and takes its own height, so a
+   long list of baskets covers the logo rather than pushing it out or running into it. */
+#panel-home { display: flex; flex-direction: column; height: 100%; position: relative; }
 /* Stops short of the shortcut column on the right, the same 240 the logo keeps clear of it,
    so a tall list of baskets never runs under Slack, Discord and the others. */
-#gate-card { flex: 0 1 auto; margin-bottom: 8px; margin-right: 240px; overflow-y: auto; }
+#gate-card { flex: 0 1 auto; margin-bottom: 8px; margin-right: 240px; overflow-y: auto;
+             z-index: 1; }
 .home {
   align-items: stretch;
+  bottom: 10px;
   display: flex;
-  flex: 1 1 auto;
   gap: 14px;
   justify-content: center;
+  left: 10px;
   min-height: 0;
+  right: 10px;
+  top: 10px;
+  z-index: 0;
   /* The column is out of the flow, so the logo is kept clear of it by hand: the 180 it
      is wide, plus the 54 it stands off the border, plus a little air. */
   padding-right: 240px;
-  position: relative;
+  position: absolute;
 }
 .home-logo {
   background: url("/landing.png") center / contain no-repeat;
-  align-self: center;
+  align-self: flex-end;
   flex: 0 1 620px;
   height: 100%;
-  max-height: 420px;
+  max-height: 340px;
   min-width: 0;
   opacity: .65;
 }
