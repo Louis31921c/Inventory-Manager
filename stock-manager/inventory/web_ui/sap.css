@@ -203,7 +203,7 @@ section.panel {
 
 /* ---- landing screen ------------------------------------------------ */
 
-/* The logo and the doors fill the screen behind everything, the logo standing on the
+/* The logo and the doors fill the screen behind everything, the logo in the
    middle. What waits for approval sits over them and takes its own height, so a
    long list of baskets covers the logo rather than pushing it out or running into it. */
 #panel-home { display: flex; flex-direction: column; height: 100%; position: relative; }
