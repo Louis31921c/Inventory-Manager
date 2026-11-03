@@ -13,6 +13,7 @@ import secrets
 import socket
 import subprocess
 import tempfile
+import threading
 from datetime import date
 from pathlib import Path
 
@@ -1172,14 +1173,22 @@ class OrderTerms(BaseModel):
     ship_by: str | None = None
 
 
+# Two requests for the contact book can arrive together, and each would find it empty and
+# fill it. One fills, the other waits and then reads what the first wrote.
+_filling_contacts = threading.Lock()
+
+
 @app.get("/api/contacts")
 def read_contacts():
     found = contacts.find_file()
     book = contacts.all_of(config.db_path)
     if not book and found:
         # Nobody has to press anything: an empty book fills itself from the file.
-        contacts.load_file(config.db_path, found, "file")
-        book = contacts.all_of(config.db_path)
+        with _filling_contacts:
+            book = contacts.all_of(config.db_path)
+            if not book:
+                contacts.load_file(config.db_path, found, "file")
+                book = contacts.all_of(config.db_path)
     return {"contacts": book, "incoterms": contacts.terms(),
             "file": str(found) if found else None}
 
