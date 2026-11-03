@@ -3753,3 +3753,37 @@ def test_the_contact_book_fills_itself_while_the_page_is_reading_everything_else
             thread.join()
         assert [path for path, code in answers if code != 200] == []
         assert len(client.get("/api/contacts").json()["contacts"]) == 30
+
+
+def test_every_card_of_the_orders_screen_sits_on_the_screen_and_not_inside_another_card():
+    """A missing </div> once swallowed the contact card into a hidden one, so the page it
+    belongs to could never be seen. Cards are siblings of each other on their screen."""
+    from html.parser import HTMLParser
+
+    from inventory import server as server_module
+
+    class Walker(HTMLParser):
+        VOID = {"input", "img", "br", "hr", "meta", "link"}
+
+        def __init__(self):
+            super().__init__()
+            self.stack, self.parents = [], {}
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if attrs.get("id"):
+                self.parents[attrs["id"]] = next(
+                    (name for name, _ in reversed(self.stack) if name), None)
+            if tag not in self.VOID:
+                self.stack.append((attrs.get("id"), tag))
+
+        def handle_endtag(self, tag):
+            if tag in self.VOID:
+                return
+            while self.stack and self.stack.pop()[1] != tag:
+                pass
+
+    walker = Walker()
+    walker.feed(server_module.PAGE.read_text())
+    for card in ("order-scan", "list-review", "contacts-card", "stored-po"):
+        assert walker.parents[card] == "panel-orders", f"{card} is inside {walker.parents[card]}"
