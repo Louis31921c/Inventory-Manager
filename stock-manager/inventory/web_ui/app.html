@@ -79,7 +79,7 @@
 
 <section class="panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home">
   <div class="card" id="gate-card" hidden>
-    <h2>Waiting for you</h2>
+    <h2>Needs your approval</h2>
     <p class="muted" id="gate-note"></p>
     <div id="gate-list"></div>
   </div>
@@ -4196,12 +4196,11 @@ async function loadGate() {
   $("gate-card").hidden = !rows.length;
   if (!rows.length) return;
 
-  // A broken seal is the one thing on this card that is not about a basket.
+  // Said only when something is wrong: a broken seal is the one thing here that is not
+  // about a basket.
   const log = data.log ?? {};
-  $("gate-note").textContent = `${rows.length} basket(s) held · nothing is bought until `
-    + "you say so · " + (log.whole
-      ? `the log is whole, ${log.entries} entries`
-      : `THE LOG IS BROKEN at entry ${log.broken_at}`);
+  $("gate-note").hidden = Boolean(log.whole);
+  $("gate-note").textContent = log.whole ? "" : `THE LOG IS BROKEN at entry ${log.broken_at}`;
   $("gate-note").className = log.whole ? "muted" : "bad";
   $("gate-list").replaceChildren(...rows.map(gateRow));
 }
