@@ -206,7 +206,9 @@ section.panel {
 /* The logo takes the room the screen has and no more, so its foot is never cut off.
    What waits for approval sits over it and takes its own height first. */
 #panel-home { display: flex; flex-direction: column; height: 100%; }
-#gate-card { flex: 0 1 auto; margin-bottom: 8px; overflow-y: auto; }
+/* Stops short of the shortcut column on the right, the same 240 the logo keeps clear of it,
+   so a tall list of baskets never runs under Slack, Discord and the others. */
+#gate-card { flex: 0 1 auto; margin-bottom: 8px; margin-right: 240px; overflow-y: auto; }
 .home {
   align-items: stretch;
   display: flex;
