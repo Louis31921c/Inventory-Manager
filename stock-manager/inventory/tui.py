@@ -8,7 +8,8 @@ import time
 from datetime import date
 from pathlib import Path
 
-from . import alerts, audit, backup, catalog, db, llm, models_info, simulation, vocabulary
+from . import (alerts, audit, backup, catalog, db, llm, models_info, photos, simulation,
+               vocabulary)
 from .models import Note, Line, parse_date
 from .screen import BRIGHT, DIM, INVERT, KEY, NORMAL, TAB, TAB_ON, WARN, Screen, columns, pad, truncate
 
@@ -149,7 +150,7 @@ class App:
         finally:
             self.busy = ""
         note = catalog.apply(self.config.db_path, note)
-        (self.config.images_dir / f"{sha}{Path(path).suffix.lower()}").write_bytes(data)
+        photos.keep(self.config.images_dir / f"{sha}{Path(path).suffix.lower()}", data)
         self.draft = note
         self.draft_proposed = note.model_copy(deep=True)
         self.draft_sha = sha
@@ -191,7 +192,7 @@ class App:
             return self.say(f"reading failed (error #{reported['error_no']}): {e}")
         finally:
             self.busy = ""
-        (self.config.images_dir / f"{sha}{Path(path).suffix.lower()}").write_bytes(data)
+        photos.keep(self.config.images_dir / f"{sha}{Path(path).suffix.lower()}", data)
         self.sheet_draft = sheet
         self.sheet_sha = sha
         self.sheet_sel = 0

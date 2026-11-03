@@ -159,7 +159,7 @@ def _attachments(message):
 def fetch(config, settings):
     """Unread mail in one folder, attachments into the queue, message left read."""
     box = connect(settings)
-    picked, skipped, seen = [], 0, 0
+    picked, queued_ids, skipped, seen = [], [], 0, 0
     try:
         state, _ = box.select(settings.folder)
         if state != "OK":
@@ -184,9 +184,11 @@ def fetch(config, settings):
                     skipped += 1
                 else:
                     picked.append(answer["name"])
+                    queued_ids.append(answer["intake_id"])
             if settings.mark_read:
                 box.store(number, "+FLAGS", "\\Seen")
     finally:
         _close(box)
 
-    return {"messages": seen, "queued": len(picked), "duplicates": skipped, "names": picked}
+    return {"messages": seen, "queued": len(picked), "duplicates": skipped, "names": picked,
+            "ids": queued_ids}

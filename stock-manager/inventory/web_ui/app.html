@@ -363,6 +363,17 @@
     <p class="muted" id="o-summary"></p>
     <div id="lists"></div>
   </div>
+
+  <div class="card" id="queue-card">
+    <h2>To order, waiting</h2>
+    <p class="muted" id="queue-summary"></p>
+    <div class="row">
+      <button class="action" id="queue-read">read what is to order</button>
+      <button class="action ghost" id="queue-place">order what is due</button>
+    </div>
+    <div id="queue-note"></div>
+    <div class="scroll-x short-box"><table id="table-queue"></table></div>
+  </div>
 </section>
 
 <section class="panel" id="panel-quotes" role="tabpanel" hidden>
@@ -640,6 +651,8 @@
       <label class="field narrow"><span>Folder</span><input id="mail-folder" value="INBOX"></label>
       <label class="field narrow"><span>Check every (min)</span>
         <input id="mail-every" type="number" min="1" max="1440" value="15"></label>
+      <label class="field narrow"><span>Store notes by itself</span>
+        <input id="mail-auto" type="checkbox" checked></label>
     </div>
     <div class="row" id="mail-by-hand" hidden>
       <label class="field grow"><span>IMAP server</span><input id="mail-host"></label>
@@ -1130,7 +1143,8 @@ $("mail-fetch").addEventListener("click", async () => {
     const answer = await api("/api/mail/fetch", postJson({}));
     notice($("mail-note"), "ok",
       `${answer.messages} message(s) read, ${answer.queued} attachment(s) queued`
-      + (answer.duplicates ? `, ${answer.duplicates} already there` : ""));
+      + (answer.duplicates ? `, ${answer.duplicates} already there` : "")
+      + (answer.read ? `, ${answer.read.stored} note(s) stored, ${answer.read.left} left to you` : ""));
     await loadQueue();
   } catch (e) {
     notice($("mail-note"), "bad", e.message);
@@ -3255,6 +3269,7 @@ async function loadMailSettings() {
   $("mail-user").value = now.user ?? "";
   $("mail-folder").value = now.folder ?? "INBOX";
   $("mail-every").value = now.every_minutes ?? 15;
+  $("mail-auto").checked = now.auto_read ?? true;
   $("mail-host").value = now.host ?? "";
   $("mail-port").value = now.port ?? "";
   $("mail-security").value = now.security ?? "ssl";
@@ -3287,6 +3302,7 @@ $("mail-save").addEventListener("click", async () => {
       password: $("mail-password").value || null,
       folder: $("mail-folder").value.trim() || "INBOX",
       every_minutes: Number($("mail-every").value) || 15,
+      auto_read: $("mail-auto").checked,
       host: $("mail-host").value.trim(),
       port: Number($("mail-port").value) || null,
       security: $("mail-security").value,
@@ -3730,6 +3746,55 @@ for (const id of ["contact-person", "contact-company"]) {
     if (event.key === "Enter") askContactFile();
   });
 }
+
+// ---- what is ticked "to order" waits, then Plutus orders it ---------------
+
+function drawQueue(data) {
+  const counts = data.counts ?? {};
+  $("queue-summary").textContent =
+    `Plutus reads every line ticked "to order" and orders it ${data.delay_days} days later. `
+    + `${counts.waiting ?? 0} waiting, ${counts.due ?? 0} due, ${counts.ordered ?? 0} ordered.`;
+  $("queue-place").disabled = !counts.due;
+  renderTable($("table-queue"), [
+    { label: "Article", cell: (row) => document.createTextNode(row.article) },
+    { label: "Qty", numeric: true, cell: (row) => document.createTextNode(showNum(row.quantity)) },
+    { label: "Site", cell: (row) => document.createTextNode(row.site || "—") },
+    { label: "Work item", cell: (row) => document.createTextNode(row.work_item || "—") },
+    { label: "Read on", cell: (row) => document.createTextNode(row.queued_on) },
+    { label: "Orders on", cell: (row) => document.createTextNode(row.due_on) },
+    { label: "State", cell: (row) => document.createTextNode(
+        row.state === "ordered" ? `ordered, list #${row.ordered_list}`
+          : row.days_left <= 0 ? "due" : `in ${row.days_left} day(s)`) },
+  ], data.rows ?? [], "Nothing is ticked \"to order\".");
+}
+
+async function loadOrderQueue() {
+  try {
+    drawQueue(await api("/api/order-queue"));
+  } catch {
+  }
+}
+
+async function askQueue(button, path, said) {
+  button.disabled = true;
+  try {
+    const data = await api(path, { method: "POST" });
+    drawQueue(data);
+    notice($("queue-note"), "ok", said(data));
+    if (path.endsWith("place") && data.orders.length) await refresh();
+  } catch (e) {
+    notice($("queue-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("queue-read").addEventListener("click", () =>
+  askQueue($("queue-read"), "/api/order-queue/collect",
+           (data) => `${data.added} line(s) read, ${data.dropped} let go.`));
+$("queue-place").addEventListener("click", () =>
+  askQueue($("queue-place"), "/api/order-queue/place",
+           (data) => `${data.orders.length} order(s) placed from ${data.lines} line(s).`));
 
 // ---- the chain, and what the two of them have been doing ------------------
 
@@ -4350,7 +4415,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {

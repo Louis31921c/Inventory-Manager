@@ -9,6 +9,7 @@ import logging
 import time
 import mimetypes
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -28,7 +29,7 @@ from dataclasses import replace
 from . import (account, agents, alerts, audit, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, llm,
-               mail_oauth, mailbox, models_info, pg, prices, quotes, routing, sheets,
+               mail_oauth, mailbox, models_info, pg, photos, prices, quotes, reorder, routing, sheets,
                shortcuts, simulation, slack_bot, stock, verify, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
@@ -85,6 +86,7 @@ async def startup():
     log.info("error reports: %s", alerts.destination(config.sms))
     asyncio.create_task(_purge_loop())
     asyncio.create_task(_mail_loop())
+    asyncio.create_task(_queue_loop())
     if discord_bot.settings()["token"]:
         asyncio.create_task(discord_bot.run(config))
     if slack_bot.settings()["bot_token"] and slack_bot.settings()["app_token"]:
@@ -105,6 +107,77 @@ async def _purge_loop():
         await asyncio.sleep(24 * 3600)
 
 
+async def _queue_loop():
+    """Every hour: read what is ticked "to order", and order what has waited long enough."""
+    while True:
+        try:
+            done = await asyncio.to_thread(reorder.run, config.db_path)
+            if done["added"] or done["orders"]:
+                log.info("order queue: %d read, %d order(s) placed",
+                         done["added"], len(done["orders"]))
+        except Exception as e:
+            log.exception("order queue failed")
+            await asyncio.to_thread(report, None, "queue", f"order queue failed: {e}",
+                                    "order queue loop")
+        await asyncio.sleep(3600)
+
+
+# A bill is read as a bill, by a person: a file that says so is left for the queue.
+NOT_A_NOTE = re.compile(r"factur|invoice|\bbill\b|avoir|devis|quote", re.IGNORECASE)
+
+
+async def _read_mail_notes(intake_ids):
+    """Read what the mailbox just brought, and store the delivery notes that read clean.
+
+    A note with anything to fix, a spreadsheet, or something that calls itself a bill
+    stays in the queue for a person, with the reason beside it. A stored note carries
+    the name MAIL, so the audit says where it came from, and it can be deleted like
+    any other.
+    """
+    stored, left = [], 0
+    config.images_dir.mkdir(parents=True, exist_ok=True)
+    known = vocabulary.known_articles(config.db_path)
+    for intake_id in intake_ids:
+        try:
+            raw, media_type, item = intake.bytes_of(config, intake_id)
+        except KeyError:
+            continue
+        if media_type not in SUPPORTED:
+            left += 1
+            continue
+        if NOT_A_NOTE.search(f"{item['name']} {item['subject'] or ''}"):
+            intake.mark(config, intake_id, intake.WAITING, "mail: looks like a bill or a quote")
+            left += 1
+            continue
+        if db.find_by_image(config.db_path, item["sha256"]) is not None:
+            intake.mark(config, intake_id, intake.DONE, "mail: already stored")
+            continue
+        try:
+            note = catalog.apply(config.db_path,
+                                 await get_backend().extract(raw, media_type, known))
+        except Exception as e:
+            intake.mark(config, intake_id, intake.WAITING, f"mail: not read ({str(e)[:120]})")
+            left += 1
+            continue
+        problems = note.problems()
+        if problems:
+            intake.mark(config, intake_id, intake.WAITING, "mail: to fix, " + ", ".join(problems))
+            left += 1
+            continue
+        path = config.images_dir / f"{item['sha256']}{SUPPORTED[media_type]}"
+        photos.keep(path, raw)
+        try:
+            note_id = db.save_note(config.db_path, note, item["sha256"], str(path), "MAIL")
+        except duckdb.ConstraintException:
+            intake.mark(config, intake_id, intake.DONE, "mail: already stored")
+            continue
+        intake.mark(config, intake_id, intake.DONE, f"mail: note #{note_id}")
+        audit.record(config.db_path, "MAIL", "note.save", f"note #{note_id}",
+                     f"{note.supplier} · {len(note.lines)} line(s) · from {item['sender'] or 'mail'}")
+        stored.append(note_id)
+    return {"stored": len(stored), "left": left}
+
+
 last_mail = {"at": None, "queued": 0, "detail": "not run yet"}
 
 
@@ -117,8 +190,11 @@ async def _mail_loop():
             continue
         try:
             answer = await asyncio.to_thread(mailbox.fetch, config, config.mail)
+            read = (await _read_mail_notes(answer["ids"])
+                    if config.mail.auto_read and answer["ids"] else None)
             last_mail.update(at=time.strftime("%Y-%m-%d %H:%M"), queued=answer["queued"],
-                             detail=f"{answer['messages']} message(s), {answer['queued']} queued")
+                             detail=f"{answer['messages']} message(s), {answer['queued']} queued"
+                                    + (f", {read['stored']} note(s) stored" if read else ""))
             if answer["queued"]:
                 log.info("mail: %d attachment(s) queued", answer["queued"])
         except Exception as e:
@@ -431,7 +507,7 @@ async def extract(request: Request, photo: UploadFile):
         raise HTTPException(500, f"Reading failed (error #{reported['error_no']}): {e}") from e
 
     note = catalog.apply(config.db_path, note)
-    (config.images_dir / f"{sha}{SUPPORTED[media_type]}").write_bytes(raw)
+    photos.keep(config.images_dir / f"{sha}{SUPPORTED[media_type]}", raw)
     return JSONResponse({"sha256": sha, "note": note.model_dump()})
 
 
@@ -485,7 +561,7 @@ async def read_queued(request: Request, intake_id: int):
         raise HTTPException(502, str(e)) from e
 
     note = catalog.apply(config.db_path, note)
-    (config.images_dir / f"{item['sha256']}{SUPPORTED[media_type]}").write_bytes(raw)
+    photos.keep(config.images_dir / f"{item['sha256']}{SUPPORTED[media_type]}", raw)
     event(request, "intake.read", item["name"])
     return JSONResponse({"sha256": item["sha256"], "note": note.model_dump(),
                          "intake_id": intake_id})
@@ -523,10 +599,13 @@ async def fetch_mail(request: Request):
         answer = await asyncio.to_thread(mailbox.fetch, config, config.mail)
     except mailbox.MailError as e:
         raise HTTPException(502, str(e)) from e
+    read = (await _read_mail_notes(answer["ids"])
+            if config.mail.auto_read and answer["ids"] else None)
     last_mail.update(at=time.strftime("%Y-%m-%d %H:%M"), queued=answer["queued"],
-                     detail=f"{answer['messages']} message(s), {answer['queued']} queued")
+                     detail=f"{answer['messages']} message(s), {answer['queued']} queued"
+                            + (f", {read['stored']} note(s) stored" if read else ""))
     event(request, "mail.fetch", config.mail.folder, last_mail["detail"])
-    return {**answer, "waiting": intake.waiting(config)}
+    return {**answer, "read": read, "waiting": intake.waiting(config)}
 
 
 class MailSettings(BaseModel):
@@ -536,6 +615,7 @@ class MailSettings(BaseModel):
     folder: str = "INBOX"
     every_minutes: int = 15
     mark_read: bool = True
+    auto_read: bool = True
     host: str = ""
     port: int | None = None
     security: str = ""
@@ -548,6 +628,7 @@ def _mail_state():
     mail = config.mail
     return {"provider": mail.provider, "host": mail.host, "port": mail.port, "user": mail.user,
             "folder": mail.folder, "security": mail.security, "mark_read": mail.mark_read,
+            "auto_read": mail.auto_read,
             "every_minutes": mail.every_minutes, "configured": mail.enabled,
             "password_set": bool(mail.password), "oauth": mail.oauth,
             "client_id": mail.client_id, "tenant": mail.tenant}
@@ -574,6 +655,7 @@ def save_mail_settings(request: Request, body: MailSettings):
     set_setting("IMAP_USER", body.user.strip())
     set_setting("IMAP_FOLDER", body.folder.strip() or "INBOX")
     set_setting("IMAP_MARK_READ", "1" if body.mark_read else "0")
+    set_setting("IMAP_AUTO_READ", "1" if body.auto_read else "0")
     set_setting("MAIL_EVERY_MINUTES", str(min(max(body.every_minutes, 1), 1440)))
     set_setting("IMAP_HOST", body.host.strip() if by_hand else "")
     set_setting("IMAP_PORT", str(body.port) if (by_hand and body.port) else "")
@@ -1002,7 +1084,7 @@ async def read_bill_photo(request: Request, photo: UploadFile):
     if already is not None:
         raise HTTPException(409, f"This bill is already stored (bill #{already}).")
     read = await _read_bill(raw, media_type)
-    (config.images_dir / f"{sha}{SUPPORTED[media_type]}").write_bytes(raw)
+    photos.keep(config.images_dir / f"{sha}{SUPPORTED[media_type]}", raw)
     event(request, "bill.read", photo.filename or "upload")
     return {"sha256": sha, "bill": read}
 
@@ -1023,7 +1105,7 @@ async def read_queued_bill(request: Request, intake_id: int):
         raise HTTPException(409, f"This bill is already stored (bill #{already}).")
 
     read = await _read_bill(raw, media_type)
-    (config.images_dir / f"{item['sha256']}{SUPPORTED[media_type]}").write_bytes(raw)
+    photos.keep(config.images_dir / f"{item['sha256']}{SUPPORTED[media_type]}", raw)
     event(request, "bill.read", item["name"])
     return {"sha256": item["sha256"], "bill": read, "intake_id": intake_id,
             "sender": item.get("sender")}
@@ -1396,7 +1478,7 @@ async def extract_list(request: Request, photo: UploadFile):
                                            f"list reading failed: {e}", "/api/orders/extract")
         raise HTTPException(500, f"Reading failed (error #{reported['error_no']}): {e}") from e
 
-    (config.images_dir / f"{sha}{SUPPORTED[media_type]}").write_bytes(raw)
+    photos.keep(config.images_dir / f"{sha}{SUPPORTED[media_type]}", raw)
     return JSONResponse({"sha256": sha, "list": sheet})
 
 class ListLine(BaseModel):
@@ -1462,6 +1544,28 @@ def set_in_stock(request: Request, list_id: int, line_no: int, body: Stock):
     state = {True: "in stock", False: "to order", None: "not ticked"}[body.in_stock]
     event(request, "order.tick", f"order #{list_id} line {line_no}", state)
     return {"list_id": list_id, "line_no": line_no, "in_stock": body.in_stock}
+
+
+@app.get("/api/order-queue")
+def read_queue():
+    return reorder.listing(config.db_path)
+
+
+@app.post("/api/order-queue/collect")
+def collect_queue(request: Request):
+    """Read every line ticked "to order" now, rather than at the next hour."""
+    done = reorder.collect(config.db_path)
+    event(request, "order.queue.read", f"{done['added']} line(s)",
+          f"{done['dropped']} left the queue")
+    return {**done, **reorder.listing(config.db_path)}
+
+
+@app.post("/api/order-queue/place")
+def place_queue(request: Request):
+    """Order what has waited its fifteen days, now."""
+    done = reorder.place_due(config.db_path)
+    event(request, "order.queue.place", f"{len(done['orders'])} order(s)", "by Plutus")
+    return {**done, **reorder.listing(config.db_path)}
 
 
 @app.delete("/api/orders/{list_id}")

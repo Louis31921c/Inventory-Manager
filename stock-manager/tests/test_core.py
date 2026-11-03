@@ -1619,7 +1619,9 @@ def test_mail_queues_the_attachments(tmp_path, monkeypatch):
     monkeypatch.setattr(mailbox, "connect", lambda settings: FakeBox())
     answer = mailbox.fetch(config, config.mail)
 
-    assert answer == {"messages": 1, "queued": 1, "duplicates": 0, "names": ["BL-306260.pdf"]}
+    assert answer == {"messages": 1, "queued": 1, "duplicates": 0, "names": ["BL-306260.pdf"],
+                      "ids": answer["ids"]}
+    assert len(answer["ids"]) == 1
     assert flags == [(b"1", "\\Seen")]
 
     from inventory import intake
@@ -3801,3 +3803,109 @@ def test_topping_up_adds_quotes_part_deliveries_bills_and_the_round(db_path):
     # A second time does nothing, so the same notes are not made twice.
     assert simulation.top_up(db_path) == {}
     assert db.read(db_path, "SELECT count(*) FROM notes")[0][0] == done["partly delivered"]
+
+
+def _ticked_list(db_path, states):
+    lines = [{"article": f"ART{n}", "designation": "d", "quantity": 2.0 + n, "in_stock": state}
+             for n, state in enumerate(states, 1)]
+    return db.save_purchase_order(db_path, {"list_date": "2026-11-01", "site": "NORD",
+                                            "work_item": "W1", "drafter": "X",
+                                            "lines": lines}, None, None, "T")
+
+
+def test_a_line_ticked_to_order_waits_fifteen_days_then_is_ordered(db_path):
+    from inventory import reorder
+
+    list_id = _ticked_list(db_path, [False, True, False, None])
+    day = date(2026, 11, 3)
+    assert reorder.collect(db_path, day) == {"added": 2, "dropped": 0}
+    assert reorder.collect(db_path, day) == {"added": 0, "dropped": 0}   # once each
+    waiting = reorder.listing(db_path, day)
+    assert waiting["counts"] == {"waiting": 2, "due": 0, "ordered": 0}
+    assert {row["due_on"] for row in waiting["rows"]} == {"2026-11-18"}
+
+    # Nothing is ordered early.
+    assert reorder.place_due(db_path, day + timedelta(days=14))["orders"] == []
+    assert db.read(db_path, "SELECT count(*) FROM purchase_orders")[0][0] == 1
+
+    # One of the two is ticked back to in stock: it leaves the queue.
+    db.set_in_stock(db_path, list_id, 3, True)
+    assert reorder.collect(db_path, day + timedelta(days=1))["dropped"] == 1
+
+    done = reorder.place_due(db_path, day + timedelta(days=15))
+    assert [(o["site"], o["work_item"], o["lines"]) for o in done["orders"]] == [("NORD", "W1", 1)]
+    made = db.read(db_path, "SELECT drafter FROM purchase_orders WHERE list_id <> ?", [list_id])
+    assert len(made) == 1 and made[0][0].upper() == "PLUTUS"
+    assert reorder.listing(db_path, day)["counts"] == {"waiting": 0, "due": 0, "ordered": 1}
+    # Ordered lines are not read a second time.
+    assert reorder.collect(db_path, day + timedelta(days=16))["added"] == 0
+
+
+def test_mailed_delivery_notes_that_read_clean_are_stored_and_the_rest_wait(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("STOCK_USER", raising=False)
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import intake
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+    db.init(server.config.db_path)
+
+    class Reads:
+        model = "fake"
+
+        async def extract(self, raw, media_type, known):
+            if raw.endswith(b"broken"):
+                return make_note(supplier="", lines=[])
+            return make_note()
+
+    server.backend = Reads()
+    ids = [intake.add(server.config, raw, name, "application/pdf", source="mail")["intake_id"]
+           for raw, name in ((b"%PDF good", "bon.pdf"), (b"%PDF broken", "bon2.pdf"),
+                             (b"%PDF bill", "facture-octobre.pdf"))]
+    ids.append(intake.add(server.config, b"a;b\n1;2\n", "lines.csv", "text/csv")["intake_id"])
+
+    done = asyncio.run(server._read_mail_notes(ids))
+    assert done == {"stored": 1, "left": 3}
+    notes = db.read(server.config.db_path, "SELECT confirmed_by FROM notes")
+    assert notes == [("MAIL",)]
+    waiting = {row["name"]: row["note"] for row in intake.waiting(server.config)}
+    assert set(waiting) == {"bon2.pdf", "facture-octobre.pdf", "lines.csv"}
+    assert waiting["bon2.pdf"].startswith("mail: to fix")
+    assert "bill or a quote" in waiting["facture-octobre.pdf"]
+    assert intake.counts(server.config)["read"] == 1
+
+
+def test_a_photo_is_kept_upright_and_small_and_a_folder_can_be_shrunk(tmp_path):
+    import io
+
+    from PIL import Image
+
+    from inventory import photos
+
+    big = Image.effect_noise((3000, 2000), 60).convert("RGB")
+    buffer = io.BytesIO()
+    big.save(buffer, "JPEG", quality=95)
+    raw = buffer.getvalue()
+
+    kept = photos.shrink(raw, ".jpg")
+    assert len(kept) < len(raw) / 2
+    assert max(Image.open(io.BytesIO(kept)).size) == photos.LONG_SIDE
+    # Something that is not a picture, or a PDF, is kept exactly as it came.
+    assert photos.shrink(b"not an image", ".jpg") == b"not an image"
+    assert photos.shrink(b"%PDF-1.4", ".pdf") == b"%PDF-1.4"
+    # A picture that is already small is not made bigger.
+    small = io.BytesIO()
+    Image.new("RGB", (40, 40), "white").save(small, "JPEG", quality=30)
+    assert len(photos.shrink(small.getvalue(), ".jpg")) <= len(small.getvalue())
+
+    (tmp_path / "a.jpg").write_bytes(raw)
+    (tmp_path / "b.pdf").write_bytes(b"%PDF-1.4")
+    done = photos.shrink_folder(tmp_path)
+    assert done["files"] == 1 and done["after"] < done["before"]
+    assert (tmp_path / "b.pdf").read_bytes() == b"%PDF-1.4"

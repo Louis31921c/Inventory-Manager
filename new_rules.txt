@@ -169,10 +169,28 @@ functionnalities to developp :
 
 - DONE (run `stock sample` with the app closed): make up 5 quotes to see if "quotes request" is working fine. also make up some data for "partly delivered" and "bills" and "blockchain"
 
+- DONE: photos are kept small (inventory/photos.py): turned upright, cut to 1600 px on the
+        long side, recompressed, metadata dropped, so a 2 MB phone photo is about 250 KB; the
+        41 photos here went from 67 MB to 4 MB. A raw pixel array would be bigger than the
+        file (a 12 MP photo is 36 MB of numbers), the saving is in the cutting down and the
+        compression, and none of it needs a cloud. The model still reads the photo as it was
+        taken. `stock shrink` does the same to the photos already stored, in place
 - idea to developp : for images storage (delivery note snap), can't we store them as an array ? like I'd do in machine learning . It would take less space and probably not need a cloud service
 
+- DONE: the mailbox reads the delivery notes by itself (Settings, Mailbox, "Store notes by
+        itself", on by default). Every check, each attached pdf or photo is read by the model
+        and, when it reads clean, stored as a note signed MAIL. A note with anything to fix,
+        a spreadsheet, or a file or subject that says facture, invoice, bill, avoir, devis or
+        quote stays in the queue with the reason beside it. The mailbox was already
+        connected (IMAP, Proton Bridge, Gmail, Outlook...); what was missing was the reading
 - for files importation, I'd like it to be directly connected to the mail provider : it reads delivery notes attached files
 
+- DONE: Purchase orders screen, new card "To order, waiting" (inventory/reorder.py, table
+        order_queue). Every hour, and on the "read what is to order" button, Plutus reads
+        every line ticked "to order" into the queue with its due day, fifteen days on. A
+        line ticked back to in stock leaves the queue. Once due, the lines become one
+        purchase order a site and work item, drafted by Plutus (same article merged),
+        or at once with "order what is due". It writes a list, nothing is bought from it
 - in purchase orders>purchase orders , I'd want plutus to read everything that's "to order" and store it in a database, then order it AFTER 15 days
 
 - DONE: when I click on plutus order, I don't wanna see the buffers

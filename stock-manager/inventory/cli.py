@@ -9,7 +9,8 @@ from pathlib import Path
 
 from dataclasses import replace
 
-from . import account, alerts, audit, backup, catalog, db, llm, simulation, sync, vocabulary
+from . import (account, alerts, audit, backup, catalog, db, llm, photos, simulation, sync,
+               vocabulary)
 from .config import load_config, settings_file
 from .tui import read_image
 
@@ -64,7 +65,7 @@ def cmd_read(config, args):
         print("not stored: fix it in the full screen program", file=sys.stderr)
         return 1
     path = config.images_dir / f"{sha}{Path(args.file).suffix.lower()}"
-    path.write_bytes(data)
+    photos.keep(path, data)
     note_id = db.save_note(config.db_path, note, sha, str(path), config.user)
     audit.record(config.db_path, config.user, "note.save", f"note #{note_id}",
                  f"{note.supplier} - {len(note.lines)} line(s)", "cli")
@@ -254,6 +255,13 @@ def cmd_where(config, args):
     return 0
 
 
+def cmd_shrink(config, args):
+    done = photos.shrink_folder(config.images_dir)
+    print(f"photos: {done['files']} shrunk, {done['before'] / 1e6:.1f} MB -> "
+          f"{done['after'] / 1e6:.1f} MB")
+    return 0
+
+
 def cmd_sample(config, args):
     done = simulation.top_up(config.db_path)
     if not done:
@@ -340,6 +348,10 @@ def build_parser():
 
     where = sub.add_parser("where", help="where the data and settings live")
     where.set_defaults(func=cmd_where)
+
+    shrink = sub.add_parser("shrink", help="cut the photos already stored down to 1600 pixels "
+                                           "and recompress them, in place")
+    shrink.set_defaults(func=cmd_shrink)
 
     sample = sub.add_parser("sample", help="add made-up quotes, part deliveries, bills and "
                                            "Blockchain baskets to this database")

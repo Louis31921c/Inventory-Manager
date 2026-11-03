@@ -55,6 +55,7 @@ class MailConfig:
     insecure: bool
     mark_read: bool
     every_minutes: int
+    auto_read: bool = True
     provider: str = ""
     oauth: bool = False
     client_id: str = ""
@@ -129,6 +130,7 @@ def _mail():
         insecure=insecure or (known["insecure"] if provider else False),
         mark_read=os.environ.get("IMAP_MARK_READ", "1").strip().lower() not in ("0", "false", "no"),
         every_minutes=int(os.environ.get("MAIL_EVERY_MINUTES", "15")),
+        auto_read=os.environ.get("IMAP_AUTO_READ", "1").strip().lower() not in ("0", "false", "no"),
         oauth=os.environ.get("IMAP_OAUTH", "").strip().lower() in ("1", "true", "yes"),
         client_id=os.environ.get("AZURE_CLIENT_ID", "").strip(),
         tenant=os.environ.get("AZURE_TENANT", "").strip() or "common",

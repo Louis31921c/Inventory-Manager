@@ -476,6 +476,23 @@ the next start should be blank.
 database of its own to run a simulation on; the year itself is written in
 `inventory/simulation.py`.
 
+## Photos, the mailbox and the order queue
+
+- **Photos are kept small.** A photo is read by the model as it was taken, then stored
+  turned upright, cut to 1600 pixels on its long side and recompressed, with its metadata
+  (where it was taken) dropped: about 250 KB for a 2 MB photo. `stock shrink` does the same
+  to the photos already stored, in place. It is not kept as a pixel array, which would be
+  larger than the file.
+- **The mailbox reads the delivery notes.** With "Store notes by itself" on (Settings,
+  Mailbox), each pdf or photo that arrives is read and, when it reads clean, stored as a
+  note signed `MAIL`. A note with something to fix, a spreadsheet, or a file or subject
+  saying facture, invoice, bill, avoir, devis or quote waits in the queue with the reason.
+- **To order, waiting.** Lines ticked "to order" on a stored purchase order are read into
+  a queue by Plutus (every hour, or the "read what is to order" button) and ordered
+  fifteen days later as one purchase order a site and work item. Tick a line back to
+  in stock and it leaves the queue. `stock sample` adds made-up quotes, part deliveries,
+  bills and Blockchain baskets to a database that already has data.
+
 ## Where things are stored
 
 | What | Path |

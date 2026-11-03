@@ -413,6 +413,30 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        18,
+        "the lines ticked to order, waiting fifteen days before Plutus orders them",
+        """
+        CREATE SEQUENCE IF NOT EXISTS order_queue_seq START 1;
+        CREATE TABLE IF NOT EXISTS order_queue (
+            queue_id     INTEGER PRIMARY KEY DEFAULT nextval('order_queue_seq'),
+            list_id      INTEGER NOT NULL,
+            line_no      INTEGER NOT NULL,
+            article      VARCHAR NOT NULL,
+            designation  VARCHAR,
+            reference    VARCHAR,
+            quantity     DOUBLE,
+            site         VARCHAR,
+            work_item    VARCHAR,
+            queued_on    DATE NOT NULL,
+            due_on       DATE NOT NULL,
+            state        VARCHAR NOT NULL DEFAULT 'waiting',
+            ordered_on   DATE,
+            ordered_list INTEGER,
+            UNIQUE (list_id, line_no)
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """
