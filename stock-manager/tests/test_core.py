@@ -3679,11 +3679,77 @@ def test_the_sample_year_can_be_switched_off_for_an_empty_start(tmp_path, monkey
     assert simulation.enabled() is True      # on unless it is said no
 
 
-def test_a_held_connection_lets_reads_join_the_writer(tmp_path):
+def test_a_write_is_never_refused_because_reads_are_going_on_around_it(tmp_path):
+    """The screens fire a dozen reads at once, and the contact book fills itself in the
+    middle of them. DuckDB refuses a read-write open while a read-only one is live in the
+    same process, so every read of the app's own database has to be opened the same way."""
+    import threading
+
     path = tmp_path / "t.duckdb"
     db.init(path)
-    with db.held(path):
-        db.write(path, "INSERT INTO users (user_name) VALUES ('ALEX')")
-        assert db.read(path, "SELECT count(*) FROM users")[0][0] == 1
-    # Afterwards reads are read-only again, as they always were.
-    assert db.read(path, "SELECT user_name FROM users")[0][0] == "ALEX"
+    stop, errors = threading.Event(), []
+
+    def reader():
+        while not stop.is_set():
+            try:
+                db.read(path, "SELECT count(*) FROM users")
+                audit.events(path, limit=5)
+                audit.users(path)
+            except Exception as e:                      # noqa: BLE001
+                errors.append(f"read: {e}")
+
+    threads = [threading.Thread(target=reader) for _ in range(5)]
+    for thread in threads:
+        thread.start()
+    try:
+        for number in range(40):
+            try:
+                db.write(path, "INSERT INTO users (user_name) VALUES (?)", (f"U{number}",))
+            except Exception as e:                      # noqa: BLE001
+                errors.append(f"write: {e}")
+    finally:
+        stop.set()
+        for thread in threads:
+            thread.join()
+    assert errors == []
+    assert db.read(path, "SELECT count(*) FROM users")[0][0] == 40
+
+
+def test_the_contact_book_fills_itself_while_the_page_is_reading_everything_else(
+        tmp_path, monkeypatch):
+    import importlib
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    paper = tmp_path / "supplier-contacts.csv"
+    paper.write_text("company,person,phone\n" + "".join(
+        f"FIRM{n},Person {n},05 99 00 00 {n:02d}\n" for n in range(30)), encoding="utf-8")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("STOCK_CONTACTS_FILE", str(paper))
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+        answers = []
+
+        def read(path):
+            answers.append((path, client.get(path).status_code))
+
+        # The first screen's fan-out, with the contact page among it.
+        paths = ["/api/audit", "/api/vocabulary", "/api/errors", "/api/accuracy",
+                 "/api/storage", "/api/contacts", "/api/data", "/api/audit"] * 2
+        threads = [threading.Thread(target=read, args=(path,)) for path in paths]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert [path for path, code in answers if code != 200] == []
+        assert len(client.get("/api/contacts").json()["contacts"]) == 30

@@ -106,7 +106,7 @@ def _webhook(sms, text):
 
 
 def recent(db_path, limit=50):
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         rows = con.execute(
             "SELECT error_no, happened_at, kind, description, context, user_name, sms_status "
             "FROM errors ORDER BY error_no DESC LIMIT ?", [int(limit)],

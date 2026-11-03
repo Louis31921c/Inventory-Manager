@@ -28,25 +28,18 @@ class QueryError(Exception):
 # Opening a DuckDB file costs a few milliseconds a time, and filling a new database with a
 # year of paperwork opens it thousands of times. `held` keeps one connection open for the
 # duration, so every other open in this process joins it instead of starting over.
-_held = set()
-
-
 @contextlib.contextmanager
 def held(db_path):
-    key = str(db_path)
-    with duckdb.connect(key):
-        _held.add(key)
-        try:
-            yield
-        finally:
-            _held.discard(key)
+    with duckdb.connect(str(db_path)):
+        yield
 
 
 def read(db_path, sql, args=()):
-    # A file that is held open read-write cannot also be opened read-only in this process,
-    # so a read joins the connection that is already there.
-    kept = str(db_path) in _held
-    with duckdb.connect(str(db_path), read_only=not kept) as con:
+    # Opened the same way a write is. DuckDB refuses a read-write open while a read-only one
+    # is live in the same process, and the screens fire a dozen reads at once: a read-only
+    # read made every write that landed among them fail, the contact book's first fill
+    # included. The one read-only door left is the SQL screen, which needs it to be safe.
+    with duckdb.connect(str(db_path)) as con:
         return con.execute(sql, list(args)).fetchall()
 
 
@@ -208,7 +201,7 @@ EXPORTS = {
 
 
 def export_query(db_path, dataset):
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         con.execute(EXPORTS[dataset])
         return [column[0] for column in con.description], con.fetchall()
 
@@ -216,7 +209,7 @@ def export_query(db_path, dataset):
 def export_to_file(db_path, dataset, out):
     
     options = "(FORMAT parquet)" if out.suffix == ".parquet" else "(HEADER, DELIMITER ';')"
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         con.execute(f"COPY ({EXPORTS[dataset]}) TO '{out}' {options}")
 
 
@@ -276,7 +269,7 @@ def purge_photos(db_path, images_dir, days=42):
 
 def table_counts(db_path):
     """Every table a question can be asked about, with how full it is."""
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         names = [row[0] for row in con.execute("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = 'main' ORDER BY table_name

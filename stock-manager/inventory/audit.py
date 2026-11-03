@@ -57,7 +57,7 @@ def events(db_path, limit=100, user=None):
     name = clean_name(user)
     where = "WHERE user_name = ?" if name else ""
     args = ([name] if name else []) + [int(limit)]
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         rows = con.execute(
             f"SELECT event_id, happened_at, user_name, action, target, detail, address "
             f"FROM audit {where} ORDER BY event_id DESC LIMIT ?", args,
@@ -70,7 +70,7 @@ def events(db_path, limit=100, user=None):
 
 def users(db_path):
    
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         rows = con.execute(
             """
             WITH activity AS (

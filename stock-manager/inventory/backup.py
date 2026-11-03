@@ -14,7 +14,7 @@ TABLES = ("notes", "inventory_lines", "purchase_orders", "purchase_order_lines",
 
 
 def export(source, target):
-    with duckdb.connect(str(source), read_only=True) as con:
+    with duckdb.connect(str(source)) as con:
         con.execute(f"EXPORT DATABASE '{target}' (FORMAT parquet)")
         return _counts(con)
 
@@ -28,7 +28,7 @@ def restore(export_dir, target):
 
 
 def counts(database):
-    with duckdb.connect(str(database), read_only=True) as con:
+    with duckdb.connect(str(database)) as con:
         return _counts(con)
 
 

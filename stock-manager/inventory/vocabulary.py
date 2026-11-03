@@ -35,7 +35,7 @@ def resolve(con, name):
 
 def known_articles(db_path, limit=PROMPT_LIMIT):
    
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         rows = con.execute(
             "SELECT article FROM article_names ORDER BY seen DESC, article LIMIT ?", [limit]
         ).fetchall()
@@ -60,7 +60,7 @@ def backfill(con):
 
 def vocabulary(db_path):
 
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         rows = con.execute(
             """
             WITH on_notes AS (SELECT article, count(*) AS n FROM inventory_lines GROUP BY article),
@@ -91,7 +91,7 @@ def vocabulary(db_path):
 
 
 def aliases(db_path):
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         rows = con.execute(
             "SELECT alias, article, created_at, created_by FROM article_aliases "
             "ORDER BY created_at DESC"

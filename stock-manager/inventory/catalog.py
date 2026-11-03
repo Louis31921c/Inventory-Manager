@@ -52,7 +52,7 @@ def apply(db_path, note):
     
     note = note.model_copy(deep=True)
     supplier = _norm(note.supplier)
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(db_path)) as con:
         for line in note.lines:
             if not line.designation:
                 continue
