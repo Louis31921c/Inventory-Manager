@@ -79,7 +79,7 @@
 
 <section class="panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home">
   <div class="card" id="gate-card" hidden>
-    <h2>Needs your approval</h2>
+    <h2>Baskets needing your approval</h2>
     <p class="muted" id="gate-note"></p>
     <div id="gate-list"></div>
   </div>
@@ -4694,21 +4694,15 @@ async function wireHomeDoors() {
     });
   }
 
-  // The listing only says where each one goes, and which file is not there yet.
-  let known;
+  // Asked only to find out that the server is the old one, which has no doors.
   try {
-    known = (await api("/api/shortcuts")).shortcuts ?? [];
+    await api("/api/shortcuts");
   } catch (e) {
     notice(note, "bad", `${e.message} - restart Stock Manager if it was open during an update.`);
     return;
   }
-  const byKey = new Map(known.map((door) => [door.key, door]));
-  for (const button of buttons) {
-    const door = byKey.get(button.dataset.door);
-    if (!door) continue;
-    // The contact sheet can be missing; the mailboxes and the chats are always there.
-    button.title = door.ready ? door.where : `not there: ${door.where}`;
-  }
+  // Nothing is written on the buttons: a title would show the address on hover. A contact
+  // sheet that is not there says so when it is clicked, which is when it matters.
 }
 
 // The landing screen is the logo, not a card: the work starts from a menu or the tree.
