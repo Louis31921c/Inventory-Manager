@@ -1194,10 +1194,11 @@ def read_contacts():
 
 
 @app.get("/api/contacts/file")
-def search_contact_file(name: str | None = None, company: str | None = None):
+def search_contact_file(name: str | None = None, company: str | None = None,
+                        all: bool = False):
     """Straight from the csv on the disk, not from the book in the database."""
     try:
-        return contacts.look_up(name, company)
+        return contacts.look_up(name, company, limit=None if all else 50)
     except FileNotFoundError as e:
         raise HTTPException(404, str(e)) from e
     except (OSError, UnicodeDecodeError) as e:

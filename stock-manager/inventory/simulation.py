@@ -479,3 +479,69 @@ def init(db_path):
               "About 20 seconds, once.", flush=True)
         seed(path)
     return applied
+
+
+def top_up(db_path, today=None):
+    """Add a little of everything to a database that already has its own data.
+
+    Five quotes in every state, a few delivery notes that arrived part by part, a month
+    of bills and the Blockchain screen's baskets. Nothing is replaced, the round is left
+    alone when it already has requests in it, and a second call does nothing.
+    """
+    if db.read(db_path, "SELECT count(*) FROM audit WHERE action = 'sample.topup'")[0][0]:
+        return {}
+    last = today or date.today()
+    rng = random.Random(SEED + 11)
+    by_supplier = {}
+    for article, designation, supplier, usual, _price in ARTICLES:
+        by_supplier.setdefault(supplier, []).append((article, designation, usual))
+    done = {}
+
+    with db.held(db_path):
+        states = ["open", "sent", "sent", "answered", "closed"]
+        for number, state in enumerate(states, 1):
+            site, work_item = pick_place(rng)
+            quotes_module.save(db_path, {
+                "supplier": rng.choice(list(by_supplier)), "site": site,
+                "work_item": work_item or "",
+                "needed_by": (last + timedelta(days=rng.randint(7, 40))).isoformat(),
+                "state": state, "note": "made up"},
+                [{"article": article, "quantity": amount, "unit": unit}
+                 for article, amount, unit in rng.sample(QUOTE_LINES, rng.randint(1, 3))],
+                "SAMPLE")
+        done["quotes"] = len(states)
+
+        # Notes that came part by part: some lines in, the rest promised for a day.
+        for number in range(1, 5):
+            supplier = rng.choice(list(by_supplier))
+            site, work_item = pick_place(rng)
+            came = last - timedelta(days=rng.randint(2, 20))
+            lines = [Line(article=article, quantity=quantity(rng, usual),
+                          designation=designation, backorder=index >= 2)
+                     for index, (article, designation, usual)
+                     in enumerate(rng.sample(by_supplier[supplier],
+                                             min(4, len(by_supplier[supplier]))))]
+            note = Note(supplier=supplier, delivery_date=came.isoformat(),
+                        order_date=(came - timedelta(days=rng.randint(5, 25))).isoformat(),
+                        site=site,
+                        work_item=work_item or None, lines=lines)
+            saved = db.save_note(db_path, note, f"topup-note-{last.isoformat()}-{number}",
+                                 "", "SAMPLE")
+            for line_no, line in enumerate(lines, 1):
+                if line.backorder and rng.random() < 0.75:
+                    backorders.expect(db_path, saved, line_no,
+                                      (last + timedelta(days=rng.randint(-10, 30))).isoformat())
+        done["partly delivered"] = 4
+
+        year = build(random.Random(SEED + 12), 75, last)
+        for bill in year["bills"][:8]:
+            bills_module.save(db_path, bills_module.shape(bill, source="sample", user="SAMPLE"))
+        done["bills"] = min(len(year["bills"]), 8)
+
+        asked = db.read(db_path, "SELECT count(*) FROM gate_requests")[0][0]
+        if not asked:
+            made = fill_gate(db_path, random.Random(SEED + 7), last)
+            done["blockchain"] = made["requests"]
+    audit.record(db_path, "SAMPLE", "sample.topup", None,
+                 ", ".join(f"{count} {what}" for what, count in done.items()))
+    return done

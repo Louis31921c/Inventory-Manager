@@ -3787,3 +3787,17 @@ def test_every_card_of_the_orders_screen_sits_on_the_screen_and_not_inside_anoth
     walker.feed(server_module.PAGE.read_text())
     for card in ("order-scan", "list-review", "contacts-card", "stored-po"):
         assert walker.parents[card] == "panel-orders", f"{card} is inside {walker.parents[card]}"
+
+
+def test_topping_up_adds_quotes_part_deliveries_bills_and_the_round(db_path):
+    from inventory import simulation
+
+    done = simulation.top_up(db_path)
+    assert done["quotes"] == 5
+    assert db.read(db_path, "SELECT count(*) FROM quotes")[0][0] == 5
+    assert db.read(db_path, "SELECT count(*) FROM notes")[0][0] == done["partly delivered"]
+    assert db.read(db_path, "SELECT count(*) FROM bills")[0][0] == done["bills"] > 0
+    assert db.read(db_path, "SELECT count(*) FROM gate_requests")[0][0] == done["blockchain"]
+    # A second time does nothing, so the same notes are not made twice.
+    assert simulation.top_up(db_path) == {}
+    assert db.read(db_path, "SELECT count(*) FROM notes")[0][0] == done["partly delivered"]

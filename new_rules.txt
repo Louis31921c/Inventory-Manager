@@ -164,3 +164,15 @@ functionnalities to developp :
         empty. The generator moved into the package (inventory/simulation.py) so a pipx
         install has it; sample_data/make_sample_data.py is now a wrapper around it. The
         pour holds one connection open, which took it from 91 seconds to 15
+        
+- DONE: for contacts , when I leave the fiels blank and click enter, "200 line(s) found, the first 50 are shown.". I don't want any response when no field is filled. Instead, add a little "show all" button
+
+- DONE (run `stock sample` with the app closed): make up 5 quotes to see if "quotes request" is working fine. also make up some data for "partly delivered" and "bills" and "blockchain"
+
+- idea to developp : for images storage (delivery note snap), can't we store them as an array ? like I'd do in machine learning . It would take less space and probably not need a cloud service
+
+- for files importation, I'd like it to be directly connected to the mail provider : it reads delivery notes attached files
+
+- in purchase orders>purchase orders , I'd want plutus to read everything that's "to order" and store it in a database, then order it AFTER 15 days
+
+- DONE: when I click on plutus order, I don't wanna see the buffers

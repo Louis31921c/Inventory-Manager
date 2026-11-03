@@ -254,6 +254,15 @@ def cmd_where(config, args):
     return 0
 
 
+def cmd_sample(config, args):
+    done = simulation.top_up(config.db_path)
+    if not done:
+        print("already topped up")
+    for what, count in done.items():
+        print(f"{what}: {count} made up")
+    return 0
+
+
 def cmd_tui(config, args):
     from . import tui
 
@@ -331,6 +340,10 @@ def build_parser():
 
     where = sub.add_parser("where", help="where the data and settings live")
     where.set_defaults(func=cmd_where)
+
+    sample = sub.add_parser("sample", help="add made-up quotes, part deliveries, bills and "
+                                           "Blockchain baskets to this database")
+    sample.set_defaults(func=cmd_sample)
     return parser
 
 

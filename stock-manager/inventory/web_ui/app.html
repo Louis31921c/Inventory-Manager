@@ -340,6 +340,9 @@
       <label class="field narrow" style="justify-content: flex-end">
         <button class="action" id="contact-find">FIND</button>
       </label>
+      <label class="field narrow" style="justify-content: flex-end">
+        <button class="action ghost" id="contact-all">show all</button>
+      </label>
     </div>
     <p class="muted" id="contact-file" hidden></p>
     <div id="contact-note"></div>
@@ -3690,15 +3693,18 @@ async function loadContacts() {
 
 // The card asks the file on the disk, the way a query asks a table: a name, a
 // company, and the lines that answer to both.
-async function askContactFile() {
+async function askContactFile(everything = false) {
   const name = $("contact-person").value.trim();
   const company = $("contact-company").value.trim();
-  const button = $("contact-find");
+  // Both fields empty is not a question: nothing is asked and nothing is said.
+  if (!everything && !name && !company) return;
+  const button = $(everything ? "contact-all" : "contact-find");
   button.disabled = true;
   try {
     const asked = new URLSearchParams();
     if (name) asked.set("name", name);
     if (company) asked.set("company", company);
+    if (everything) asked.set("all", "true");
     const answer = await api(`/api/contacts/file?${asked}`);
     renderTable($("table-contacts"),
                 answer.columns.map((field) => ({
@@ -3717,7 +3723,8 @@ async function askContactFile() {
   }
 }
 
-$("contact-find").addEventListener("click", askContactFile);
+$("contact-find").addEventListener("click", () => askContactFile());
+$("contact-all").addEventListener("click", () => askContactFile(true));
 for (const id of ["contact-person", "contact-company"]) {
   $(id).addEventListener("keydown", (event) => {
     if (event.key === "Enter") askContactFile();
@@ -4371,7 +4378,7 @@ const SCREEN_MENUS = [
   { menu: "tools-menu", drop: "tools-drop", button: "menu-ddmrp",
     panel: "panel-ddmrp", tab: "ddmrp", key: "ddmrp-card", title: "DDMRP",
     // The buffers are the screen itself, so the menu lists what sits under them.
-    skip: ["ddmrp-landing"], go: openPredictions },
+    skip: ["ddmrp-landing"], alone: ["plutus-card"], go: openPredictions },
 ];
 
 // A menu that walks to another screen instead of picking a card on this one.
@@ -4398,6 +4405,12 @@ function menuCards(spec) {
 function showOnly(spec, card) {
   for (const other of menuCards(spec)) {
     other.hidden = other !== card;
+  }
+  // The screen's own card sits above whatever is picked, except for the cards that
+  // want the whole screen to themselves.
+  for (const id of spec.skip) {
+    const own = $(id);
+    if (own && spec.alone) own.hidden = spec.alone.includes(card.id);
   }
   for (const entry of document.querySelectorAll(`#${spec.drop} button`)) {
     entry.setAttribute("aria-current", String(entry.dataset.card === cardName(card)));
