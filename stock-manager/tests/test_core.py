@@ -65,8 +65,17 @@ def test_problems():
 
 @pytest.fixture(autouse=True)
 def no_sample_year(monkeypatch):
-    """A new database is filled with made-up paperwork. The suite wants to start empty."""
+    """A new database is filled with made-up paperwork. The suite wants to start empty.
+
+    The settings file of whoever runs the suite is read into the environment when the
+    server is imported, so the mailbox it names is cleared: a test about a mailbox that
+    is not set up must not meet the real one.
+    """
     monkeypatch.setenv("SAMPLE_DATA", "0")
+    for name in ("MAIL_PROVIDER", "IMAP_HOST", "IMAP_USER", "IMAP_PASSWORD", "IMAP_PORT",
+                 "IMAP_SECURITY", "IMAP_FOLDER", "IMAP_AUTO_READ", "IMAP_MARK_READ",
+                 "MAIL_EVERY_MINUTES"):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
@@ -4097,3 +4106,31 @@ def test_stock_control_routes_refuse_in_words_and_answer_with_the_new_picture(tm
                              headers=mine).status_code == 404
         assert client.post("/api/stockctl/adjust", headers=mine, json={
             "article": "bolt", "site": "nord", "quantity": -1}).status_code == 422
+
+
+def test_lead_times_are_learned_from_the_notes_and_used_by_the_planner(db_path):
+    from inventory import forecast, leadtimes
+
+    for number, wait in enumerate((4, 6, 5, 20), 1):
+        day = date(2026, 10, 1) + timedelta(days=number * 3)
+        db.save_note(db_path, make_note(supplier="SLOWCO", delivery_date=day.isoformat(),
+                                        order_date=(day - timedelta(days=wait)).isoformat(),
+                                        lines=[Line(article="WIDGET", quantity=10)]),
+                     f"lt{number}", "", "T")
+    db.save_note(db_path, make_note(supplier="RARE", delivery_date="2026-10-20",
+                                    order_date="2026-10-10",
+                                    lines=[Line(article="ONCE", quantity=1)]), "lt9", "", "T")
+
+    got = leadtimes.per_supplier(db_path)["SLOWCO"]
+    assert got["n"] == 4 and got["days"] == 5.5 and got["fastest"] == 4 and got["slowest"] == 20
+    assert got["plan_days"] > got["days"]          # plan around the slow one in five
+    assert "WIDGET" in leadtimes.learned(db_path) and "ONCE" not in leadtimes.learned(db_path)
+    assert leadtimes.for_supplier(db_path, "RARE", default=7) == 7      # too few to say
+
+    rows, _span = forecast.articles(db_path, lead=7)
+    by_name = {row["article"]: row for row in rows}
+    assert by_name["WIDGET"]["lead_source"] == "learned"
+    assert by_name["WIDGET"]["lead_days"] == leadtimes.learned(db_path)["WIDGET"]
+    assert by_name["ONCE"]["lead_source"] == "default" and by_name["ONCE"]["lead_days"] == 7
+    rows, _span = forecast.articles(db_path, lead=7, use_learned=False)
+    assert {row["lead_source"] for row in rows} == {"default"}

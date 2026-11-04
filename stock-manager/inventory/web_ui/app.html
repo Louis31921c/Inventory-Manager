@@ -654,6 +654,12 @@
     <div id="buffer-note"></div>
   </div>
 
+  <div class="card" id="lead-card">
+    <h2>Lead times</h2>
+    <p class="muted" id="lead-summary"></p>
+    <div class="scroll-x short-box"><table id="table-leads"></table></div>
+  </div>
+
   <div class="card" id="plutus-card">
     <h2>Plutus orders</h2>
     <div class="row">
@@ -3790,6 +3796,27 @@ async function stockControlAsk(path, options) {
   }
 }
 
+async function loadLeadTimes() {
+  let data;
+  try {
+    data = await api("/api/leadtimes");
+  } catch {
+    return;
+  }
+  $("lead-summary").textContent =
+    "Learned from the ordered and delivered days on the delivery notes. 'Plan around' is the "
+    + "delay one delivery in five exceeds. An article with "
+    + `${data.min_samples}+ deliveries is planned with its own, anything else with the setting.`;
+  renderTable($("table-leads"), [
+    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier) },
+    { label: "Deliveries", numeric: true, cell: (row) => document.createTextNode(String(row.n)) },
+    { label: "Usually (days)", numeric: true, cell: (row) => document.createTextNode(showNum(row.days)) },
+    { label: "Plan around", numeric: true, cell: (row) => document.createTextNode(showNum(row.plan_days)) },
+    { label: "Fastest", numeric: true, cell: (row) => document.createTextNode(String(row.fastest)) },
+    { label: "Slowest", numeric: true, cell: (row) => document.createTextNode(String(row.slowest)) },
+  ], data.suppliers ?? [], "No delivery note carries an order date yet.");
+}
+
 async function loadStockControl() {
   try {
     drawStockControl(await api("/api/stockctl"));
@@ -4675,7 +4702,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {

@@ -1,7 +1,7 @@
 import math
 from datetime import date, timedelta
 
-from . import db
+from . import db, leadtimes
 
 SERVICE_Z = {80: 0.84, 85: 1.04, 90: 1.28, 95: 1.65, 98: 2.05, 99: 2.33}
 
@@ -137,8 +137,12 @@ def _risk(cover_days, horizon, backorders, daily):
     return int(round(risk))
 
 
-def articles(db_path, lead=DEFAULT_LEAD, service=DEFAULT_SERVICE, horizon=DEFAULT_HORIZON):
+def articles(db_path, lead=DEFAULT_LEAD, service=DEFAULT_SERVICE, horizon=DEFAULT_HORIZON,
+             use_learned=True):
+    """One row per article. `lead` is the days to plan for when nothing better is known; an
+    article with enough dated deliveries is planned with what its suppliers really took."""
     first, last, days = _window(db_path)
+    taken = leadtimes.learned(db_path) if use_learned else {}
     usage = _usage(db_path)
     counted = _on_hand(db_path)
     ordered = _on_order(db_path)
@@ -153,8 +157,10 @@ def articles(db_path, lead=DEFAULT_LEAD, service=DEFAULT_SERVICE, horizon=DEFAUL
         weekly_mean = sum(weeks) / len(weeks) if weeks else 0.0
         weekly_spread = _spread(weeks, weekly_mean)
         daily_spread = weekly_spread / 7
-        lead_demand = daily * lead
-        safety = z * daily_spread * math.sqrt(lead)
+        own = taken.get(article)
+        lead_here = max(own, 1.0) if own else lead
+        lead_demand = daily * lead_here
+        safety = z * daily_spread * math.sqrt(lead_here)
         reorder_point = lead_demand + safety
 
         on_hand, counted_on = counted.get(article, (None, None))
@@ -188,6 +194,8 @@ def articles(db_path, lead=DEFAULT_LEAD, service=DEFAULT_SERVICE, horizon=DEFAUL
             "per_day": round(daily, 3),
             "per_week": round(daily * 7, 2),
             "spread_per_week": round(weekly_spread, 2),
+            "lead_days": round(lead_here, 1),
+            "lead_source": "learned" if own else "default",
             "lead_demand": round(lead_demand, 2),
             "safety_stock": round(safety, 2),
             "reorder_point": round(reorder_point, 2),

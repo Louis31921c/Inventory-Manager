@@ -28,7 +28,7 @@ from dataclasses import replace
 
 from . import (account, agents, alerts, audit, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
-               forecast, gate, intake, llm,
+               forecast, gate, intake, leadtimes, llm,
                mail_oauth, mailbox, matching, models_info, pg, photos, prices, quotes, reorder, routing, sheets,
                shortcuts, simulation, slack_bot, stock, stockctl, verify, vocabulary)
 from .config import load_config, set_setting
@@ -1136,6 +1136,12 @@ def save_bill(request: Request, body: BillBody):
     return {"bill_id": bill_id, "bill": bills.one(config.db_path, bill_id)}
 
 
+@app.get("/api/leadtimes")
+def read_lead_times():
+    """How long each supplier really takes, from the delivery notes."""
+    return leadtimes.overview(config.db_path)
+
+
 @app.get("/api/match")
 def three_way_match():
     """Bills against the deliveries they pay for, and orders against what has come in."""
@@ -1888,7 +1894,7 @@ async def draft_order(request: Request, body: OrderDraft):
                                 "Nothing worth ordering: no article is under its reorder point.")
 
     keep = ("article", "designation", "reference", "supplier", "per_week", "on_hand", "on_order",
-            "lead_demand", "safety_stock", "reorder_point", "cover_days", "suggested", "state",
+            "lead_days", "lead_source", "lead_demand", "safety_stock", "reorder_point", "cover_days", "suggested", "state",
             "risk", "backorders")
     planner = {
         "settings": plan["settings"],
