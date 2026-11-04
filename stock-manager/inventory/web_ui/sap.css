@@ -803,17 +803,16 @@ td span.muted { color: var(--ink-soft); }
 .status-down { color: var(--red); font-weight: 700; }
 .status-critical { color: #b45309; font-weight: 700; }
 
-/* The dashboard, twice the size of the compact strip it was: 1200 px, type and cells doubled. */
-#dash-card { align-self: flex-start; font-size: 22px; max-width: 1200px; padding: 10px 16px 14px; width: 100%; }
-#dash-card .row { flex-wrap: nowrap; gap: 8px; }
-#dash-card .stat { flex: 1 1 0; min-width: 0; padding: 4px 10px 6px; }
-#dash-card .stat .stat-name { font-size: 18px; white-space: nowrap; }
-#dash-card .stat strong { font-size: 24px; }
-#dash-card table { font-size: 20px; }
-#dash-card th, #dash-card td { padding: 2px 8px; }
-#dash-card .short-box { max-height: 320px; }
-#dash-card .eyebrow { font-size: 18px; margin: 8px 0 4px; }
-#autonomy-score { font-size: 40px; }
-#dash-card .autonomy-name, #dash-card .autonomy-of { font-size: 22px; }
+/* The dashboard: twice as wide as the compact strip (1200 px), with its small type unchanged. */
+#dash-card { align-self: flex-start; font-size: 11px; max-width: 1200px; padding: 5px 8px 7px; width: 100%; }
+#dash-card .row { flex-wrap: nowrap; gap: 4px; }
+#dash-card .stat { flex: 1 1 0; min-width: 0; padding: 2px 5px 3px; }
+#dash-card .stat .stat-name { font-size: 9px; white-space: nowrap; }
+#dash-card .stat strong { font-size: 12px; }
+#dash-card table { font-size: 10px; }
+#dash-card th, #dash-card td { padding: 1px 4px; }
+#dash-card .short-box { max-height: 160px; }
+#dash-card .eyebrow { margin: 4px 0 2px; }
+#autonomy-score { font-size: 20px; }
 #dash-card td { white-space: normal; }
 #dash-card td.num { white-space: nowrap; }
