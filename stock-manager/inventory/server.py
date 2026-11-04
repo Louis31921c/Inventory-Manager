@@ -29,7 +29,7 @@ from dataclasses import replace
 from . import (account, agents, alerts, audit, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, llm,
-               mail_oauth, mailbox, models_info, pg, photos, prices, quotes, reorder, routing, sheets,
+               mail_oauth, mailbox, matching, models_info, pg, photos, prices, quotes, reorder, routing, sheets,
                shortcuts, simulation, slack_bot, stock, verify, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
@@ -1134,6 +1134,12 @@ def save_bill(request: Request, body: BillBody):
     event(request, "bill.save", f"bill #{bill_id}",
           f"{row['supplier']} · {row['total']} {row['currency']}")
     return {"bill_id": bill_id, "bill": bills.one(config.db_path, bill_id)}
+
+
+@app.get("/api/match")
+def three_way_match():
+    """Bills against the deliveries they pay for, and orders against what has come in."""
+    return matching.report(config.db_path)
 
 
 @app.patch("/api/bills/{bill_id}")

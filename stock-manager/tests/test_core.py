@@ -3929,3 +3929,57 @@ def test_only_the_doors_that_are_pages_have_a_window_title_to_go_back_to():
 
     assert set(shortcuts.WINDOW_TITLES) == {key for key, door in shortcuts.DOORS.items()
                                             if "url" in door}
+
+
+def test_a_bill_is_checked_against_the_deliveries_it_pays_for(db_path):
+    from inventory import bills as bills_module
+    from inventory import matching, prices
+
+    today = date(2026, 11, 3)
+    prices.remember(db_path, "BOLT", 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    for number, day in enumerate((date(2026, 10, 2), date(2026, 10, 9)), 1):
+        db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                        order_date="2026-09-20",
+                                        lines=[Line(article="BOLT", quantity=10)]),
+                     f"s{number}", "", "T")
+
+    def bill(net, when="2026-10-31"):
+        return bills_module.save(db_path, bills_module.shape(
+            {"supplier": "ACME", "number": f"B{net}", "bill_date": when, "net": net,
+             "total": net}, source="t"))
+
+    bill(40.0)                      # 2 deliveries of 10 at 2.00
+    found = matching.bills(db_path, today)
+    assert found["bills"][0]["verdict"] == "matched"
+    assert found["bills"][0]["expected"] == 40.0 and found["bills"][0]["deliveries"] == 2
+
+    bill(55.0, "2026-11-02")        # nothing delivered since the last bill
+    found = matching.bills(db_path, today)
+    verdicts = {row["number"]: row["verdict"] for row in found["bills"]}
+    assert verdicts == {"B40.0": "matched", "B55.0": "nothing delivered"}
+
+    db.save_note(db_path, make_note(supplier="ACME", delivery_date="2026-11-03",
+                                    order_date="2026-10-20",
+                                    lines=[Line(article="BOLT", quantity=5)]), "s3", "", "T")
+    bill(30.0, "2026-11-03")        # 5 bolts are worth 10, the bill says 30
+    found = matching.bills(db_path, today)
+    last = next(row for row in found["bills"] if row["number"] == "B30.0")
+    assert last["verdict"] == "over" and last["gap"] == 20.0
+
+
+def test_an_order_is_checked_against_what_came_in(db_path):
+    from inventory import matching
+
+    today = date(2026, 11, 3)
+    list_id = db.save_purchase_order(db_path, {
+        "list_date": date(2026, 10, 20), "site": "NORD", "work_item": "W1", "drafter": "Plutus",
+        "lines": [{"article": "BOLT", "quantity": 10.0}, {"article": "NUT", "quantity": 4.0}]},
+        None, None, "T")
+    db.save_note(db_path, make_note(supplier="ACME", delivery_date="2026-10-25",
+                                    order_date="2026-10-20", site="NORD", work_item="W1",
+                                    lines=[Line(article="BOLT", quantity=10)]), "o1", "", "T")
+    found = matching.orders(db_path, today)
+    held = found["orders"][0]
+    assert held["list_id"] == list_id and held["state"] == "part delivered"
+    states = {line["article"]: line["state"] for line in held["lines"]}
+    assert states == {"BOLT": "complete", "NUT": "not delivered"}

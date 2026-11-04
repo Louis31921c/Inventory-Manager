@@ -472,6 +472,20 @@
     <div class="scroll-x short-box"><table id="table-bill-months"></table></div>
   </div>
 
+  <div class="card" id="match-card">
+    <h2>Bills against deliveries</h2>
+    <p class="muted">A bill is checked against every delivery of that supplier since its
+      previous bill, at the prices the app has seen. A gap is a question for the supplier,
+      not a verdict.</p>
+    <div class="row" id="match-totals"></div>
+    <div class="scroll-x short-box"><table id="table-match"></table></div>
+    <h3>Delivered, not billed</h3>
+    <div class="scroll-x short-box"><table id="table-unbilled"></table></div>
+    <h3>Ordered, against what came</h3>
+    <div class="scroll-x short-box"><table id="table-order-match"></table></div>
+    <div id="match-note"></div>
+  </div>
+
   <div class="card">
     <h2>Read a bill</h2>
     <label class="file-drop" for="bill-photo">
@@ -3163,6 +3177,78 @@ async function loadBills() {
   renderBillMonths(summary);
 }
 
+async function loadMatch() {
+  let data;
+  try {
+    data = await api("/api/match");
+  } catch {
+    return;
+  }
+  const found = data.bills ?? {};
+  const counts = found.counts ?? {};
+  const orders = data.orders ?? {};
+  $("match-totals").replaceChildren(
+    ...[["matched", counts.matched ?? 0], ["over", counts.over ?? 0],
+        ["under", counts.under ?? 0], ["unchecked", counts.unchecked ?? 0],
+        ["nothing delivered", counts["nothing delivered"] ?? 0],
+        ["orders late", orders.counts?.late ?? 0]]
+      .map(([name, value]) => statTile(name, String(value))));
+
+  const word = (row) => ({
+    matched: "matched", over: `over by ${money(row.gap)}`, under: `under by ${money(-row.gap)}`,
+    unchecked: `${row.unpriced} line(s) without a price`, "nothing delivered": "nothing delivered",
+    "no amount": "no amount",
+  })[row.verdict] ?? row.verdict;
+
+  renderTable($("table-match"), [
+    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier) },
+    { label: "Bill", cell: (row) => document.createTextNode(row.number ?? `#${row.bill_id}`) },
+    { label: "Date", cell: (row) => document.createTextNode(row.bill_date) },
+    { label: "Billed", numeric: true, cell: (row) => document.createTextNode(
+        row.billed == null ? "—" : money(row.billed)) },
+    { label: "Deliveries come to", numeric: true, cell: (row) => document.createTextNode(
+        row.deliveries ? money(row.expected) : "—") },
+    { label: "Result", cell: (row) => el("span", {
+        className: row.verdict === "matched" ? "ok" : (row.verdict === "unchecked" ? "muted" : "bad"),
+        textContent: word(row) + (row.order_unknown ? " · order ref not found" : "") }) },
+    { label: "", cell: (row) => {
+      if (!["over", "under", "nothing delivered"].includes(row.verdict) || row.state === "disputed") {
+        return document.createTextNode(row.state === "disputed" ? "disputed" : "");
+      }
+      const dispute = el("button", { className: "mini", textContent: "dispute" });
+      dispute.addEventListener("click", async () => {
+        try {
+          await api(`/api/bills/${row.bill_id}`, patchJson({ state: "disputed" }));
+          await Promise.all([loadBills(), loadMatch()]);
+        } catch (e) {
+          notice($("match-note"), "bad", e.message);
+        }
+      });
+      return dispute;
+    } },
+  ], found.bills ?? [], "No bill to check yet.");
+
+  renderTable($("table-unbilled"), [
+    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier) },
+    { label: "Deliveries", numeric: true, cell: (row) => document.createTextNode(String(row.deliveries)) },
+    { label: "Since", cell: (row) => document.createTextNode(row.since) },
+    { label: "Days", numeric: true, cell: (row) => document.createTextNode(String(row.days)) },
+    { label: "Worth", numeric: true, cell: (row) => document.createTextNode(money(row.worth)) },
+  ], found.unbilled ?? [], "Every delivery has been billed, or is recent.");
+
+  renderTable($("table-order-match"), [
+    { label: "Order", numeric: true, cell: (row) => document.createTextNode(`#${row.list_id}`) },
+    { label: "Date", cell: (row) => document.createTextNode(row.list_date) },
+    { label: "Site", cell: (row) => document.createTextNode(row.site || "—") },
+    { label: "Work item", cell: (row) => document.createTextNode(row.work_item || "—") },
+    { label: "Lines", cell: (row) => document.createTextNode(row.lines.map((line) =>
+        `${line.article} ${showNum(line.delivered)}/${showNum(line.ordered)}`).join(", ")) },
+    { label: "State", cell: (row) => el("span", {
+        className: row.state === "complete" ? "ok" : (row.state === "late" ? "bad" : "muted"),
+        textContent: row.state }) },
+  ], orders.orders ?? [], "No order to a supplier in the last 120 days.");
+}
+
 pickPhoto($("bill-photo"), $("bill-name"), "thumb-bill", $("bill-read"),
           (file) => { billFile = file; });
 $("bill-read").addEventListener("click", () => billFile && readBillFile(billFile));
@@ -4415,7 +4501,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {

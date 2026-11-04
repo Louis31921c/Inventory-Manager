@@ -787,3 +787,8 @@ select.replaced { display: none; }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
 [hidden] { display: none !important; }
+
+/* A verdict in a table cell. */
+td span.ok { color: var(--green); }
+td span.bad { color: var(--red); font-weight: 700; }
+td span.muted { color: var(--ink-soft); }
