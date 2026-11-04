@@ -44,11 +44,11 @@ ORDERED = "ordered"
 OPEN_STATES = (WAITING, CHECKED)
 
 REASON_WORDS = {
-    "first-article": "first time this article is bought",
-    "new-supplier": "a supplier this article has not come from before",
-    "over-ceiling": f"the basket comes to more than {CEILING:.0f} EUR",
-    "dear-line": f"a line costs more than {DEAR:g} times the usual price",
-    "no-price": "a line carries no price, so the money rules cannot be checked",
+    "first-article": "new article",
+    "new-supplier": "new supplier",
+    "over-ceiling": f"Basket > {CEILING:.0f} EUR",
+    "dear-line": f"{DEAR:g} the usual price",
+    "no-price": "no price",
 }
 
 
