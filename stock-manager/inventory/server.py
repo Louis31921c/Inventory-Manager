@@ -29,7 +29,7 @@ from dataclasses import replace
 from . import (account, agents, alerts, audit, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
-               mail_oauth, mailbox, matching, models_info, pg, photos, prices, quotes, reorder, routing, sheets,
+               mail_oauth, mailbox, matching, models_info, outbox, pg, photos, prices, quotes, reorder, routing, sheets,
                shortcuts, simulation, slack_bot, stock, stockctl, verify, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
@@ -1134,6 +1134,88 @@ def save_bill(request: Request, body: BillBody):
     event(request, "bill.save", f"bill #{bill_id}",
           f"{row['supplier']} · {row['total']} {row['currency']}")
     return {"bill_id": bill_id, "bill": bills.one(config.db_path, bill_id)}
+
+
+class MailRef(BaseModel):
+    list_id: int | None = None
+    quote_id: int | None = None
+    mail_id: int | None = None
+    supplier: str | None = None
+
+
+class DraftEdit(BaseModel):
+    to: str | None = None
+    subject: str | None = None
+    body: str | None = None
+
+
+def _outbox_work(request, action, target, work):
+    """The mails to suppliers: a refusal is in words the person can act on."""
+    try:
+        done = work()
+    except (ValueError, outbox.SendError) as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, f"supplier.{action}", target, None)
+    return {**(done if isinstance(done, dict) else {}),
+            "outbox": outbox.overview(config.db_path, config.mail)}
+
+
+@app.get("/api/outbox")
+def read_outbox():
+    return outbox.overview(config.db_path, config.mail)
+
+
+@app.post("/api/outbox/draft-order")
+def outbox_draft_order(request: Request, body: MailRef):
+    return _outbox_work(request, "draft", f"order #{body.list_id}", lambda: outbox.draft_order(
+        config.db_path, body.list_id, who(request)[0]))
+
+
+@app.post("/api/outbox/draft-quote")
+def outbox_draft_quote(request: Request, body: MailRef):
+    return _outbox_work(request, "draft", f"quote #{body.quote_id}", lambda: outbox.draft_quote(
+        config.db_path, body.quote_id, who(request)[0]))
+
+
+@app.post("/api/outbox/draft-chase")
+def outbox_draft_chase(request: Request, body: MailRef):
+    return _outbox_work(request, "draft", f"chase #{body.mail_id}", lambda: outbox.draft_chase(
+        config.db_path, body.mail_id, who(request)[0]))
+
+
+@app.post("/api/outbox/draft-backorder")
+def outbox_draft_backorder(request: Request, body: MailRef):
+    return _outbox_work(request, "draft", body.supplier or "", lambda: outbox.draft_backorder(
+        config.db_path, body.supplier or "", who(request)[0]))
+
+
+@app.patch("/api/outbox/{mail_id}")
+def outbox_edit(request: Request, mail_id: int, body: DraftEdit):
+    return _outbox_work(request, "edit", f"mail #{mail_id}", lambda: {
+        "draft": outbox.update_draft(config.db_path, mail_id, body.to, body.subject, body.body)})
+
+
+@app.delete("/api/outbox/{mail_id}")
+def outbox_discard(request: Request, mail_id: int):
+    if not outbox.discard(config.db_path, mail_id):
+        raise HTTPException(404, "That draft is not there, or it has already been sent.")
+    event(request, "supplier.discard", f"mail #{mail_id}")
+    return {"outbox": outbox.overview(config.db_path, config.mail)}
+
+
+@app.post("/api/outbox/{mail_id}/send")
+def outbox_send(request: Request, mail_id: int):
+    """The one place a mail leaves: only on this call, for a draft a person has seen."""
+    return _outbox_work(request, "send", f"mail #{mail_id}", lambda: {
+        "sent": outbox.send(config.db_path, mail_id, config.mail, who(request)[0])})
+
+
+@app.post("/api/outbox/{mail_id}/close")
+def outbox_close(request: Request, mail_id: int):
+    if not outbox.close(config.db_path, mail_id):
+        raise HTTPException(404, "That order is not waiting.")
+    event(request, "supplier.close", f"mail #{mail_id}")
+    return {"outbox": outbox.overview(config.db_path, config.mail)}
 
 
 @app.get("/api/leadtimes")

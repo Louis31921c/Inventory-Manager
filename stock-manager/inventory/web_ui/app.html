@@ -416,6 +416,26 @@
     <div id="lists"></div>
   </div>
 
+  <div class="card" id="suppliers-card">
+    <h2>Suppliers</h2>
+    <p class="muted" id="outbox-smtp"></p>
+    <div class="row">
+      <label class="field grow"><span>purchase order</span><select id="ob-order"></select></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="ob-draft-order">draft the mails</button></label>
+      <label class="field grow"><span>quote request</span><select id="ob-quote"></select></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="ob-draft-quote">draft it</button></label>
+    </div>
+    <div id="outbox-note"></div>
+    <p class="eyebrow">Drafts, nothing leaves until you press send</p>
+    <div id="outbox-drafts"></div>
+    <p class="eyebrow">Waiting on suppliers</p>
+    <div class="scroll-x short-box"><table id="table-threads"></table></div>
+    <p class="eyebrow">Delivery-note lines still owed</p>
+    <div class="scroll-x short-box"><table id="table-owing"></table></div>
+    <p class="eyebrow">Mail log</p>
+    <div class="scroll-x short-box"><table id="table-mail-log"></table></div>
+  </div>
+
   <div class="card" id="queue-card">
     <h2>To order, waiting</h2>
     <p class="muted" id="queue-summary"></p>
@@ -4034,6 +4054,178 @@ for (const id of ["contact-person", "contact-company"]) {
   });
 }
 
+// ---- mail to the suppliers and what comes back ---------------------------
+
+function fillOutboxPickers() {
+  const pick = (id, rows, label) => {
+    const box = $(id);
+    const keep = box.value;
+    box.replaceChildren(el("option", { value: "", textContent: "choose..." }),
+                        ...rows.map((row) => el("option", { value: String(row.value),
+                                                            textContent: label(row) })));
+    box.value = keep;
+  };
+  pick("ob-order", lists.map((sheet) => ({ value: sheet.id, sheet })), (row) =>
+    `#${row.value} · ${[row.sheet.list_date, row.sheet.site, row.sheet.work_item]
+      .filter(Boolean).join(" · ")}`);
+  pick("ob-quote", quoteRows.map((quote) => ({ value: quote.quote_id, quote })), (row) =>
+    `#${row.value} · ${row.quote.supplier ?? "?"} · ${row.quote.state}`);
+}
+
+function draftBox(mail) {
+  const to = el("input", { value: mail.to_addr ?? "", placeholder: "supplier's e-mail" });
+  const subject = el("input", { value: mail.subject ?? "" });
+  const body = el("textarea", { rows: 9, value: mail.body ?? "" });
+  const say = el("div");
+  const act = (path, options) => async () => {
+    try {
+      const done = await api(path, options);
+      drawOutbox(done.outbox);
+      return done;
+    } catch (e) {
+      notice(say, "bad", e.message);
+    }
+  };
+  const save = async () => {
+    try {
+      await api(`/api/outbox/${mail.mail_id}`, patchJson({
+        to: to.value.trim(), subject: subject.value, body: body.value }));
+      return true;
+    } catch (e) {
+      notice(say, "bad", e.message);
+      return false;
+    }
+  };
+  const send = el("button", { className: "action", textContent: "send" });
+  send.addEventListener("click", async () => {
+    if (!(await save())) return;
+    send.disabled = true;
+    spinner(say, "Sending...");
+    const done = await act(`/api/outbox/${mail.mail_id}/send`, { method: "POST" })();
+    if (done) notice($("outbox-note"), "ok", `Sent to ${done.sent.to_addr}.`);
+    send.disabled = false;
+  });
+  const keep = el("button", { className: "action ghost", textContent: "save" });
+  keep.addEventListener("click", async () => { if (await save()) notice(say, "ok", "Saved."); });
+  const drop = el("button", { className: "action ghost", textContent: "discard" });
+  drop.addEventListener("click", act(`/api/outbox/${mail.mail_id}`, { method: "DELETE" }));
+
+  const heading = [mail.kind === "chase" ? "Reminder" : mail.kind === "quote" ? "Quote request" : "Order",
+                   mail.supplier].filter(Boolean).join(" · ");
+  return el("div", { className: "sheet" }, [
+    el("div", { className: "sheet-title" }, [el("strong", { textContent: heading }),
+      mail.state === "failed" ? el("span", { className: "bad", textContent:
+        `not sent: ${mail.error ?? ""}` }) : el("span")]),
+    el("label", { className: "field" }, [el("span", { textContent: "to" }), to]),
+    el("label", { className: "field" }, [el("span", { textContent: "subject" }), subject]),
+    el("label", { className: "field" }, [el("span", { textContent: "message" }), body]),
+    el("div", { className: "row tight" }, [send, keep, drop]),
+    say,
+  ]);
+}
+
+function drawOutbox(data) {
+  $("outbox-smtp").textContent = data.smtp?.ready
+    ? `Mails go out from ${data.smtp.detail}.` : (data.smtp?.detail ?? "");
+  fillOutboxPickers();
+  $("outbox-drafts").replaceChildren(...(data.drafts ?? []).map(draftBox));
+  if (!(data.drafts ?? []).length) {
+    $("outbox-drafts").append(el("p", { className: "muted", textContent: "No draft." }));
+  }
+
+  renderTable($("table-threads"), [
+    { label: "Sent", cell: (row) => document.createTextNode((row.sent_at ?? "").slice(0, 10)) },
+    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier ?? "—") },
+    { label: "What", cell: (row) => document.createTextNode(
+        `${row.kind === "quote" ? "quote" : "order"} #${row.ref_id}`) },
+    { label: "State", cell: (row) => el("span", {
+        className: row.needs_chase ? "bad" : (row.state === "confirmed" ? "ok" : "muted"),
+        textContent: row.state === "confirmed" ? "confirmed" : `waiting ${row.days_waiting} day(s)`
+          + (row.chase_count ? `, chased ${row.chase_count}x` : "") }) },
+    { label: "Expect", cell: (row) => document.createTextNode(row.expected_on) },
+    { label: "", cell: (row) => {
+      const box = el("span");
+      if (row.needs_chase) {
+        const chase = el("button", { className: "mini", textContent: "chase" });
+        chase.addEventListener("click", async () => {
+          try {
+            drawOutbox((await api("/api/outbox/draft-chase", postJson({ mail_id: row.mail_id }))).outbox);
+          } catch (e) {
+            notice($("outbox-note"), "bad", e.message);
+          }
+        });
+        box.append(chase, " ");
+      }
+      const done = el("button", { className: "mini", textContent: "received" });
+      done.addEventListener("click", async () => {
+        try {
+          drawOutbox((await api(`/api/outbox/${row.mail_id}/close`, { method: "POST" })).outbox);
+        } catch (e) {
+          notice($("outbox-note"), "bad", e.message);
+        }
+      });
+      box.append(done);
+      return box;
+    } },
+  ], data.threads ?? [], "Nothing is waiting on an answer.");
+
+  renderTable($("table-owing"), [
+    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier) },
+    { label: "Lines", cell: (row) => document.createTextNode(row.lines.map((line) =>
+        `${showNum(line.quantity ?? 0)} x ${line.article}`
+        + (line.expected_on ? ` (promised ${line.expected_on})` : "")).join(", ")) },
+    { label: "", cell: (row) => {
+      const chase = el("button", { className: "mini", textContent: "draft a reminder" });
+      chase.addEventListener("click", async () => {
+        try {
+          drawOutbox((await api("/api/outbox/draft-backorder",
+                                postJson({ supplier: row.supplier }))).outbox);
+        } catch (e) {
+          notice($("outbox-note"), "bad", e.message);
+        }
+      });
+      return chase;
+    } },
+  ], data.owing ?? [], "No line is owed late.");
+
+  renderTable($("table-mail-log"), [
+    { label: "When", cell: (row) => document.createTextNode((row.sent_at ?? row.created_at ?? "").replace("T", " ")) },
+    { label: "", cell: (row) => document.createTextNode(row.direction === "in" ? "received" : "sent") },
+    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier ?? "—") },
+    { label: "Subject", cell: (row) => document.createTextNode(row.subject ?? "") },
+  ], data.log ?? [], "No mail yet.");
+}
+
+async function loadOutbox() {
+  try {
+    drawOutbox(await api("/api/outbox"));
+  } catch {
+  }
+}
+
+async function askDraft(button, path, body) {
+  button.disabled = true;
+  try {
+    const done = await api(path, postJson(body));
+    drawOutbox(done.outbox);
+    notice($("outbox-note"), (done.unassigned ?? []).length ? "warn" : "ok",
+           (done.unassigned ?? []).length
+             ? `No supplier is known for: ${done.unassigned.join(", ")}. Those lines are not in any draft.`
+             : `${(done.drafts ?? []).length} draft(s) ready below.`);
+  } catch (e) {
+    notice($("outbox-note"), "bad", e.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("ob-order").addEventListener("focus", fillOutboxPickers);
+$("ob-quote").addEventListener("focus", fillOutboxPickers);
+$("ob-draft-order").addEventListener("click", () => $("ob-order").value
+  && askDraft($("ob-draft-order"), "/api/outbox/draft-order", { list_id: Number($("ob-order").value) }));
+$("ob-draft-quote").addEventListener("click", () => $("ob-quote").value
+  && askDraft($("ob-draft-quote"), "/api/outbox/draft-quote", { quote_id: Number($("ob-quote").value) }));
+
 // ---- what is ticked "to order" waits, then Plutus orders it ---------------
 
 function drawQueue(data) {
@@ -4702,7 +4894,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {

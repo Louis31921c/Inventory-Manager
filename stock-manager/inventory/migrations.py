@@ -471,6 +471,36 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        20,
+        "mail to and from suppliers: drafts, what was sent, what came back",
+        """
+        CREATE SEQUENCE IF NOT EXISTS supplier_mail_seq START 1;
+        CREATE TABLE IF NOT EXISTS supplier_mail (
+            mail_id         INTEGER PRIMARY KEY DEFAULT nextval('supplier_mail_seq'),
+            direction       VARCHAR NOT NULL,
+            kind            VARCHAR NOT NULL,
+            supplier        VARCHAR,
+            to_addr         VARCHAR,
+            from_addr       VARCHAR,
+            subject         VARCHAR,
+            body            VARCHAR,
+            ref_kind        VARCHAR,
+            ref_id          INTEGER,
+            thread_id       INTEGER,
+            state           VARCHAR NOT NULL,
+            error           VARCHAR,
+            message_id      VARCHAR,
+            created_at      TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            created_by      VARCHAR,
+            sent_at         TIMESTAMP,
+            confirmed_at    TIMESTAMP,
+            eta             DATE,
+            chase_count     INTEGER NOT NULL DEFAULT 0,
+            last_chased_at  TIMESTAMP
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

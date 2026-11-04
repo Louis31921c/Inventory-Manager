@@ -493,6 +493,29 @@ database of its own to run a simulation on; the year itself is written in
   in stock and it leaves the queue. `stock sample` adds made-up quotes, part deliveries,
   bills and Blockchain baskets to a database that already has data.
 
+## Running the logistics end to end
+
+- **Suppliers (Purchase orders screen).** A stored purchase order, or a quote request, becomes
+  one draft mail a supplier, written in French and addressed from the contact book. Nothing
+  leaves until you press send on a draft you can edit. Sending needs a mailbox that takes
+  outgoing mail (Gmail, Yahoo, iCloud, or Proton through the Bridge); Microsoft's sign-in only
+  lets the app read, and any other server is set with `SMTP_HOST` and `SMTP_PORT` in the
+  settings file. A reply from the supplier's address that names the order or quote number
+  is filed against it by the mailbox check, and a date in it becomes the day to expect the
+  goods. An order with no answer after 3 days, or past its promised day, gets a "chase"
+  button that drafts a reminder; delivery-note lines owed late get a reminder per supplier.
+- **Bills against deliveries (Bills screen).** Each bill is checked against every delivery of
+  that supplier since its previous bill, priced at what the app has seen the articles cost.
+  Over, under, unchecked (articles with no known price), nothing delivered, deliveries not
+  billed for 45 days, and orders against what has come in. A gap can be marked disputed.
+- **Stock control (Inventory screen).** Stock by site, transfers between sites, corrections
+  that need a reason, reservations that an order for the same work item uses up, and a
+  cycle count that asks for the busiest articles every 30 days, the next every 60, the rest
+  every 90. A count's gap against the paperwork is kept as a movement.
+- **Lead times (DDMRP screen).** Learned per supplier from the ordered and delivered days on
+  the notes. An article with 3 or more deliveries is planned with its own (the day one
+  delivery in five exceeds); the Lead setting is the fallback, and Plutus sees both.
+
 ## Where things are stored
 
 | What | Path |

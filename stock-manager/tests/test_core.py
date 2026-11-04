@@ -4134,3 +4134,145 @@ def test_lead_times_are_learned_from_the_notes_and_used_by_the_planner(db_path):
     assert by_name["ONCE"]["lead_source"] == "default" and by_name["ONCE"]["lead_days"] == 7
     rows, _span = forecast.articles(db_path, lead=7, use_learned=False)
     assert {row["lead_source"] for row in rows} == {"default"}
+
+
+def _outbox_world(db_path):
+    from inventory import contacts, prices
+
+    prices.remember(db_path, "BOLT", 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    prices.remember(db_path, "NUT", 1.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    prices.remember(db_path, "PIPE", 9.0, supplier="TUBES SA", seen_on=date(2026, 9, 1))
+    contacts.save(db_path, {"company": "ACME", "email": "sales@acme.example"}, "T")
+    return db.save_purchase_order(db_path, {
+        "list_date": date(2026, 10, 30), "site": "NORD", "work_item": "W1", "drafter": "X",
+        "lines": [{"article": "BOLT", "quantity": 10.0, "in_stock": False},
+                  {"article": "NUT", "quantity": 4.0, "in_stock": False},
+                  {"article": "PIPE", "quantity": 2.0, "in_stock": False},
+                  {"article": "ODDITY", "quantity": 1.0, "in_stock": False},
+                  {"article": "SHELF", "quantity": 7.0, "in_stock": True}]}, None, None, "T")
+
+
+def test_an_order_becomes_one_draft_a_supplier_and_is_sent_only_when_told(db_path):
+    from inventory import outbox
+
+    list_id = _outbox_world(db_path)
+    made = outbox.draft_order(db_path, list_id, "T")
+    by_supplier = {row["supplier"]: row for row in made["drafts"]}
+    assert set(by_supplier) == {"ACME", "TUBES SA"} and made["unassigned"] == ["ODDITY"]
+    acme = by_supplier["ACME"]
+    assert acme["to_addr"] == "sales@acme.example" and acme["state"] == "draft"
+    assert "10 x BOLT" in acme["body"] and "4 x NUT" in acme["body"]
+    assert "SHELF" not in acme["body"] and "PIPE" not in acme["body"]
+    assert by_supplier["TUBES SA"]["to_addr"] is None                # no contact on file
+
+    # Asking again hands back the same drafts instead of piling up new ones.
+    again = outbox.draft_order(db_path, list_id, "T")
+    assert {row["mail_id"] for row in again["drafts"]} == {row["mail_id"] for row in made["drafts"]}
+
+    mail = make_config(tmp_path_for(db_path)).mail
+    with pytest.raises(outbox.SendError):                            # no mailbox, nothing goes
+        outbox.send(db_path, acme["mail_id"], mail)
+    with pytest.raises(outbox.SendError):                            # no address on the draft
+        outbox.send(db_path, by_supplier["TUBES SA"]["mail_id"], _ready_mail())
+
+    sent = []
+
+    class Link:
+        def send_message(self, message):
+            sent.append(message)
+
+        def quit(self):
+            pass
+
+    done = outbox.send(db_path, acme["mail_id"], _ready_mail(), "T", connect=lambda m, f: Link())
+    assert done["state"] == "sent" and done["sent_at"]
+    assert sent[0]["To"] == "sales@acme.example" and "Commande n°" in sent[0]["Subject"]
+    assert sent[0]["From"] == "buyer@example.com"
+
+    class Refuses:
+        def send_message(self, message):
+            raise OSError("relay refused")
+
+        def quit(self):
+            pass
+
+    failed = outbox.update_draft(db_path, by_supplier["TUBES SA"]["mail_id"],
+                                 to="tubes@tubes.example")
+    with pytest.raises(outbox.SendError):
+        outbox.send(db_path, failed["mail_id"], _ready_mail(), connect=lambda m, f: Refuses())
+    assert outbox.one(db_path, failed["mail_id"])["state"] == "failed"
+    assert "relay refused" in outbox.one(db_path, failed["mail_id"])["error"]
+    assert outbox.discard(db_path, failed["mail_id"]) is True
+    assert outbox.discard(db_path, acme["mail_id"]) is False         # sent: it stays on record
+
+
+def tmp_path_for(db_path):
+    return db_path.parent
+
+
+def _ready_mail():
+    return MailConfig(host="imap.gmail.com", port=993, user="buyer@example.com",
+                      password="app-password", folder="INBOX", security="ssl", insecure=False,
+                      mark_read=True, every_minutes=15, provider="gmail")
+
+
+def test_a_reply_that_names_the_order_confirms_it_and_an_unanswered_order_is_chased(db_path):
+    from inventory import outbox
+
+    list_id = _outbox_world(db_path)
+    acme = next(r for r in outbox.draft_order(db_path, list_id)["drafts"] if r["supplier"] == "ACME")
+
+    class Link:
+        def send_message(self, message):
+            pass
+
+        def quit(self):
+            pass
+
+    outbox.send(db_path, acme["mail_id"], _ready_mail(), connect=lambda m, f: Link())
+    today = date.today()
+    # Sent now: nothing to chase yet, and the day to expect is the supplier's usual wait.
+    row = outbox.threads(db_path, today)[0]
+    assert row["needs_chase"] is False and row["state"] == "sent"
+    assert row["expected_on"] == (today + timedelta(days=7)).isoformat()
+
+    later = today + timedelta(days=4)
+    row = outbox.threads(db_path, later)[0]
+    assert row["needs_chase"] is True and row["why"] == "no answer yet"
+    chase = outbox.draft_chase(db_path, acme["mail_id"], "T")["drafts"][0]
+    assert chase["kind"] == "chase" and chase["subject"].startswith("Relance")
+    assert outbox.draft_chase(db_path, acme["mail_id"])["drafts"][0]["mail_id"] == chase["mail_id"]
+
+    # Strangers and unrelated mail are not taken.
+    assert outbox.take_reply(db_path, "x@other.example", "Commande n° %d" % list_id, "ok") is None
+    assert outbox.take_reply(db_path, "sales@acme.example", "Bonjour", "no number here") is None
+    when = (today + timedelta(days=9)).strftime("%d/%m/%Y")
+    taken = outbox.take_reply(db_path, "Anne <sales@acme.example>", f"RE: Commande n° {list_id}",
+                              f"Bien reçue, livraison le {when}.", today)
+    assert taken == acme["mail_id"]
+    thread = outbox.one(db_path, acme["mail_id"])
+    assert thread["state"] == "confirmed" and thread["eta"] == (today + timedelta(days=9)).isoformat()
+    assert outbox.threads(db_path, later)[0]["needs_chase"] is False   # promised day not here yet
+    late = today + timedelta(days=12)
+    assert outbox.threads(db_path, late)[0]["why"] == "past the day it was promised"
+    assert outbox.close(db_path, acme["mail_id"]) is True
+    assert outbox.threads(db_path, late) == []
+
+
+def test_lines_a_delivery_note_still_owes_are_chased_by_supplier(db_path):
+    from inventory import backorders, outbox
+
+    _outbox_world(db_path)
+    day = date.today() - timedelta(days=10)
+    note_id = db.save_note(db_path, make_note(
+        supplier="ACME", delivery_date=day.isoformat(), order_date=day.isoformat(),
+        lines=[Line(article="BOLT", quantity=10, backorder=True),
+               Line(article="NUT", quantity=5)]), "ow1", "", "T")
+    owed = outbox.owing(db_path)
+    assert [(row["supplier"], len(row["lines"])) for row in owed] == [("ACME", 1)]
+    draft = outbox.draft_backorder(db_path, "ACME", "T")["drafts"][0]
+    assert "10 x BOLT" in draft["body"] and draft["to_addr"] == "sales@acme.example"
+    with pytest.raises(ValueError):
+        outbox.draft_backorder(db_path, "TUBES SA")
+    backorders.expect(db_path, note_id, 1, (date.today() + timedelta(days=5)).isoformat())
+    assert outbox.owing(db_path) == []                             # a day is promised, not late

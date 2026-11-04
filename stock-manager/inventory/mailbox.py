@@ -156,6 +156,15 @@ def _attachments(message):
         yield name, media_type, raw
 
 
+def _body(message):
+    """The first plain-text part of a message, decoded; what the supplier wrote."""
+    for part in message.walk():
+        if part.get_content_type() == "text/plain" and not part.get_filename():
+            raw = part.get_payload(decode=True) or b""
+            return raw.decode(part.get_content_charset() or "utf-8", errors="replace")
+    return ""
+
+
 def fetch(config, settings):
     """Unread mail in one folder, attachments into the queue, message left read."""
     box = connect(settings)
@@ -177,6 +186,13 @@ def fetch(config, settings):
             message = email.message_from_bytes(data[0][1])
             sender = _text(message.get("From"))
             subject = _text(message.get("Subject"))
+            # A reply to an order or a quote we sent is filed against it, attachment or not.
+            try:
+                from . import outbox
+
+                outbox.take_reply(config.db_path, sender, subject, _body(message))
+            except Exception:
+                pass
             for name, media_type, raw in _attachments(message):
                 answer = intake.add(config, raw, name, media_type, source="mail",
                                     sender=sender, subject=subject)
