@@ -2788,7 +2788,7 @@ def test_the_landing_page_carries_the_approval_window():
 
     page = server_module.PAGE.read_text()
     home = page[page.index('id="panel-home"'):page.index('id="panel-capture"')]
-    assert 'id="gate-card"' in home and "<h2>Waiting for you</h2>" in home
+    assert 'id="gate-card"' in home and "<h2>Baskets needing your approval</h2>" in home
     assert 'id="gate-list"' in home
 
 
