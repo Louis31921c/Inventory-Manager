@@ -3983,3 +3983,117 @@ def test_an_order_is_checked_against_what_came_in(db_path):
     assert held["list_id"] == list_id and held["state"] == "part delivered"
     states = {line["article"]: line["state"] for line in held["lines"]}
     assert states == {"BOLT": "complete", "NUT": "not delivered"}
+
+
+def test_stock_control_moves_reserves_adjusts_and_counts(db_path):
+    from inventory import stock, stockctl
+
+    day = date.today() - timedelta(days=10)
+    db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                    order_date=day.isoformat(), site="NORD", work_item="W1",
+                                    lines=[Line(article="BOLT", quantity=100)]), "c1", "", "T")
+
+    def row(site):
+        return next(r for r in stockctl.site_stock(db_path)
+                    if r["article"] == "BOLT" and r["site"] == site)
+
+    assert row("NORD")["available"] == 100
+
+    stockctl.transfer(db_path, "bolt", "nord", "sud", 30, "T")
+    assert (row("NORD")["on_hand"], row("SUD")["on_hand"]) == (70, 30)
+    with pytest.raises(ValueError):
+        stockctl.transfer(db_path, "bolt", "nord", "sud", 500)
+    with pytest.raises(ValueError):
+        stockctl.transfer(db_path, "bolt", "nord", "nord", 1)
+
+    held = stockctl.reserve(db_path, "bolt", "nord", "w1", 50, user="T")
+    assert (row("NORD")["reserved"], row("NORD")["available"]) == (50, 20)
+    with pytest.raises(ValueError):
+        stockctl.reserve(db_path, "bolt", "nord", "w2", 30)
+
+    # An order for that work item uses the reservation up.
+    db.save_purchase_order(db_path, {"list_date": date.today(), "site": "NORD",
+                                     "work_item": "W1", "drafter": "X",
+                                     "lines": [{"article": "BOLT", "quantity": 20.0}]},
+                           None, None, "T")
+    assert stockctl.reservations(db_path)[0]["left"] == 30
+    assert stockctl.release(db_path, held["reservation_id"]) is True
+    assert stockctl.reservations(db_path) == []
+
+    with pytest.raises(ValueError):
+        stockctl.adjust(db_path, "bolt", "nord", -5, " ")
+    stockctl.adjust(db_path, "bolt", "nord", -5, "broken in the van", "T")
+    assert row("NORD")["on_hand"] == 65
+    assert stock.on_hand_map(db_path)["BOLT"] == 95      # the shelf as a whole, 100 - 5
+
+    # A count replaces the sum, and what is adjusted afterwards is added back.
+    done = stockctl.count(db_path, "bolt", 90, "T")
+    assert (done["expected"], done["variance"]) == (95.0, -5.0)
+    assert stock.on_hand_map(db_path)["BOLT"] == 90
+    assert stockctl.moves(db_path)[0]["kind"] == "count"
+
+
+def test_the_cycle_count_asks_for_busy_and_never_counted_articles_first(db_path):
+    from inventory import stockctl
+
+    today = date(2026, 11, 3)
+    for article, shipped in (("FAST", 90), ("SLOW", 1), ("DEAD", 0)):
+        db.save_note(db_path, make_note(delivery_date="2026-10-01", order_date="2026-09-20",
+                                        lines=[Line(article=article, quantity=100)]),
+                     f"cy-{article}", "", "T")
+    db.save_purchase_order(db_path, {"list_date": date(2026, 10, 15), "site": "NORD",
+                                     "drafter": "X", "lines": [
+                                         {"article": "FAST", "quantity": 90.0},
+                                         {"article": "SLOW", "quantity": 1.0}]},
+                           None, None, "T")
+    asked = stockctl.cycle_due(db_path, today)
+    assert [row["article"] for row in asked["due"]][0] == "FAST"
+    assert {row["article"] for row in asked["due"]} == {"FAST", "SLOW", "DEAD"}
+    assert asked["due"][0]["class"] == "A"
+    db.save_stock_count(db_path, "FAST", 10, "T")
+    db.write(db_path, "UPDATE stock_counts SET counted_on = ?", (date(2026, 10, 25),))
+    again = stockctl.cycle_due(db_path, today)
+    assert "FAST" not in {row["article"] for row in again["due"]}      # counted 9 days ago
+
+
+def test_stock_control_routes_refuse_in_words_and_answer_with_the_new_picture(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("STOCK_USER", raising=False)
+
+    import importlib
+
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse",
+                                     "again": "correct horse"}, headers=mine)
+        db.save_note(server.config.db_path, make_note(
+            delivery_date="2026-10-01", order_date="2026-09-20", site="NORD",
+            lines=[Line(article="BOLT", quantity=50)]), "r1", "", "T")
+
+        refused = client.post("/api/stockctl/transfer", headers=mine, json={
+            "article": "bolt", "from_site": "nord", "to_site": "sud", "quantity": 80})
+        assert refused.status_code == 422 and "free" in refused.json()["detail"]
+
+        done = client.post("/api/stockctl/transfer", headers=mine, json={
+            "article": "bolt", "from_site": "nord", "to_site": "sud", "quantity": 20}).json()
+        sites = {row["site"]: row["on_hand"] for row in done["control"]["sites"]}
+        assert sites == {"NORD": 30, "SUD": 20}
+
+        held = client.post("/api/stockctl/reserve", headers=mine, json={
+            "article": "bolt", "site": "nord", "work_item": "w1", "quantity": 10}).json()
+        rid = held["reservation_id"]
+        assert client.get("/api/stockctl").json()["summary"]["reserved"] == 10
+        gone = client.delete(f"/api/stockctl/reservations/{rid}", headers=mine)
+        assert gone.json()["control"]["summary"]["reserved"] == 0
+        assert client.delete(f"/api/stockctl/reservations/{rid}",
+                             headers=mine).status_code == 404
+        assert client.post("/api/stockctl/adjust", headers=mine, json={
+            "article": "bolt", "site": "nord", "quantity": -1}).status_code == 422

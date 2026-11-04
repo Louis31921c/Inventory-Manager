@@ -44,26 +44,44 @@ def counted(db_path):
     return {row["article"]: row for row in db.stock_counts(db_path)}
 
 
+def adjustments(db_path, after_count=False):
+    """Article -> what stock adjustments added or took off. With after_count, only those
+    made since the day the article was last counted: a count already includes the rest."""
+    since = " AND (c.counted_on IS NULL OR m.moved_on > c.counted_on)" if after_count else ""
+    rows = db.read(db_path, f"""
+            SELECT m.article, sum(m.quantity)
+            FROM stock_moves m LEFT JOIN stock_counts c USING (article)
+            WHERE m.kind = 'adjust'{since}
+            GROUP BY m.article""")
+    return {article: float(total or 0) for article, total in rows}
+
+
 def on_hand_map(db_path):
-    """Article -> what the shelf holds. A hand count replaces the sum for that article."""
+    """Article -> what the shelf holds. A hand count replaces the sum for that article,
+    and what was adjusted after the count is added back to it."""
     came, went = received(db_path), shipped(db_path)
     answer = {article: entry["quantity"] - went.get(article, {}).get("out", 0.0)
               for article, entry in came.items()}
     for article, entry in went.items():
         answer.setdefault(article, -entry["out"])
+    for article, total in adjustments(db_path).items():
+        answer[article] = answer.get(article, 0.0) + total
+    later = adjustments(db_path, after_count=True)
     for article, row in counted(db_path).items():
-        answer[article] = float(row["quantity"])
+        answer[article] = float(row["quantity"]) + later.get(article, 0.0)
     return answer
 
 
 def rows(db_path):
     """One line per article: in, out, still being picked, and what is left."""
     came, went, hand = received(db_path), shipped(db_path), counted(db_path)
+    moved = adjustments(db_path)
     out = []
-    for article in sorted(set(came) | set(went)):
+    for article in sorted(set(came) | set(went) | set(moved)):
         got = came.get(article, {})
         gone = went.get(article, {})
-        running = float(got.get("quantity", 0.0)) - float(gone.get("out", 0.0))
+        running = (float(got.get("quantity", 0.0)) - float(gone.get("out", 0.0))
+                   + moved.get(article, 0.0))
         count = hand.get(article)
         out.append({
             "article": article,

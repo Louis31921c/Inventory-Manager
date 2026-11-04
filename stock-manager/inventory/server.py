@@ -30,7 +30,7 @@ from . import (account, agents, alerts, audit, backorders, backup, baskets, bill
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, llm,
                mail_oauth, mailbox, matching, models_info, pg, photos, prices, quotes, reorder, routing, sheets,
-               shortcuts, simulation, slack_bot, stock, verify, vocabulary)
+               shortcuts, simulation, slack_bot, stock, stockctl, verify, vocabulary)
 from .config import load_config, set_setting
 from .models import Note, parse_date
 
@@ -1766,6 +1766,86 @@ def put_stock_count(request: Request, body: StockCount):
     event(request, "stock.count", body.article,
           "cleared" if body.quantity is None else str(body.quantity))
     return {"article": article or body.article, "quantity": body.quantity}
+
+
+def _stock_control(request, action, target, work):
+    """One door for the stock-control writes: a refusal is the person's to read, not an error."""
+    try:
+        done = work()
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, f"stock.{action}", target, None)
+    return {**done, "control": stockctl.overview(config.db_path)}
+
+
+class Transfer(BaseModel):
+    article: str
+    from_site: str
+    to_site: str
+    quantity: float
+    note: str | None = None
+    force: bool = False
+
+
+class Adjustment(BaseModel):
+    article: str
+    site: str | None = None
+    quantity: float
+    reason: str = ""
+
+
+class Reservation(BaseModel):
+    article: str
+    site: str | None = None
+    work_item: str | None = None
+    quantity: float
+    needed_by: str | None = None
+    note: str | None = None
+    force: bool = False
+
+
+class CycleCount(BaseModel):
+    article: str
+    quantity: float
+
+
+@app.get("/api/stockctl")
+def read_stock_control():
+    return stockctl.overview(config.db_path)
+
+
+@app.post("/api/stockctl/transfer")
+def stock_transfer(request: Request, body: Transfer):
+    return _stock_control(request, "transfer", body.article, lambda: stockctl.transfer(
+        config.db_path, body.article, body.from_site, body.to_site, body.quantity,
+        who(request)[0], body.note, body.force))
+
+
+@app.post("/api/stockctl/adjust")
+def stock_adjust(request: Request, body: Adjustment):
+    return _stock_control(request, "adjust", body.article, lambda: stockctl.adjust(
+        config.db_path, body.article, body.site, body.quantity, body.reason, who(request)[0]))
+
+
+@app.post("/api/stockctl/reserve")
+def stock_reserve(request: Request, body: Reservation):
+    return _stock_control(request, "reserve", body.article, lambda: stockctl.reserve(
+        config.db_path, body.article, body.site, body.work_item, body.quantity,
+        body.needed_by, who(request)[0], body.note, body.force))
+
+
+@app.delete("/api/stockctl/reservations/{reservation_id}")
+def stock_release(request: Request, reservation_id: int):
+    if not stockctl.release(config.db_path, reservation_id):
+        raise HTTPException(404, "That reservation is not held any more.")
+    event(request, "stock.release", f"reservation #{reservation_id}")
+    return {"control": stockctl.overview(config.db_path)}
+
+
+@app.post("/api/stockctl/count")
+def stock_cycle_count(request: Request, body: CycleCount):
+    return _stock_control(request, "count", body.article, lambda: stockctl.count(
+        config.db_path, body.article, body.quantity, who(request)[0]))
 
 
 class OrderDraft(BaseModel):

@@ -233,6 +233,58 @@
     <div class="scroll-x short-box"><table id="table-stock"></table></div>
   </div>
 
+  <div class="card" id="site-stock-card">
+    <h2>Stock by site</h2>
+    <div class="row" id="site-stats"></div>
+    <div class="row tight">
+      <label class="field grow"><span>search</span><input id="site-search" placeholder="article or site"></label>
+    </div>
+    <div class="scroll-x short-box"><table id="table-site-stock"></table></div>
+  </div>
+
+  <div class="card" id="stock-moves-card">
+    <h2>Move, hold back, correct</h2>
+    <datalist id="stock-articles"></datalist>
+    <datalist id="stock-sites"></datalist>
+    <p class="eyebrow">Transfer between sites</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="mv-article" list="stock-articles" autocomplete="off"></label>
+      <label class="field grow"><span>from</span><input id="mv-from" list="stock-sites" autocomplete="off"></label>
+      <label class="field grow"><span>to</span><input id="mv-to" list="stock-sites" autocomplete="off"></label>
+      <label class="field narrow"><span>quantity</span><input id="mv-qty" inputmode="decimal"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="mv-go">transfer</button></label>
+    </div>
+    <p class="eyebrow">Hold back for a work item</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="rs-article" list="stock-articles" autocomplete="off"></label>
+      <label class="field grow"><span>site</span><input id="rs-site" list="stock-sites" autocomplete="off"></label>
+      <label class="field grow"><span>work item</span><input id="rs-work" autocomplete="off"></label>
+      <label class="field narrow"><span>quantity</span><input id="rs-qty" inputmode="decimal"></label>
+      <label class="field narrow"><span>needed by</span><input id="rs-by" type="date"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="rs-go">hold back</button></label>
+    </div>
+    <p class="eyebrow">Correct the stock (a reason is needed)</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="aj-article" list="stock-articles" autocomplete="off"></label>
+      <label class="field grow"><span>site</span><input id="aj-site" list="stock-sites" autocomplete="off"></label>
+      <label class="field narrow"><span>by (+ or -)</span><input id="aj-qty" inputmode="decimal"></label>
+      <label class="field grow"><span>reason</span><input id="aj-reason" autocomplete="off" placeholder="broken, found, miscounted..."></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="aj-go">correct</button></label>
+    </div>
+    <div id="stockctl-note"></div>
+    <p class="eyebrow">Held back</p>
+    <div class="scroll-x short-box"><table id="table-reservations"></table></div>
+    <p class="eyebrow">Last movements</p>
+    <div class="scroll-x short-box"><table id="table-moves"></table></div>
+  </div>
+
+  <div class="card" id="cycle-card">
+    <h2>Count next</h2>
+    <p class="muted" id="cycle-summary"></p>
+    <div class="scroll-x short-box"><table id="table-cycle"></table></div>
+    <div id="cycle-note"></div>
+  </div>
+
   <div class="card">
     <h2>Partly delivered</h2>
     <div class="row" id="waiting-stats"></div>
@@ -3634,6 +3686,128 @@ $("stock-short").addEventListener("click", () => {
   renderStock();
 });
 
+// ---- stock control: sites, reservations, corrections, cycle counts --------
+
+let siteRows = [];
+
+function drawStockControl(data) {
+  const summary = data.summary ?? {};
+  siteRows = data.sites ?? [];
+  $("site-stats").replaceChildren(
+    statTile("lines", String(summary.lines ?? 0)),
+    statTile("held back", showNum(summary.reserved ?? 0)),
+    statTile("below zero", String(summary.negative ?? 0)));
+  renderSiteStock();
+
+  $("stock-articles").replaceChildren(...[...new Set(siteRows.map((row) => row.article))]
+    .map((name) => el("option", { value: name })));
+  $("stock-sites").replaceChildren(...[...new Set(siteRows.map((row) => row.site).filter(Boolean))]
+    .map((name) => el("option", { value: name })));
+
+  renderTable($("table-reservations"), [
+    { label: "Article", cell: (row) => document.createTextNode(row.article) },
+    { label: "Site", cell: (row) => document.createTextNode(row.site || "—") },
+    { label: "Work item", cell: (row) => document.createTextNode(row.work_item || "—") },
+    { label: "Held", numeric: true, cell: (row) => document.createTextNode(
+        `${showNum(row.left)} of ${showNum(row.quantity)}`) },
+    { label: "Needed by", cell: (row) => document.createTextNode(row.needed_by ?? "—") },
+    { label: "", cell: (row) => {
+      const free = el("button", { className: "mini", textContent: "release" });
+      free.addEventListener("click", () => stockControlAsk(
+        `/api/stockctl/reservations/${row.reservation_id}`, { method: "DELETE" }));
+      return free;
+    } },
+  ], data.reservations ?? [], "Nothing is held back.");
+
+  renderTable($("table-moves"), [
+    { label: "Day", cell: (row) => document.createTextNode(row.moved_on) },
+    { label: "What", cell: (row) => document.createTextNode(
+        { transfer_out: "transfer out", transfer_in: "transfer in", adjust: "correction",
+          count: "count gap" }[row.kind] ?? row.kind) },
+    { label: "Article", cell: (row) => document.createTextNode(row.article) },
+    { label: "Site", cell: (row) => document.createTextNode(row.site || "—") },
+    { label: "Qty", numeric: true, cell: (row) => document.createTextNode(showNum(row.quantity)) },
+    { label: "Why", cell: (row) => document.createTextNode(row.reason || row.ref || "—") },
+    { label: "By", cell: (row) => document.createTextNode(row.by ?? "—") },
+  ], data.moves ?? [], "No movement yet.");
+
+  const cycle = data.cycle ?? {};
+  $("cycle-summary").textContent =
+    `${cycle.total_due ?? 0} article(s) are due. The busiest quarter is counted every 30 days, `
+    + "the next every 60, the rest every 90. Count first, the paperwork's figure comes after.";
+  renderTable($("table-cycle"), [
+    { label: "Article", cell: (row) => document.createTextNode(row.article) },
+    { label: "Class", cell: (row) => document.createTextNode(row.class) },
+    { label: "Last counted", cell: (row) => document.createTextNode(
+        row.last_counted ? `${row.last_counted} (${row.days_since} days)` : "never") },
+    { label: "Counted", cell: (row) => {
+      const box = el("input", { className: "cell", inputMode: "decimal", size: 6 });
+      const go = el("button", { className: "mini", textContent: "count" });
+      go.addEventListener("click", async () => {
+        if (box.value.trim() === "") return;
+        try {
+          const done = await api("/api/stockctl/count",
+                                 postJson({ article: row.article, quantity: Number(box.value) }));
+          drawStockControl(done.control);
+          notice($("cycle-note"), done.variance ? "warn" : "ok",
+                 `${row.article}: counted ${showNum(done.counted)}, the paperwork said `
+                 + `${showNum(done.expected)} (${done.variance > 0 ? "+" : ""}${showNum(done.variance)}).`);
+          loadStock();
+        } catch (e) {
+          notice($("cycle-note"), "bad", e.message);
+        }
+      });
+      return el("span", {}, [box, go]);
+    } },
+  ], cycle.due ?? [], "Nothing is due for a count.");
+}
+
+function renderSiteStock() {
+  const asked = $("site-search").value.trim().toUpperCase();
+  const rows = siteRows.filter((row) => !asked
+    || row.article.includes(asked) || row.site.includes(asked));
+  renderTable($("table-site-stock"), [
+    { label: "Article", cell: (row) => document.createTextNode(row.article) },
+    { label: "Site", cell: (row) => document.createTextNode(row.site || "—") },
+    { label: "On hand", numeric: true, cell: (row) => document.createTextNode(showNum(row.on_hand)) },
+    { label: "Held back", numeric: true, cell: (row) => document.createTextNode(
+        row.reserved ? showNum(row.reserved) : "—") },
+    { label: "Free", numeric: true, cell: (row) => el("span", {
+        className: row.available < 0 ? "bad" : "", textContent: showNum(row.available) }) },
+  ], rows.slice(0, 300), "Nothing is standing anywhere yet.");
+}
+
+async function stockControlAsk(path, options) {
+  try {
+    const done = await api(path, options);
+    drawStockControl(done.control);
+    notice($("stockctl-note"), "ok", "Done.");
+    loadStock();
+    return true;
+  } catch (e) {
+    notice($("stockctl-note"), "bad", e.message);
+    return false;
+  }
+}
+
+async function loadStockControl() {
+  try {
+    drawStockControl(await api("/api/stockctl"));
+  } catch {
+  }
+}
+
+$("site-search").addEventListener("input", renderSiteStock);
+$("mv-go").addEventListener("click", () => stockControlAsk("/api/stockctl/transfer", postJson({
+  article: $("mv-article").value, from_site: $("mv-from").value, to_site: $("mv-to").value,
+  quantity: Number($("mv-qty").value) })));
+$("rs-go").addEventListener("click", () => stockControlAsk("/api/stockctl/reserve", postJson({
+  article: $("rs-article").value, site: $("rs-site").value, work_item: $("rs-work").value,
+  quantity: Number($("rs-qty").value), needed_by: $("rs-by").value || null })));
+$("aj-go").addEventListener("click", () => stockControlAsk("/api/stockctl/adjust", postJson({
+  article: $("aj-article").value, site: $("aj-site").value,
+  quantity: Number($("aj-qty").value), reason: $("aj-reason").value })));
+
 // ---- the tables a question can be asked about -----------------------------
 
 async function loadTables() {
@@ -4501,7 +4675,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {

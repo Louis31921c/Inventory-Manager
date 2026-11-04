@@ -437,6 +437,40 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        19,
+        "stock control: movements between sites, adjustments, reservations",
+        """
+        CREATE SEQUENCE IF NOT EXISTS stock_move_seq START 1;
+        CREATE TABLE IF NOT EXISTS stock_moves (
+            move_id    INTEGER PRIMARY KEY DEFAULT nextval('stock_move_seq'),
+            article    VARCHAR NOT NULL,
+            site       VARCHAR,
+            quantity   DOUBLE NOT NULL,
+            kind       VARCHAR NOT NULL,
+            reason     VARCHAR,
+            ref        VARCHAR,
+            moved_on   DATE NOT NULL DEFAULT current_date,
+            created_at TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            created_by VARCHAR
+        );
+
+        CREATE SEQUENCE IF NOT EXISTS reservation_seq START 1;
+        CREATE TABLE IF NOT EXISTS reservations (
+            reservation_id INTEGER PRIMARY KEY DEFAULT nextval('reservation_seq'),
+            article        VARCHAR NOT NULL,
+            site           VARCHAR,
+            work_item      VARCHAR,
+            quantity       DOUBLE NOT NULL,
+            needed_by      DATE,
+            note           VARCHAR,
+            state          VARCHAR NOT NULL DEFAULT 'active',
+            created_on     DATE NOT NULL DEFAULT current_date,
+            created_at     TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            created_by     VARCHAR
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """
