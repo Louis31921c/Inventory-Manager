@@ -800,7 +800,5 @@ td span.muted { color: var(--ink-soft); }
 .autonomy-name { color: var(--ink-soft); font-weight: 700; text-transform: uppercase; }
 #autonomy-score { font-size: 28px; font-variant-numeric: tabular-nums; }
 .autonomy-of { color: var(--ink-soft); }
-.autonomy-bar { background: var(--line-soft); display: inline-block; height: 8px; min-width: 120px; width: 22%; }
-.autonomy-bar > span { background: var(--accent); display: block; height: 100%; transition: width .6s; width: 0; }
 .status-down { color: var(--red); font-weight: 700; }
 .status-critical { color: #b45309; font-weight: 700; }

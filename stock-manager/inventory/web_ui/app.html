@@ -84,24 +84,25 @@
     <div id="gate-list"></div>
   </div>
   <div class="card" id="dash-card">
-    <div class="autonomy">
-      <span class="autonomy-name">Autonomy</span>
-      <strong id="autonomy-score">--.--</strong><span class="autonomy-of">/ 100</span>
-      <span class="autonomy-bar"><span id="autonomy-fill"></span></span>
-      <button class="mini" id="autonomy-more" type="button">how it is worked out</button>
+    <div class="row tight">
+      <button class="action ghost" id="dash-toggle" type="button" aria-expanded="false">Short watch dashboard</button>
     </div>
-    <div id="autonomy-detail" hidden>
-      <p class="eyebrow">Where the points are, by value</p>
-      <ol id="autonomy-next"></ol>
-      <div class="row" id="autonomy-areas"></div>
-      <table id="table-autonomy"></table>
-      <p class="muted" id="autonomy-note"></p>
+    <div id="dash-body" hidden>
+      <div class="autonomy">
+        <span class="autonomy-name">DEV-Score</span>
+        <strong id="autonomy-score">--.--</strong><span class="autonomy-of">/ 100</span>
+      </div>
+      <div id="autonomy-detail">
+        <p class="eyebrow">Where the points are, by value</p>
+        <ol id="autonomy-next"></ol>
+        <div class="row" id="autonomy-areas"></div>
+        <table id="table-autonomy"></table>
+        <p class="muted" id="autonomy-note"></p>
+      </div>
+      <div class="row" id="dash-kpis"></div>
+      <p class="eyebrow">Shortages</p>
+      <div class="scroll-x short-box"><table id="table-shortages"></table></div>
     </div>
-    <div class="row" id="dash-kpis"></div>
-    <p class="eyebrow">Shortages</p>
-    <div class="scroll-x short-box"><table id="table-shortages"></table></div>
-    <p class="eyebrow">Open actions</p>
-    <div class="scroll-x short-box"><table id="table-actions"></table></div>
   </div>
   <div class="home">
     <div class="home-logo" role="img" aria-label="Logistics Manager"></div>
@@ -4414,9 +4415,8 @@ function drawDashboard(data) {
     { label: "Root cause", cell: (row) => td(`${row.cause}${row.cause_detail ? `: ${row.cause_detail}` : ""}`) },
     { label: "Supplier", cell: (row) => td(row.supplier) },
     { label: "Lead (days)", numeric: true, cell: (row) => td(row.lead_days) },
-    { label: "Do", cell: (row) => td(row.action) },
   ], data.shortages ?? [], "Nothing is short for the next two weeks.");
-  renderTable($("table-actions"), [
+  if ($("table-actions")) renderTable($("table-actions"), [
     { label: "", cell: (row) => el("span", { className: row.severity === "critical" || row.severity === "high"
         ? "status-down" : "muted", textContent: row.severity }) },
     { label: "What", cell: (row) => td(row.title) },
@@ -4435,7 +4435,6 @@ async function loadDashboard() {
 
 function drawAutonomy(data) {
   $("autonomy-score").textContent = Number(data.score).toFixed(2);
-  $("autonomy-fill").style.width = `${Math.min(100, data.score)}%`;
   $("autonomy-areas").replaceChildren(...(data.areas ?? []).map((a) =>
     statTile(a.area, `${a.points.toFixed(1)} / ${a.weight}`)));
   $("autonomy-next").replaceChildren(...(data.next_steps ?? []).map((n) => el("li", {
@@ -4463,9 +4462,23 @@ async function loadAutonomy() {
   }
 }
 
-$("autonomy-more").addEventListener("click", () => {
-  $("autonomy-detail").hidden = !$("autonomy-detail").hidden;
-});
+function setDashboard(open) {
+  $("dash-body").hidden = !open;
+  $("dash-toggle").setAttribute("aria-expanded", String(open));
+  $("dash-toggle").textContent = open ? "Fold the short watch dashboard" : "Short watch dashboard";
+  try {
+    localStorage.setItem("dash-open", open ? "1" : "0");
+  } catch {
+  }
+}
+
+$("dash-toggle").addEventListener("click", () => setDashboard($("dash-body").hidden));
+try {
+  setDashboard(localStorage.getItem("dash-open") === "1");
+} catch {
+}
+
+
 loadAutonomy();
 setInterval(() => { if (!document.hidden) loadAutonomy(); }, 5000);
 setInterval(() => { if (!document.hidden) loadDashboard(); }, 60000);

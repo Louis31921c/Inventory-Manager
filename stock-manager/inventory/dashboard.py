@@ -79,14 +79,13 @@ def _cause(db_path, article, supplier, lead, days_left, today):
     queued = db.read(db_path, "SELECT min(due_on) FROM order_queue WHERE state = 'waiting' "
                               "AND article = ?", [article])
     if queued and queued[0][0]:
-        return "waiting in the 15-day queue", f"Plutus orders it on {queued[0][0]}"
+        return f"Plutus orders it on {queued[0][0]}"
     if db.read(db_path, "SELECT 1 FROM inventory_lines WHERE article = ? AND backorder "
                         "AND settled_on IS NULL", [article]):
-        return "part delivered, the rest is owed", "a delivery note still owes it"
+        return "part delivered, the rest is owed",
     if lead is not None and lead > max(days_left, 0):
         return "no order placed", (f"nothing is ordered, and the supplier takes {lead:g} days "
                                    f"against {max(days_left, 0)} left")
-    return "no order placed", "nothing is ordered, drafted or queued for it"
 
 
 def shortages(db_path, today=None):
@@ -122,7 +121,10 @@ def shortages(db_path, today=None):
         down = have <= 0 and (row is None or row["per_day"] > 0 or bool(needs))
         status = ("line down" if down and days_left <= LINE_DOWN_DAYS
                   else "critical" if days_left <= CRITICAL_DAYS else "at risk")
-        cause, why = _cause(db_path, article, supplier, lead, days_left, today)
+        found = _cause(db_path, article, supplier, lead, days_left, today)
+        if isinstance(found, str):
+            found = (found, "")
+        cause, why = (tuple(found or ()) + (None, ""))[:2] if found else (None, "")
         blocks = []
         for item in sorted(needs, key=lambda i: i["need_date"]):
             label = " / ".join(x for x in (item["site"], item["work_item"]) if x) or "unassigned"
