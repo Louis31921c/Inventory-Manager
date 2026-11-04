@@ -1,51 +1,60 @@
 # Logistics Manager
 
-**One desk for everything a logistics manager does: what arrives, what is on the shelf, what to order, who to chase and what to pay.**
+**One desk for a logistics manager's whole week: what arrived, what is on the shelf, what to order, who to chase, what to pay.**
 
-Your paperwork already holds the answers. Logistics Manager reads it, keeps it in one place on your own computer, and tells the team what needs attention.
+It runs on your own computer, reads the paperwork you already have, and puts what needs a decision in front of a person.
 
-## What it does for the team
+## 1. Receiving: no more retyping delivery notes
 
-**Stop typing delivery notes.**
-Take a photo of a delivery note, or let the mailbox collect the ones suppliers send. The app reads them, fills in the lines and stores the photo as proof. Anything unclear waits for a person; clean notes go straight in.
+- **Four ways in:** photo of a note, PDF or image file, a spreadsheet (CSV or Excel, columns recognised in English or French), or attachments from your mailbox.
+- **Mailbox checked every 15 minutes** (Gmail, Outlook, Proton, Yahoo, iCloud, or any IMAP mailbox). A note that reads cleanly is stored on its own; anything with a gap, plus anything named invoice, bill or quote, waits for a person with the reason shown.
+- **Each note records** supplier, delivery date, order date, site, work item and every line (article, quantity, backorder or not). The same file twice is stored once.
+- **Part deliveries are tracked:** a missing line gets the date the supplier promised, and turns red once that date passes.
+- **Photos are kept as proof,** reduced to about 250 KB, and cleared after 6 weeks (adjustable). The data stays.
 
-**Always know what is on the shelf.**
-Stock is worked out from deliveries and orders, site by site. Move goods between sites, hold stock back for a job, correct mistakes with a written reason, and let the app tell you which articles to count next.
+## 2. Stock you can trust
 
-**Order the right things at the right time.**
-The app watches how fast each article is used and how long each supplier really takes, then flags what is running short. Plutus, the built-in buyer, drafts the order. Items marked "to order" wait 15 days, then Plutus orders them, so nobody places the same order twice.
+- **On hand = delivered minus shipped,** per article and per site. A hand count always overrides the arithmetic.
+- **Move stock between sites,** hold stock back for a work item (an order for that work item uses the hold up), and correct mistakes, always with a written reason.
+- **Count smart:** the app lists which articles to count next. The busiest ones (80% of what left in the last 90 days) every 30 days, the next band every 60, the rest every 90. The gap each count finds is kept.
 
-**Keep suppliers moving.**
-Turn an order or a quote request into a ready-to-send mail for each supplier. Replies that confirm an order are filed against it. Unanswered orders and missing deliveries are chased with one click. Nothing is sent until a person presses send.
+## 3. Ordering at the right time
 
-**Pay only what was delivered.**
-Every bill is checked against the deliveries it covers. Overcharges, undercharges and bills for goods that never came are flagged, and a disputed bill is one click away.
+- **Buffers per article** (red, yellow, green zones) sized from your own history. Lead times are measured from your notes (ordered date to delivered date), per supplier and per article, not guessed.
+- **A demand outlook** labels every week quiet, light, usual or spike and shows the chance of a spike ahead.
+- **Plutus, the built-in buyer,** drafts an order for what is running short. Lines ticked "to order" wait 15 days, then Plutus turns them into one purchase order per site and work item, so nothing is ordered twice.
 
-**Spend with a safety net.**
-Big, unusual or first-time purchases are held for approval, with the reason in plain words. Every decision is written to a log that shows if anyone tampers with it.
+## 4. Suppliers: draft, send, chase
 
-**Plan the day's round.**
-Pick up the work for each van, with its load limits and opening hours, in one screen.
+- **One click turns** a purchase order or quote request into a ready mail per supplier, in French, addressed from your contact book. Nothing is sent until a person presses send.
+- **Replies are filed:** a supplier reply that quotes the order or quote number marks it confirmed and takes the delivery date from the text.
+- **Chasing:** an order unanswered after 3 days, or past its promised day, gets a reminder draft. Late delivery-note lines get one reminder per supplier.
+- **Quote requests** are measured in what the trade uses: piece, metre, m2, m3, kg, tonne, litre, hour.
 
-## Why teams like it
+## 5. Pay only for what arrived
 
-- **Your data stays with you.** Everything is stored on your own machine, protected by a password. No subscription for storage, no cloud needed.
-- **Nothing happens behind your back.** The assistants propose, people decide. Mails, approvals and orders all need a human click.
-- **Starts working on day one.** A new installation fills itself with realistic sample data so the team can try every screen before using real paperwork.
-- **Everything is traceable.** Who did what, and when, is recorded.
-- **Meets people where they work.** One-click shortcuts to Slack, Discord, Outlook, Proton Mail and the supplier contact sheet sit on the home screen, and the team can ask questions and raise baskets from chat.
+- **Bills are read from a photo or PDF,** then checked against the deliveries they cover, priced at what each article has cost. A bill within 2% (or 1 EUR) is matched. Over, under, no price known, or nothing delivered are flagged, and one click marks a bill disputed.
+- **Also listed:** deliveries not billed after 45 days, and orders against what actually came in.
 
-## At a glance
+## 6. Spending under control
 
-| Daily job | What the app does |
-|---|---|
-| Receiving | Reads delivery notes from photos and mail |
-| Stock | Live stock by site, transfers, reservations, counts |
-| Buying | Spots shortages, drafts orders, delays them 15 days |
-| Suppliers | Draft, send, track and chase by mail |
-| Money | Matches bills to deliveries, flags gaps |
-| Control | Approval gate, full history, backups |
+- **Anyone can fill a basket from Slack or Discord** (`/basket`, `/purchase`, `/quote`, `/stock`). Buying is held for a person when the basket has a new article, a new supplier, a total over 500 EUR, a line over twice the usual price, or a line with no price.
+- **Terminus, a second AI check,** says whether an article is one you already know under another wording. It never approves anything.
+- **Every decision is written to a tamper-evident log.** If any entry is edited afterwards, the screen shows which one.
 
-## What it is not (yet)
+## 7. Planning the round
 
-It does not book carriers or track parcels, it does not post to accounting software, and it needs a person to approve anything that spends money. Those are the natural next steps.
+- **Route wrangler** holds the vans (two Renault Partner at 3.3 m3 and 650 kg, one Iveco Daily at 19.6 m3 and 1,800 kg) and the stops with their opening hours.
+
+## Built for a small team
+
+- **Private by design:** data stays on your machine, reachable only from it, behind a password. Five wrong tries pause it for five minutes, sessions end after 12 hours, backups can be encrypted.
+- **Try before you trust:** a new database fills itself with about six months of realistic made-up paperwork in roughly 20 seconds.
+- **Everything is traceable:** who did what, and when.
+- **One click to the tools you use:** Slack, Discord, Outlook, Proton Mail and the supplier contact sheet sit on the home screen.
+
+## Good to know
+
+- **Reading documents and the Plutus and Terminus assistants need an AI model:** the Claude command line signed in on the machine, or a Gemini or OpenAI key.
+- **Proton Mail needs a paid Proton plan** (through its Bridge app). **Outlook** can be read but not sent from.
+- **Not included yet:** carrier booking and tracking, export to accounting software, and paying or placing the order with the supplier. Approved orders are placed by hand.
