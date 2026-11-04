@@ -4598,21 +4598,31 @@ def test_orders_to_come_lists_buffer_orders_the_queue_and_what_was_sent(db_path)
     assert waiting["order_on"] == "2026-11-18"                      # 15 days after it was read
 
 
-def test_autonomy_is_measured_from_the_record_and_starts_low(db_path):
+def test_autonomy_rates_the_architecture_and_moves_with_what_is_switched_on(tmp_path, monkeypatch):
     from inventory import autonomy
 
-    empty = autonomy.measure(db_path, date(2026, 11, 3))
-    assert empty["score"] == 0.0 and sum(p["weight"] for p in empty["parts"]) == 100
-    assert all(p["points"] == 0 for p in empty["parts"])
+    monkeypatch.delenv("NOTIFY_VIA", raising=False)
+    bare = autonomy.measure(config=make_config(tmp_path))
+    assert sum(p["weight"] for p in bare["parts"]) == 100
+    assert 0 < bare["score"] < 100 and all(0 <= p["level"] <= 4 for p in bare["parts"])
+    assert bare["next_steps"][0]["to_win"] >= bare["next_steps"][-1]["to_win"]   # ranked by value
+    by_name = {p["capability"]: p for p in bare["parts"]}
+    assert by_name["Payments"]["level"] == 0 and by_name["Audit trail"]["level"] == 4
+    assert by_name["Placing orders"]["level"] == 1                            # no outgoing mail
+    assert by_name["Alerts"]["level"] == 2                                    # nothing is pushed
+    assert by_name["Audit trail"]["next"] is None
 
-    for number in range(4):
-        who = "MAIL" if number < 3 else "T"                          # 3 of 4 notes came in by mail
-        db.save_note(db_path, make_note(), f"au{number}", "", who)
-    got = autonomy.measure(db_path, date(2026, 11, 3))
-    receiving = next(p for p in got["parts"] if p["part"] == "receiving")
-    assert receiving["rate"] == 0.75 and receiving["points"] == 11.25 and receiving["samples"] == 4
-    assert got["score"] >= 11.25 and got["measured_weight"] >= 15
-    assert got["score"] <= 100
+    # A mailbox that sends, and an alert channel, raise exactly the lines that depend on them.
+    ready = MailConfig(host="imap.gmail.com", port=993, user="buyer@example.com",
+                       password="x", folder="INBOX", security="ssl", insecure=False,
+                       mark_read=True, every_minutes=15, provider="gmail")
+    monkeypatch.setenv("NOTIFY_VIA", "slack")
+    wired = autonomy.measure(config=make_config(tmp_path, mail=ready))
+    now = {p["capability"]: p for p in wired["parts"]}
+    assert now["Placing orders"]["level"] == 2 and now["Alerts"]["level"] == 3
+    assert now["Delivery notes"]["level"] == 3 and now["Supplier replies"]["level"] == 3
+    assert wired["score"] > bare["score"]
+    assert abs(wired["score"] - sum(p["points"] for p in wired["parts"])) < 0.01
 
 
 def test_contacts_carry_the_lead_time_learned_for_their_supplier(db_path):

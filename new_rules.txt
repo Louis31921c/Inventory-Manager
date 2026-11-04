@@ -215,14 +215,12 @@ functionnalities to developp :
         supplier, its lead time and the action to take; below it the open actions
 - on the landing page add a dashboard with : shortage at risk critical and line down, sku's shortage units blocking next weeks activity and their need date and root cause and supplier lead time, open actions
 
-- DONE: landing page "Autonomy" figure, two decimals out of 100, refreshed every 5 seconds.
-        Eight parts of the job carry 100 points; each is measured from what the app recorded
-        (notes stored by the mailbox with no person, fields the model read right, counts that
-        found the shelf as the books said, articles fine or already covered by a planned
-        order, mails sent unedited, orders confirmed by a filed reply, bills that matched,
-        deliveries signed for). A part with nothing to measure scores 0 and a part the software
-        cannot do (placing an order, paying) is capped, so it starts low and rises as the
-        software really takes work over. "How it is worked out" shows every line
+- DONE: landing page "Autonomy" figure, two decimals out of 100, live. Rates the ARCHITECTURE
+        as a logistics manager, not what was done today: 19 capabilities in four areas with
+        fixed weights, each on a 0 to 4 ladder (not built, records only, assisted, supervised,
+        autonomous), points = weight x level / 4. It moves when a module is built or a mailbox,
+        outgoing mail, alert channel or the Claude command line is switched on. "How it is worked
+        out" lists the biggest gaps by points to win, each with the step that would close it
 - on the landing page, add a live software autonomous-ness rate out of 100 with 2 digits : I wanna see how efficient it would be to replace a logistics manager employee
 
 - DONE (asked in chat): alerts that push to Slack, SMS or mail (NOTIFY_VIA) plus a daily digest at

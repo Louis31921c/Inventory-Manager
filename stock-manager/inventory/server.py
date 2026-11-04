@@ -1217,7 +1217,7 @@ def read_autonomy():
     """The figure on the landing page. Worked out at most every few seconds."""
     now = time.monotonic()
     if _autonomy_cache["value"] is None or now - _autonomy_cache["at"] > 4:
-        _autonomy_cache.update(at=now, value=autonomy.measure(config.db_path))
+        _autonomy_cache.update(at=now, value=autonomy.measure(config.db_path, config=config))
     return _autonomy_cache["value"]
 
 

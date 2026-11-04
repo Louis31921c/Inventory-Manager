@@ -91,6 +91,9 @@
       <button class="mini" id="autonomy-more" type="button">how it is worked out</button>
     </div>
     <div id="autonomy-detail" hidden>
+      <p class="eyebrow">Where the points are, by value</p>
+      <ol id="autonomy-next"></ol>
+      <div class="row" id="autonomy-areas"></div>
       <table id="table-autonomy"></table>
       <p class="muted" id="autonomy-note"></p>
     </div>
@@ -4433,18 +4436,24 @@ async function loadDashboard() {
 function drawAutonomy(data) {
   $("autonomy-score").textContent = Number(data.score).toFixed(2);
   $("autonomy-fill").style.width = `${Math.min(100, data.score)}%`;
+  $("autonomy-areas").replaceChildren(...(data.areas ?? []).map((a) =>
+    statTile(a.area, `${a.points.toFixed(1)} / ${a.weight}`)));
+  $("autonomy-next").replaceChildren(...(data.next_steps ?? []).map((n) => el("li", {
+    textContent: `+${n.to_win.toFixed(1)} points, ${n.capability}: ${n.step}` })));
   renderTable($("table-autonomy"), [
-    { label: "Part of the job", cell: (row) => td(row.part) },
+    { label: "Area", cell: (row) => td(row.area) },
+    { label: "Capability", cell: (row) => td(row.capability) },
     { label: "Weight", numeric: true, cell: (row) => td(row.weight) },
-    { label: "Done by the software", numeric: true, cell: (row) => td(
-        row.rate == null ? "nothing to measure" : `${(row.rate * 100).toFixed(1)}%`) },
+    { label: "Level", cell: (row) => td(`${row.level} ${row.level_name}`) },
     { label: "Points", numeric: true, cell: (row) => td(row.points.toFixed(2)) },
-    { label: "Samples", numeric: true, cell: (row) => td(row.samples) },
-    { label: "Worked out from", cell: (row) => td(row.basis) },
+    { label: "What it does now", cell: (row) => td(row.why) },
+    { label: "To raise it", cell: (row) => td(row.next) },
   ], data.parts ?? [], "");
   $("autonomy-note").textContent =
-    `Measured on ${data.measured_weight} of the 100 points. A part with nothing to measure scores 0, `
-    + "and a part the software cannot do (placing an order, paying) is capped at what it can.";
+    "Levels: 0 not built, 1 records only, 2 assisted (it prepares, a person carries out), "
+    + "3 supervised (it acts alone on routine cases, a person takes the exceptions), 4 autonomous. "
+    + "Points are weight x level / 4. It rates the architecture, and moves when something is built "
+    + "or switched on (a mailbox, outgoing mail, alert pushing, the Claude command line).";
 }
 
 async function loadAutonomy() {

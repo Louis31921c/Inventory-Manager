@@ -1,114 +1,147 @@
-"""How much of a logistics manager's job the software does without a person: one number.
+"""How autonomous the software is as a logistics manager, as a map to build from.
 
-The job is split into eight parts, each worth a share of 100. For each part the app measures,
-from what it has recorded, how much of the work got done with no human step. A part with
-nothing to measure yet scores nothing and says so, and a part the software cannot do (it does
-not place an order, it does not pay) is capped at what it can: sending a drafted mail still
-takes a person pressing send. So the figure starts low and rises only as the software really
-takes work over, and every line shows what it was worked out from.
+This is about the architecture, not about what anybody did today. The job is split into
+nineteen capabilities, each worth a share of 100 points, and each is rated on a five-step
+ladder of how much of it the software does without a person:
 
-  receiving     notes stored by the mailbox with no person, of every note stored (30 days)
-  reading       share of what the model read that nobody had to correct (30 days)
-  stock         counts that found the shelf as the books said, within one unit (90 days)
-  planning      articles in use that are either fine or already covered by a planned order
-  ordering      supplier mails: half credit for one sent unedited, a quarter if it was edited
-  follow-up     orders confirmed by a filed reply, of orders sent (60 days)
-  bills         bills that matched their deliveries, of bills received (60 days)
-  deliveries    dispatches that reached a signature: recorded by a person, so a quarter credit
+  0  not built          nothing here does it
+  1  records only       it stores the data, a person does the work
+  2  assisted           it prepares the work, a person carries it out
+  3  supervised         it acts alone on the routine cases, a person takes the exceptions
+  4  autonomous         it acts, checks itself and escalates only by exception
+
+A capability's points are its weight times its level over four. Some levels depend on what is
+switched on (a mailbox, an outgoing mail server, a way to push alerts, the Claude command line)
+and some on what has been built (a module that does not exist yet, a step of the purchase
+round that is still not walked), so the figure moves when the system does, and each line says
+what would raise it. The lines are ranked by the points still to win.
 """
 
-from datetime import date
+import importlib.util
 
-from . import dashboard, db, matching, stockctl
+from . import agents, gate, outbox, pricing, watch
 
-WEIGHTS = (("receiving", 15), ("reading", 10), ("stock", 15), ("planning", 20),
-           ("ordering", 15), ("follow-up", 10), ("bills", 10), ("deliveries", 5))
-
-
-def _ratio(done, total):
-    return None if not total else max(0.0, min(1.0, done / total))
+LEVELS = ("not built", "records only", "assisted", "supervised", "autonomous")
 
 
-def _receiving(db_path):
-    total, auto = db.read(db_path, """
-            SELECT count(*), count(*) FILTER (WHERE confirmed_by = 'MAIL') FROM notes
-            WHERE confirmed_at >= now() - INTERVAL 30 DAY""")[0]
-    return _ratio(auto, total), total, "notes the mailbox stored with no person / all notes, 30 days"
+def _built(name):
+    """Whether a module of this name has been written yet."""
+    return importlib.util.find_spec(f"{__package__}.{name}") is not None
 
 
-def _reading(db_path):
-    fields, wrong = db.read(db_path, """
-            SELECT coalesce(sum(fields), 0), coalesce(sum(corrected), 0) FROM readings
-            WHERE measured_at >= now() - INTERVAL 30 DAY""")[0]
-    return _ratio(fields - wrong, fields), int(fields), "fields read that nobody corrected, 30 days"
+def _facts(config):
+    mail = config.mail if config is not None else None
+    return {
+        "mailbox": bool(mail and mail.enabled),
+        "auto_read": bool(mail and mail.enabled and mail.auto_read),
+        "smtp": bool(mail and outbox.readiness(mail)["ready"]),
+        "push": bool(watch.channels()),
+        "plutus": agents.available(),
+        "policies": _built("policies"),
+        "requisitions": _built("requisitions"),
+        "scanning": _built("scanning"),
+        "payments": _built("payments"),
+        "projects": _built("projects"),
+        "order_step_walked": 7 not in getattr(gate, "UNBUILT", (7,)),
+    }
 
 
-def _stock(db_path):
-    total, right = db.read(db_path, """
-            SELECT count(*), count(*) FILTER (WHERE abs(quantity) <= 1) FROM stock_moves
-            WHERE kind = 'count' AND created_at >= now() - INTERVAL 90 DAY""")[0]
-    return _ratio(right, total), total, "counts within one unit of the books / counts, 90 days"
+def _capabilities(f):
+    """(area, name, weight, level, why, next step) for every capability, given the facts."""
+    return [
+        ("Intake", "Delivery notes", 6,
+         3 if f["auto_read"] else 2,
+         "Reads photos, PDFs and sheets; stores clean notes from the mailbox alone" if f["auto_read"]
+         else "Reads photos, PDFs and sheets, a person confirms each note (no mailbox set up)",
+         "Feed corrections back so more notes read clean; connect a mailbox" if not f["auto_read"]
+         else "Learn from corrections to raise the clean-note rate and settle unknown articles itself"),
+        ("Intake", "Supplier bills", 4, 2,
+         "Reads a bill, a person confirms it",
+         "Store bills from the mailbox alone when they match a delivery"),
+        ("Intake", "Site requests", 4, 3 if f["requisitions"] else 1,
+         "Chat baskets and stored lists carry the need, but there is no request with a status",
+         "Requisitions: a request for a work item, checked against stock first, with a status back"),
+        ("Intake", "Supplier replies", 5, 3 if f["mailbox"] else 1,
+         "Files a reply that names the order and takes the promised date" if f["mailbox"]
+         else "Needs a mailbox to read replies",
+         "Read prices and delivery notices out of replies; answer simple questions itself"),
+        ("Planning", "Demand and buffers", 7, 4 if f["projects"] else 3,
+         "Sizes buffers per article from history, with a demand outlook",
+         "Add demand from the project plan, and tune buffers from the stock-outs that really happened"),
+        ("Planning", "Lead times", 4, 3,
+         "Learns each supplier's real lead time and plans with it",
+         "Score suppliers on promised against delivered and shift orders to the reliable ones"),
+        ("Planning", "Replenishment", 8, 4 if f["policies"] and f["plutus"] else 3 if f["plutus"] else 2,
+         "Plutus drafts orders from the numbers and orders the 'to order' lines after 15 days"
+         if f["plutus"] else "Buffers say what to order, but Plutus needs the Claude command line",
+         "Let policies release routine orders without a person" if not f["policies"]
+         else "Close the loop: judge each order afterwards and adjust"),
+        ("Planning", "Stock accuracy", 5, 3 if f["scanning"] else 2,
+         "Says which articles to count next, a person counts",
+         "Scanning, and finding the cause of a gap by itself"),
+        ("Execution", "Placing orders", 14,
+         4 if f["policies"] and f["smtp"] and f["order_step_walked"]
+         else 3 if f["policies"] and f["smtp"] else 2 if f["smtp"] else 1,
+         "Drafts the order and mails it when a person presses send" if f["smtp"]
+         else "Drafts the order mail, but no outgoing mail is set up",
+         "Policies: routine orders sent without a person, within limits and with a kill switch"
+         if not f["policies"] else "Walk step 7 of the purchase round so a placed order is confirmed back"),
+        ("Execution", "Chasing suppliers", 6, 3 if f["policies"] and f["smtp"] else 2,
+         "Spots silent and late orders and drafts the reminder, a person sends it",
+         "Send routine reminders by itself under a policy"),
+        ("Execution", "Receiving and put-away", 4, 3 if f["scanning"] else 1,
+         "Records what arrived; nothing scans, locates or puts away",
+         "Scan-in against the order, with a location for each pile"),
+        ("Execution", "Deliveries to sites", 4, 2,
+         "Plans the delivery, prints the note and labels, records the signature",
+         "Route and load it from the day's orders, and chase a delivery that was not signed"),
+        ("Execution", "Quotes and awards", 4, 3 if hasattr(pricing, "from_reply") else 2,
+         "Compares answers and awards one; the prices are typed in",
+         "Send requests to several suppliers and read the prices out of the replies"),
+        ("Control", "Spend control", 8, 4 if f["policies"] else 3,
+         "Routine baskets pass, unusual ones are held for a person" if not f["policies"]
+         else "Policies decide what passes, the rest is held",
+         "Rules a person sets (supplier, ceiling, price band) that release routine buys on their own"
+         if not f["policies"] else "Check each automatic pass afterwards against the delivered price"),
+        ("Control", "Invoice matching", 4, 3,
+         "Matches every bill to its deliveries and flags the gaps alone",
+         "Pay or hold from the match, and tie credit notes back automatically"),
+        ("Control", "Disputes", 2, 2,
+         "Opens the dispute and drafts the mail, a person sends it and records the credit",
+         "Send the dispute and read the credit note out of the reply"),
+        ("Control", "Alerts", 6, 3 if f["push"] else 2,
+         "Finds what needs a person and pushes it out" if f["push"]
+         else "Finds what needs a person and lists it, nothing is pushed (NOTIFY_VIA is empty)",
+         "Push to where the team is, and escalate what stays unanswered"),
+        ("Control", "Audit trail", 3, 4,
+         "Every change recorded; every purchase decision sealed in a hash chain",
+         "Nothing more to add"),
+        ("Control", "Payments", 2, 3 if f["payments"] else 0,
+         "Nothing schedules or makes a payment",
+         "A payment run from due dates, as a file for the bank"),
+    ]
 
 
-def _planning(db_path, today):
-    from . import forecast
-
-    plan, _span = forecast.articles(db_path)
-    used = [row for row in plan if row["per_day"] > 0 and row["on_hand"] is not None]
-    if not used:
-        return None, 0, "articles in use that are fine or already covered"
-    short = {r["article"]: r for r in dashboard.shortages(db_path, today)}
-    covered = 0
-    for row in used:
-        item = short.get(row["article"])
-        if item is None or item["cause"] in ("being handled", "waiting in the 15-day queue",
-                                             "order drafted, not sent", "held for approval"):
-            covered += 1
-    return _ratio(covered, len(used)), len(used), "articles in use that are fine or already covered"
-
-
-def _ordering(db_path):
-    rows = db.read(db_path, """
-            SELECT state, body IS NOT DISTINCT FROM orig_body FROM supplier_mail
-            WHERE direction = 'out' AND created_at >= now() - INTERVAL 30 DAY""")
-    credit = sum((0.5 if same else 0.25) for state, same in rows if state in ("sent", "confirmed", "closed"))
-    return _ratio(credit, len(rows)), len(rows), "mails sent unedited count half, edited a quarter, unsent nothing"
-
-
-def _follow_up(db_path):
-    total, filed = db.read(db_path, """
-            SELECT count(*), count(*) FILTER (WHERE confirmed_at IS NOT NULL) FROM supplier_mail
-            WHERE direction = 'out' AND kind IN ('order', 'quote') AND state IN ('sent', 'confirmed', 'closed')
-              AND sent_at >= now() - INTERVAL 60 DAY""")[0]
-    return _ratio(filed, total), total, "orders and quotes answered by a reply the mailbox filed / sent, 60 days"
-
-
-def _bills(db_path, today):
-    rows = [b for b in matching.bills(db_path, today)["bills"] if b["bill_date"] >= (
-        date.fromordinal(today.toordinal() - 60)).isoformat()]
-    return (_ratio(sum(1 for b in rows if b["verdict"] == "matched"), len(rows)), len(rows),
-            "bills that matched their deliveries / bills, 60 days")
-
-
-def _deliveries(db_path):
-    total, signed = db.read(db_path, """
-            SELECT count(*), count(*) FILTER (WHERE state IN ('delivered', 'part delivered'))
-            FROM dispatches WHERE created_at >= now() - INTERVAL 60 DAY""")[0]
-    return _ratio(signed * 0.25, total), total, "deliveries with a signature, a person records them: quarter credit"
-
-
-def measure(db_path, today=None):
-    today = today or date.today()
-    got = {"receiving": _receiving(db_path), "reading": _reading(db_path),
-           "stock": _stock(db_path), "planning": _planning(db_path, today),
-           "ordering": _ordering(db_path), "follow-up": _follow_up(db_path),
-           "bills": _bills(db_path, today), "deliveries": _deliveries(db_path)}
-    parts, score, measured = [], 0.0, 0
-    for name, weight in WEIGHTS:
-        rate, n, basis = got[name]
-        points = weight * (rate or 0.0)
+def measure(db_path=None, today=None, config=None):
+    """The score and the table behind it. `db_path` and `today` are kept for the callers that
+    pass them: nothing here depends on what was recorded."""
+    facts = _facts(config)
+    rows, score = [], 0.0
+    for area, name, weight, level, why, nxt in _capabilities(facts):
+        points = weight * level / 4
         score += points
-        measured += weight if rate is not None else 0
-        parts.append({"part": name, "weight": weight, "rate": None if rate is None else round(rate, 4),
-                      "points": round(points, 2), "samples": int(n), "basis": basis})
-    return {"score": round(score, 2), "measured_weight": measured, "parts": parts}
+        rows.append({"area": area, "capability": name, "weight": weight, "level": level,
+                     "level_name": LEVELS[level], "points": round(points, 2),
+                     "to_win": round(weight - points, 2), "why": why,
+                     "next": nxt if level < 4 else None})
+    areas = {}
+    for row in rows:
+        held = areas.setdefault(row["area"], {"area": row["area"], "weight": 0, "points": 0.0})
+        held["weight"] += row["weight"]
+        held["points"] += row["points"]
+    ranked = sorted((r for r in rows if r["to_win"] > 0), key=lambda r: -r["to_win"])
+    return {"score": round(score, 2), "parts": rows,
+            "areas": [{**a, "points": round(a["points"], 2)} for a in areas.values()],
+            "next_steps": [{"capability": r["capability"], "to_win": r["to_win"], "step": r["next"]}
+                           for r in ranked[:6]],
+            "levels": list(LEVELS)}

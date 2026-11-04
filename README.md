@@ -520,7 +520,9 @@ database of its own to run a simulation on; the year itself is written in
 
 - **Landing dashboard and autonomy figure.** `/api/dashboard` lists the short articles with status,
   need date, blocked work, root cause, supplier lead time and action; `/api/autonomy` is the
-  0 to 100 figure, eight weighted parts each measured from the record (see `autonomy.py`).
+  0 to 100 figure: a capability map of the architecture (19 weighted capabilities, each on a
+  0 to 4 ladder of how much the software does without a person), see `autonomy.py`. It moves
+  when a module is built or something is switched on, and ranks the gaps to build next.
   `/api/notices` is the list the hourly scan keeps (`watch.py`); critical and high ones are pushed
   once to the channels in `NOTIFY_VIA` (`slack`, `sms`, `mail`), and a digest goes at `NOTIFY_HOUR`
   (default 8). Nothing is pushed when `NOTIFY_VIA` is empty.
