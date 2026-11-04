@@ -4401,12 +4401,12 @@ function drawDashboard(data) {
         className: row.status === "line down" ? "status-down" : (row.status === "critical" ? "status-critical" : ""),
         textContent: row.status }) },
     { label: "SKU", cell: (row) => td(row.article) },
-    { label: "Short (units)", numeric: true, cell: (row) => td(showNum(row.shortage)) },
-    { label: "Needed", cell: (row) => td(`${row.need_date} (${row.days_left}d)`) },
+    { label: "Short", numeric: true, cell: (row) => td(showNum(row.shortage)) },
+    { label: "Needed", cell: (row) => td(`${row.need_date.slice(5)} (${row.days_left}d)`) },
     { label: "Blocks", cell: (row) => td(row.blocks.join(", ") || "stock cover") },
     { label: "Root cause", cell: (row) => td(`${row.cause}${row.cause_detail ? `: ${row.cause_detail}` : ""}`) },
-    { label: "Supplier", cell: (row) => td(row.supplier) },
-    { label: "Lead (days)", numeric: true, cell: (row) => td(row.lead_days) },
+    { label: "Supplier (lead, days)", cell: (row) => td(
+        `${row.supplier ?? "—"}${row.lead_days == null ? "" : ` (${showNum(row.lead_days)})`}`) },
   ], data.shortages ?? [], "Nothing is short for the next two weeks.");
   renderTable($("table-actions"), [
     { label: "", cell: (row) => el("span", { className: row.severity === "critical" || row.severity === "high"
