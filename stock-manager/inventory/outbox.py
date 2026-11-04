@@ -24,7 +24,7 @@ from datetime import date, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import make_msgid
 
-from . import backorders, contacts, db, leadtimes, mailbox, quotes
+from . import backorders, contacts, db, leadtimes, mailbox, pricing, quotes, units, workdays
 from .models import normalize_name, parse_date
 
 CHASE_AFTER_DAYS = 3
@@ -93,6 +93,8 @@ def one(db_path, mail_id):
 
 
 def _add(db_path, **fields):
+    if fields.get("direction") == "out" and "body" in fields:
+        fields.setdefault("orig_body", fields["body"])       # to tell later whether it was edited
     names = ", ".join(fields)
     marks = ", ".join("?" for _ in fields)
     row = db.write(db_path, f"INSERT INTO supplier_mail ({names}) VALUES ({marks}) "
@@ -109,8 +111,11 @@ def contact_email(db_path, supplier):
 
 
 def supplier_of(db_path, article):
-    """Who this article is bought from: the supplier of its latest price, else its latest
-    delivery."""
+    """Who this article is bought from: the supplier it has an agreement with, else the
+    supplier of its latest price, else of its latest delivery."""
+    agreed = pricing.agreement_for(db_path, article)
+    if agreed:
+        return agreed["supplier"]
     rows = db.read(db_path, """
             SELECT supplier FROM (
                 SELECT supplier, seen_on AS day, 1 AS rank FROM article_prices
@@ -135,12 +140,11 @@ def _existing(db_path, kind, ref_kind, ref_id, supplier=None):
     return found[0][0] if found else None
 
 
-def draft_order(db_path, list_id, user=None):
-    """One draft a supplier for a stored purchase order. Lines nobody can say a supplier
-    for come back apart: they are the ones to ring about."""
-    head = db.read(db_path, """
-            SELECT list_date, site, work_item FROM purchase_orders WHERE list_id = ?""",
-                   [list_id])
+def _order_groups(db_path, list_id):
+    """(site, work item, {supplier: lines}, articles with no supplier) for a stored order.
+    Lines ticked "to order" are what goes out; an order nobody ticked goes out whole."""
+    head = db.read(db_path, "SELECT list_date, site, work_item FROM purchase_orders "
+                            "WHERE list_id = ?", [list_id])
     if not head:
         raise ValueError(f"No purchase order #{list_id}.")
     _day, site, work_item = head[0]
@@ -148,12 +152,10 @@ def draft_order(db_path, list_id, user=None):
             SELECT article, designation, reference, quantity, in_stock
             FROM purchase_order_lines WHERE list_id = ? AND quantity IS NOT NULL
             ORDER BY line_no""", [list_id])
-    # Lines ticked "to order" are what goes out; an order nobody ticked goes out whole.
     ticked = [row for row in lines if row[4] is False]
     chosen = ticked or lines
     if not chosen:
         raise ValueError(f"Order #{list_id} has no line with a quantity.")
-
     groups, unassigned = {}, []
     for article, designation, reference, quantity, _stock in chosen:
         supplier = supplier_of(db_path, article)
@@ -161,7 +163,28 @@ def draft_order(db_path, list_id, user=None):
             unassigned.append(article)
         else:
             groups.setdefault(supplier, []).append((article, designation, reference, quantity))
+    return site, work_item, groups, unassigned
 
+
+def _line_text(db_path, supplier, article, designation, reference, quantity):
+    """One order line as it reads in the mail, in packs when the supplier sells in packs."""
+    extra = " - ".join(part for part in (designation, reference and f"réf. {reference}") if part)
+    packed = units.to_packs(db_path, article, supplier, quantity)
+    if packed:
+        text = (f"{packed['packs']} x {packed['pack_label']} de {_quantity(packed['pack_qty'])} "
+                f"{article} (soit {_quantity(packed['base'])} {packed['base_unit']})")
+        shown = f"{packed['packs']} x {packed['pack_label']} de {_quantity(packed['pack_qty'])}"
+    else:
+        text = f"{_quantity(quantity)} x {article}"
+        shown = str(_quantity(quantity))
+    return text + (f" ({extra})" if extra else ""), (designation or "") + (
+        f" réf. {reference}" if reference else ""), shown
+
+
+def draft_order(db_path, list_id, user=None):
+    """One draft a supplier for a stored purchase order. Lines nobody can say a supplier
+    for come back apart: they are the ones to ring about."""
+    site, work_item, groups, unassigned = _order_groups(db_path, list_id)
     made = []
     for supplier, rows in groups.items():
         known = _existing(db_path, "order", "po", list_id, supplier)
@@ -173,9 +196,8 @@ def draft_order(db_path, list_id, user=None):
                 f"Veuillez trouver ci-dessous notre commande n° {list_id}"
                 + (f" ({where})" if where else "") + " :", ""]
         for article, designation, reference, quantity in rows:
-            extra = " - ".join(part for part in (designation, reference and f"réf. {reference}")
-                               if part)
-            body.append(f"- {_quantity(quantity)} x {article}" + (f" ({extra})" if extra else ""))
+            body.append("- " + _line_text(db_path, supplier, article, designation, reference,
+                                          quantity)[0])
         body += ["", "Merci de nous confirmer la commande et la date de livraison.",
                  "", "Cordialement"]
         mail_id = _add(db_path, direction="out", kind="order", supplier=supplier,
@@ -185,6 +207,26 @@ def draft_order(db_path, list_id, user=None):
                        created_by=user)
         made.append(one(db_path, mail_id))
     return {"drafts": made, "unassigned": unassigned}
+
+
+def order_attachment(db_path, row):
+    """The order as a PDF to go with its mail, or None when it is not an order or the PDF
+    library is not there."""
+    if row["kind"] != "order" or row["ref_kind"] != "po" or not row["ref_id"]:
+        return None
+    try:
+        from . import documents
+
+        _site, _work, groups, _left = _order_groups(db_path, row["ref_id"])
+        lines = [(article, *_line_text(db_path, row["supplier"], article, designation, reference,
+                                       quantity)[1:])
+                 for article, designation, reference, quantity in groups.get(row["supplier"], [])]
+        if not lines:
+            return None
+        return (f"commande-{row['ref_id']}.pdf",
+                documents.order_pdf(db_path, row["ref_id"], row["supplier"], lines))
+    except Exception:
+        return None
 
 
 def draft_quote(db_path, quote_id, user=None):
@@ -264,6 +306,10 @@ def send(db_path, mail_id, mail, user=None, connect=_connect):
     message["Subject"] = row["subject"] or ""
     message["Message-ID"] = make_msgid(domain=(mail.user.split("@")[-1] or "localhost"))
     message.set_content(row["body"] or "")
+    attached = order_attachment(db_path, row)
+    if attached:
+        message.add_attachment(attached[1], maintype="application", subtype="pdf",
+                               filename=attached[0])
     try:
         link = connect(mail, smtp_for(mail))
         try:
@@ -294,7 +340,10 @@ def send(db_path, mail_id, mail, user=None, connect=_connect):
 # ---- waiting on suppliers -------------------------------------------------
 
 def threads(db_path, today=None):
-    """Orders and quotes that went out, with the day to expect an answer or the goods."""
+    """Orders and quotes that went out, with the day to expect an answer or the goods.
+
+    Days waited are working days, and the day to expect counts from the day the supplier's
+    cut-off lets the order start, so a Friday evening order is not late on Monday."""
     today = today or date.today()
     rows = db.read(db_path, f"""
             SELECT {_COLUMNS} FROM supplier_mail
@@ -303,14 +352,18 @@ def threads(db_path, today=None):
     out = []
     for values in rows:
         row = _shape(values)
-        sent = parse_date(row["sent_at"][:10]) if row["sent_at"] else today
+        sent_at = (datetime.fromisoformat(row["sent_at"]) if row["sent_at"]
+                   else datetime.combine(today, datetime.min.time()))
+        sent = sent_at.date()
+        calendar = workdays.Calendar(db_path, row["supplier"])
         usual = leadtimes.for_supplier(db_path, row["supplier"], default=7)
-        expected = parse_date(row["eta"]) if row["eta"] else sent + timedelta(days=round(usual))
-        waited = (today - sent).days
+        expected = (parse_date(row["eta"]) if row["eta"]
+                    else calendar.arrival(sent_at, usual))
+        waited = calendar.between(sent, today)
         last = parse_date(row["last_chased_at"][:10]) if row["last_chased_at"] else None
-        quiet = last is None or (today - last).days >= CHASE_EVERY_DAYS
+        quiet = last is None or calendar.between(last, today) >= CHASE_EVERY_DAYS
         silent = row["state"] == "sent" and waited >= CHASE_AFTER_DAYS
-        late = row["state"] == "confirmed" and expected < today - timedelta(days=1)
+        late = row["state"] == "confirmed" and calendar.between(expected, today) >= 1
         row.update({"expected_on": expected.isoformat(), "days_waiting": waited,
                     "needs_chase": bool(quiet and (silent or late)),
                     "why": ("no answer yet" if silent else "past the day it was promised")

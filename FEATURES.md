@@ -9,7 +9,7 @@ One desk for a logistics manager's week: what arrived, what is on the shelf, wha
 | Runs as | Desktop window (GTK WebKit), browser tab, terminal screen (`stock-tui`) or command line (`stock`) |
 | Stack | Python 3.11+, FastAPI on a loopback port, one DuckDB file, a single-page web UI |
 | Data | One file, `inventory.duckdb`, plus a photos folder. 20 schema migrations applied on start |
-| Size | About 13,000 lines of Python in 52 modules, about 130 HTTP routes, about 200 automated tests |
+| Size | About 16,000 lines of Python in 62 modules, about 170 HTTP routes, about 210 automated tests |
 | AI | Claude command line by default (no key), or Gemini or OpenAI. Used to read documents, draft orders and check article names |
 
 ## 1. Receiving: delivery notes in
@@ -31,7 +31,7 @@ One desk for a logistics manager's week: what arrived, what is on the shelf, wha
 
 **Part deliveries:** a backorder line can carry a promised date and a settled date. It turns red when the date passes.
 
-**Photos:** kept as proof, cut to 1,600 px on the long side and recompressed (about 250 KB from 2 MB), metadata dropped. Purged after 42 days by default (`PHOTO_RETENTION_DAYS`). `stock shrink` does the same to photos already stored.
+**Photos:** kept as proof, cut to 1,600 px on the long side and recompressed (about 250 KB from 2 MB), metadata dropped. After 42 days (`PHOTO_RETENTION_DAYS`) the photo is packed into a small array and the file deleted (see section 10). `stock shrink` does the same to photos already stored.
 
 ## 2. Stock: what is on the shelf
 
@@ -103,7 +103,28 @@ Net flow is the counted shelf minus what open orders still ask for. It is placed
 
 Vans with volume and payload (default two Renault Partner at 3.3 m3 and 650 kg, one Iveco Daily at 19.6 m3 and 1,800 kg) and up to 25 stops with opening hours. Addresses are geocoded by Nominatim and distances come from OSRM (OpenStreetMap). If either is unreachable it falls back to straight-line distance.
 
-## 8. Security and traceability
+## 8. Control tower: dashboard, alerts, autonomy score
+
+- **Landing dashboard:** counts of line down, critical and at risk, units short, then one row per short article: status, units short, the day it is needed, the work it blocks, the root cause, the supplier, its lead time, and the action to take. An article is short when what is needed (stock held for a work item, lines ticked "to order", all in the next 14 days) is more than the shelf, or when a used article is at zero or will run out before a delivery can arrive. Status is line down (at zero and needed within 3 days), critical (within 7) or at risk. The root cause is the first true of: held for approval, order sent with no confirmation, supplier ETA after the need date, order late, drafted not sent, waiting in the 15-day queue, part delivered, no order placed.
+- **Notices:** every hour the app looks over its books and keeps a list of what needs a person (stock at zero, orders past their day, a basket held over 24 hours, bills past due, a quote needed within 3 days, no reply, owed lines, mismatched bills, disputes with no credit note, a price over 25% above usual). A notice is one entry for as long as it lasts and clears itself when fixed. Critical and high ones are pushed once to Slack, SMS or mail (`NOTIFY_VIA`), and a digest of everything open goes out daily at `NOTIFY_HOUR`. Nothing is pushed unless set.
+- **Autonomy score (0 to 100, two decimals, refreshed every 5 seconds):** eight parts of the job with fixed weights: receiving 15, reading 10, stock accuracy 15, planning 20, ordering 15, follow-up 10, bills 10, deliveries 5. Each is measured from what was recorded (for example, notes stored by the mailbox with no person over all notes in 30 days). A part with nothing to measure scores zero, and a part the software cannot do is capped (a mail it drafted still needs a person to send it: half credit unedited, a quarter edited). The screen shows every line and what it was worked out from.
+- **Orders to come (DDMRP screen):** what the buffers say to order now, what waits in the 15-day queue, and what was sent and has not arrived, with the day to order and the day to expect it.
+
+## 9. Prices, units and calendars
+
+- **Quote answers:** type in a supplier's price, lead time and how long it stands, per line. Copy the request to other suppliers to compare: price, lead time and the total for the wanted quantity are shown side by side with the cheapest and fastest marked. Award one and it ends the previous agreement for that article, enters the price history (so the usual price and the bill check know it), and becomes the supplier that order drafts use.
+- **Pack sizes:** per article and per supplier: units per pack, the pack's name, minimum packs. An order for 130 washers sold by 100 with a minimum of 2 goes out as 2 boxes of 100.
+- **Working calendar:** French public holidays (fixed ones and the three that follow Easter), your own closures, and per supplier a cut-off hour (an order after it counts as the next day) and shut weekdays. Expected delivery, days waited and chase timing all count working days.
+- **Currency:** a bill in another currency is converted to euros at the last rate known on its date (typed, or fetched from the European Central Bank) before it is matched, or left "no rate".
+- **Lead time per supplier** is also shown next to each contact.
+
+## 10. Disputes, outbound, retention
+
+- **Disputes:** one click on a mismatched bill opens a dispute with the reason worked out, drafts the mail to the supplier listing the deliveries the bill should pay for, and tracks it until the credit note is recorded: open, credited, closed once the credit covers 98% of the claim. No credit note after 14 days is flagged.
+- **Deliveries to sites:** a stored order becomes a dispatch (van, day, lines), then loaded, then delivered with the name of who signed and what really arrived per line. A shortfall marks it part delivered. PDFs: a delivery note with a box to sign, 100 x 60 mm labels (site, work item, article, quantity), and the order itself, attached automatically to the supplier mail.
+- **Retention:** a stored photo is kept as taken for 42 days, then packed into a small array in the database and the file deleted. The array is the page levelled for uneven light, flattened to one bit a pixel, packed eight to a byte and compressed: about 30 KB for a 1.6 MB photo, print still readable, colour gone. Kept for 10 years (`DOCUMENT_RETENTION_YEARS`). PDFs are kept as they are. `stock archive` packs everything now.
+
+## 11. Security and traceability
 
 | Guard | Detail |
 |---|---|
@@ -115,13 +136,13 @@ Vans with volume and payload (default two Renault Partner at 3.3 m3 and 650 kg, 
 | Backups | `stock backup`, encrypted with AES-256-CBC (PBKDF2, 200,000 rounds) when `BACKUP_PASSPHRASE` is set |
 | Audit | Every change recorded with user, time and detail. Failures are logged and can raise an SMS alert (Twilio or a webhook, 6 an hour at most) |
 
-## 9. Data model (main tables)
+## 12. Data model (main tables)
 
-Paperwork: `notes`, `inventory_lines`, `purchase_orders`, `purchase_order_lines`, `quotes`, `quote_lines`, `bills`, `intake`. Catalogue: `catalog`, `article_names`, `article_aliases`, `article_prices`, `contacts`. Stock: `stock_counts`, `stock_moves`, `reservations`. Buying: `baskets`, `gate_requests`, `gate_log`, `order_queue`, `supplier_mail`. Logistics: `places`, `vehicles`. System: `audit`, `errors`, `readings`, `users`, `schema_migrations`.
+Paperwork: `notes`, `inventory_lines`, `purchase_orders`, `purchase_order_lines`, `quotes`, `quote_lines`, `bills`, `intake`. Catalogue: `catalog`, `article_names`, `article_aliases`, `article_prices`, `contacts`. Stock: `stock_counts`, `stock_moves`, `reservations`, `article_units`. Buying: `baskets`, `gate_requests`, `gate_log`, `order_queue`, `supplier_mail`, `quote_offers`, `agreements`, `disputes`. Logistics: `places`, `vehicles`, `dispatches`, `dispatch_lines`, `calendar_days`, `supplier_terms`, `fx_rates`. Control: `notices`, `photo_archive`. System: `audit`, `errors`, `readings`, `users`, `schema_migrations`.
 
 Exports: inventory, purchase orders, bills and quotes as CSV, XLSX or Parquet (`stock export`), and any table through the SQL screen.
 
-## 10. What leaves the machine
+## 13. What leaves the machine
 
 | To | When |
 |---|---|
@@ -130,10 +151,10 @@ Exports: inventory, purchase orders, bills and quotes as CSV, XLSX or Parquet (`
 | Slack, Discord | Only if their tokens are set |
 | OpenStreetMap services | Only when a route is asked for |
 
-## 11. Command line
+## 14. Command line
 
-`stock run | read | search | ask | sql | export | backup | restore | vocab | audit | errors | sync | password | where | shrink | sample`. `stock sample` adds made-up quotes, part deliveries, bills and baskets to an existing database; a new database fills itself with about six months of made-up paperwork in around 20 seconds (`SAMPLE_DATA=0` to start empty).
+`stock run | read | search | ask | sql | export | backup | restore | vocab | audit | errors | sync | password | where | shrink | archive | sample`. `stock sample` adds made-up quotes, part deliveries, bills and baskets to an existing database; a new database fills itself with about six months of made-up paperwork in around 20 seconds (`SAMPLE_DATA=0` to start empty).
 
-## 12. Not built
+## 15. Not built
 
-Carrier booking and tracking, export to accounting software, a payment or wallet step, and placing the order with the supplier (steps 6 and 7 of the round). Microsoft mailboxes cannot send. Proton mail needs a paid plan for Bridge.
+Carrier booking and tracking, export to accounting software, a payment or wallet step, and placing the order with the supplier (steps 6 and 7 of the round), site requisitions, and rules that let routine buys pass the gate by themselves. Microsoft mailboxes cannot send. Proton mail needs a paid plan for Bridge.

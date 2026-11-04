@@ -1,5 +1,7 @@
 import contextlib
 import shutil
+import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,6 +34,23 @@ class QueryError(Exception):
 def held(db_path):
     with duckdb.connect(str(db_path)):
         yield
+
+
+# A DuckDB file that every connection has closed is shut, and one opened again while it is
+# being shut is refused ("already attached"). The server answers a dozen requests at once
+# and the heavier screens read a hundred times each, so that window is hit. One connection
+# held for as long as the server runs means the file is never shut underneath anybody.
+_anchors = {}
+_anchor_lock = threading.Lock()
+
+
+def keep_open(db_path):
+    """Hold one connection to the database for the life of the process. Safe to repeat."""
+    key = str(db_path)
+    with _anchor_lock:
+        if key not in _anchors:
+            _anchors[key] = duckdb.connect(key)
+    return key
 
 
 def read(db_path, sql, args=()):
@@ -222,48 +241,70 @@ def export(db_path, out_dir):
 
 
 def purge_photos(db_path, images_dir, days=42):
-  
+    """After `days`, a photo is packed into a small array in the database and the file goes.
+    A PDF is kept as the file it is, being small, until the retention years are up."""
+    from . import archive
+
     removed, freed = 0, 0
     if not images_dir.exists():
         return {"files": 0, "bytes": 0, "notes": 0, "lists": 0}
 
-    def unlink(path_str):
+    def unlink(path_str, sha=None):
+        """True when the file is gone, so the row can stop pointing at it."""
         nonlocal removed, freed
         if not path_str:
-            return
+            return True
         path = Path(path_str)
         if not path.is_file():
-            return
-        freed += path.stat().st_size
+            return True
+        if path.suffix.lower() == ".pdf" and sha is not None:
+            return False
+        if sha:
+            raw = path.read_bytes()
+            packed = archive.store(db_path, sha, raw)
+            freed += max(len(raw) - (packed or 0), 0)
+        else:
+            freed += path.stat().st_size
         path.unlink(missing_ok=True)
         removed += 1
+        return True
 
     with duckdb.connect(str(db_path)) as con:
         old_notes = con.execute(
-            "SELECT note_id, image_path FROM notes WHERE image_path IS NOT NULL "
+            "SELECT note_id, image_path, image_sha256 FROM notes WHERE image_path IS NOT NULL "
             f"AND confirmed_at < now() - INTERVAL {int(days)} DAY"
         ).fetchall()
-        for note_id, path_str in old_notes:
-            unlink(path_str)
-            con.execute("UPDATE notes SET image_path = NULL WHERE note_id = ?", [note_id])
+        for note_id, path_str, sha in old_notes:
+            if unlink(path_str, sha):
+                con.execute("UPDATE notes SET image_path = NULL WHERE note_id = ?", [note_id])
 
         old_lists = con.execute(
-            "SELECT list_id, image_path FROM purchase_orders WHERE image_path IS NOT NULL "
-            f"AND created_at < now() - INTERVAL {int(days)} DAY"
+            "SELECT list_id, image_path, image_sha256 FROM purchase_orders "
+            f"WHERE image_path IS NOT NULL AND created_at < now() - INTERVAL {int(days)} DAY"
         ).fetchall()
-        for list_id, path_str in old_lists:
-            unlink(path_str)
-            con.execute("UPDATE purchase_orders SET image_path = NULL WHERE list_id = ?", [list_id])
+        for list_id, path_str, sha in old_lists:
+            if unlink(path_str, sha):
+                con.execute("UPDATE purchase_orders SET image_path = NULL WHERE list_id = ?", [list_id])
+
+        old_bills = con.execute(
+            "SELECT bill_id, image_path, image_sha256 FROM bills WHERE image_path IS NOT NULL "
+            f"AND added_at < now() - INTERVAL {int(days)} DAY"
+        ).fetchall()
+        for bill_id, path_str, sha in old_bills:
+            if unlink(path_str, sha):
+                con.execute("UPDATE bills SET image_path = NULL WHERE bill_id = ?", [bill_id])
 
         kept = {row[0] for row in con.execute(
             "SELECT image_path FROM notes WHERE image_path IS NOT NULL "
-            "UNION SELECT image_path FROM purchase_orders WHERE image_path IS NOT NULL"
+            "UNION SELECT image_path FROM purchase_orders WHERE image_path IS NOT NULL "
+            "UNION SELECT image_path FROM bills WHERE image_path IS NOT NULL"
         ).fetchall()}
 
     for orphan in images_dir.glob("*"):
         if orphan.is_file() and str(orphan) not in kept:
             unlink(str(orphan))
 
+    archive.forget_old(db_path)
     return {"files": removed, "bytes": freed, "notes": len(old_notes), "lists": len(old_lists)}
 
 
@@ -429,8 +470,36 @@ def order_photo_path(db_path, list_id):
     return rows[0][0] if rows else None
 
 
+SNAPSHOT_LIMIT = 300 * 1024 * 1024
+
+
+def _snapshot(db_path):
+    """A copy of the database to ask questions of while a connection is held open on the
+    original, which would refuse a read-only open of the same file."""
+    with _anchor_lock:
+        anchor = _anchors[str(db_path)]
+        anchor.execute("CHECKPOINT")
+        folder = tempfile.mkdtemp(prefix="stock-ask-")
+        copy = Path(folder) / "ask.duckdb"
+        shutil.copyfile(str(db_path), copy)
+    return copy
+
+
 def run_readonly(db_path, sql, max_rows=500):
-    
+    """One SELECT, on a database opened read-only with no access to files."""
+    copy = None
+    target = db_path
+    if str(db_path) in _anchors and Path(db_path).stat().st_size <= SNAPSHOT_LIMIT:
+        copy = _snapshot(db_path)
+        target = copy
+    try:
+        return _run_readonly(target, sql, max_rows)
+    finally:
+        if copy is not None:
+            shutil.rmtree(copy.parent, ignore_errors=True)
+
+
+def _run_readonly(db_path, sql, max_rows):
     try:
         with duckdb.connect(str(db_path), read_only=True,
                             config={"enable_external_access": False}) as con:

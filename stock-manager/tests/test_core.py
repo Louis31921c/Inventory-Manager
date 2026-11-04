@@ -1,7 +1,7 @@
 import asyncio
 import json
 import pathlib
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -4230,14 +4230,17 @@ def test_a_reply_that_names_the_order_confirms_it_and_an_unanswered_order_is_cha
             pass
 
     outbox.send(db_path, acme["mail_id"], _ready_mail(), connect=lambda m, f: Link())
-    today = date.today()
-    # Sent now: nothing to chase yet, and the day to expect is the supplier's usual wait.
-    row = outbox.threads(db_path, today)[0]
-    assert row["needs_chase"] is False and row["state"] == "sent"
-    assert row["expected_on"] == (today + timedelta(days=7)).isoformat()
+    # Sent on a Monday morning, so the days below do not depend on the day the suite runs.
+    db.write(db_path, "UPDATE supplier_mail SET sent_at = ? WHERE mail_id = ? RETURNING mail_id",
+             [datetime(2026, 11, 2, 9, 0), acme["mail_id"]])
+    monday = date(2026, 11, 2)
 
-    later = today + timedelta(days=4)
-    row = outbox.threads(db_path, later)[0]
+    row = outbox.threads(db_path, monday)[0]
+    assert row["needs_chase"] is False and row["state"] == "sent"
+    assert row["expected_on"] == "2026-11-09"                       # the usual 7 days, a Monday
+
+    friday = date(2026, 11, 6)                                       # 4 working days of silence
+    row = outbox.threads(db_path, friday)[0]
     assert row["needs_chase"] is True and row["why"] == "no answer yet"
     chase = outbox.draft_chase(db_path, acme["mail_id"], "T")["drafts"][0]
     assert chase["kind"] == "chase" and chase["subject"].startswith("Relance")
@@ -4246,17 +4249,92 @@ def test_a_reply_that_names_the_order_confirms_it_and_an_unanswered_order_is_cha
     # Strangers and unrelated mail are not taken.
     assert outbox.take_reply(db_path, "x@other.example", "Commande n° %d" % list_id, "ok") is None
     assert outbox.take_reply(db_path, "sales@acme.example", "Bonjour", "no number here") is None
-    when = (today + timedelta(days=9)).strftime("%d/%m/%Y")
     taken = outbox.take_reply(db_path, "Anne <sales@acme.example>", f"RE: Commande n° {list_id}",
-                              f"Bien reçue, livraison le {when}.", today)
+                              "Bien reçue, livraison le 18/11/2026.", friday)
     assert taken == acme["mail_id"]
     thread = outbox.one(db_path, acme["mail_id"])
-    assert thread["state"] == "confirmed" and thread["eta"] == (today + timedelta(days=9)).isoformat()
-    assert outbox.threads(db_path, later)[0]["needs_chase"] is False   # promised day not here yet
-    late = today + timedelta(days=12)
+    assert thread["state"] == "confirmed" and thread["eta"] == "2026-11-18"
+    assert outbox.threads(db_path, friday)[0]["needs_chase"] is False  # the promised day is not here
+    late = date(2026, 11, 20)
     assert outbox.threads(db_path, late)[0]["why"] == "past the day it was promised"
     assert outbox.close(db_path, acme["mail_id"]) is True
     assert outbox.threads(db_path, late) == []
+
+
+def test_the_working_calendar_skips_weekends_holidays_and_supplier_days(db_path):
+    from inventory import workdays
+
+    assert workdays.easter(2026) == date(2026, 4, 5)
+    holidays = workdays.french_holidays(2026)
+    assert date(2026, 4, 6) in holidays and date(2026, 5, 14) in holidays    # Easter Monday, Ascension
+    calendar = workdays.Calendar(db_path)
+    assert calendar.add(date(2026, 11, 6), 1) == date(2026, 11, 9)           # Friday + 1: the Monday
+    assert calendar.add(date(2026, 11, 10), 1) == date(2026, 11, 12)         # the 11th is a holiday
+    assert calendar.between(date(2026, 11, 6), date(2026, 11, 12)) == 3
+
+    workdays.close_day(db_path, date(2026, 11, 9), "stocktake")
+    workdays.set_terms(db_path, "acme", cutoff="15:00", closed_days="4")      # shut on Fridays
+    shop = workdays.Calendar(db_path, "ACME")
+    assert shop.working(date(2026, 11, 9)) is False                          # a closure of ours
+    assert shop.working(date(2026, 11, 13)) is False                         # Friday, the supplier's
+    # An order at 16:00, after the cut-off, starts the next working day for that supplier.
+    assert shop.order_day(datetime(2026, 11, 2, 16, 0)) == date(2026, 11, 3)
+    assert shop.order_day(datetime(2026, 11, 2, 10, 0)) == date(2026, 11, 2)
+    with pytest.raises(ValueError):
+        workdays.set_terms(db_path, "acme", cutoff="25:99")
+
+
+def test_a_bill_in_another_currency_is_converted_or_left_unchecked(db_path):
+    from inventory import bills as bills_module
+    from inventory import matching, prices, workdays
+
+    prices.remember(db_path, "BOLT", 2.0, supplier="SWISS", seen_on=date(2026, 9, 1))
+    db.save_note(db_path, make_note(supplier="SWISS", delivery_date="2026-10-05",
+                                    order_date="2026-09-25",
+                                    lines=[Line(article="BOLT", quantity=10)]), "fx1", "", "T")
+    bills_module.save(db_path, bills_module.shape(
+        {"supplier": "SWISS", "number": "S1", "bill_date": "2026-10-31", "net": 19.0,
+         "total": 19.0, "currency": "CHF"}, source="t"))
+    assert matching.bills(db_path, date(2026, 11, 3))["bills"][0]["verdict"] == "no rate"
+    workdays.set_rate(db_path, date(2026, 10, 30), "CHF", 0.95)              # 0.95 CHF per EUR
+    row = matching.bills(db_path, date(2026, 11, 3))["bills"][0]
+    assert row["billed"] == 20.0 and row["verdict"] == "matched"
+
+    class Reply:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return (b"<Cube time='2026-11-02'><Cube currency='USD' rate='1.10'/>"
+                    b"<Cube currency='JPY' rate='160.5'/></Cube>")
+
+    got = workdays.fetch_rates(db_path, opener=lambda url, timeout: Reply())
+    assert got == {"day": "2026-11-02", "stored": 2}
+    assert workdays.to_eur(db_path, 11.0, "USD", date(2026, 11, 3)) == 10.0
+
+
+def test_a_wanted_quantity_becomes_whole_packs_and_the_order_mail_says_so(db_path):
+    from inventory import outbox, units
+
+    list_id = _outbox_world(db_path)
+    units.set_pack(db_path, "BOLT", 100, supplier="ACME", pack_label="boîte", moq_packs=2)
+    got = units.to_packs(db_path, "bolt", "acme", 130)
+    assert (got["packs"], got["base"], got["extra"]) == (2, 200, 70)         # 2 boxes, the minimum
+    assert units.to_packs(db_path, "bolt", "acme", 350)["packs"] == 4
+    assert units.to_packs(db_path, "NUT", "ACME", 5) is None
+    with pytest.raises(ValueError):
+        units.set_pack(db_path, "BOLT", 0)
+    units.set_pack(db_path, "BOLT", 25, supplier="")                          # anybody's pack
+    assert units.to_packs(db_path, "BOLT", "OTHER", 30)["packs"] == 2
+    assert units.to_packs(db_path, "BOLT", "ACME", 30)["packs"] == 2          # ACME's own wins: 2 boxes
+    assert units.price_per_base(50.0, 100) == 0.5
+
+    acme = next(r for r in outbox.draft_order(db_path, list_id)["drafts"] if r["supplier"] == "ACME")
+    assert "2 x boîte de 100 BOLT (soit 200 piece)" in acme["body"]
+    assert "4 x NUT" in acme["body"]                                          # no pack known: as asked
 
 
 def test_lines_a_delivery_note_still_owes_are_chased_by_supplier(db_path):
@@ -4276,3 +4354,275 @@ def test_lines_a_delivery_note_still_owes_are_chased_by_supplier(db_path):
         outbox.draft_backorder(db_path, "TUBES SA")
     backorders.expect(db_path, note_id, 1, (date.today() + timedelta(days=5)).isoformat())
     assert outbox.owing(db_path) == []                             # a day is promised, not late
+
+
+def test_quote_answers_are_compared_and_the_winner_becomes_the_agreed_supplier(db_path):
+    from inventory import outbox, pricing, prices
+
+    first = quotes.save(db_path, {"supplier": "ACME", "site": "NORD", "needed_by": "2026-12-01"},
+                        [{"article": "GRAVEL", "quantity": 12, "unit": "m3"},
+                         {"article": "SAND", "quantity": 5, "unit": "m3"}], "T")
+    others = pricing.ask_others(db_path, first, ["TUBES SA", "acme"], "T")
+    assert len(others) == 1                                   # ACME already has it
+    second = others[0]
+
+    pricing.set_offer(db_path, first, 1, 30.0, lead_days=5, valid_until="2099-01-01")
+    assert quotes.one(db_path, first)["state"] == "open"      # one line of two answered
+    pricing.set_offer(db_path, first, 2, 20.0, lead_days=5)
+    assert quotes.one(db_path, first)["state"] == "answered"
+    pricing.set_offer(db_path, second, 1, 27.5, lead_days=10)
+    with pytest.raises(ValueError):
+        pricing.set_offer(db_path, second, 9, 1.0)
+    with pytest.raises(ValueError):
+        pricing.set_offer(db_path, second, 1, -3)
+
+    gravel = next(a for a in pricing.compare(db_path)["articles"] if a["article"] == "GRAVEL")
+    by = {o["supplier"]: o for o in gravel["offers"]}
+    assert by["TUBES SA"]["cheapest"] and not by["ACME"]["cheapest"]
+    assert by["ACME"]["fastest"] and not by["TUBES SA"]["fastest"]
+    assert by["TUBES SA"]["total"] == 330.0                   # 12 m3 at 27.50
+
+    done = pricing.award(db_path, second, 1, user="T")
+    assert (done["supplier"], done["unit_price"]) == ("TUBES SA", 27.5)
+    assert outbox.supplier_of(db_path, "GRAVEL") == "TUBES SA"
+    assert prices.usual(db_path, "GRAVEL") == 27.5            # the gate's usual price knows it
+    pricing.award(db_path, first, 1, user="T")                # a later award replaces it
+    assert [a["supplier"] for a in pricing.agreements(db_path)] == ["ACME"]
+    assert outbox.supplier_of(db_path, "GRAVEL") == "ACME"
+
+
+def test_a_dispute_drafts_the_mail_and_runs_until_the_credit_note(db_path):
+    from inventory import bills as bills_module
+    from inventory import disputes, matching, outbox, prices
+
+    prices.remember(db_path, "BOLT", 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    db.save_note(db_path, make_note(supplier="ACME", delivery_date="2026-10-05",
+                                    order_date="2026-09-25",
+                                    lines=[Line(article="BOLT", quantity=10)]), "d1", "", "T")
+    bill_id = bills_module.save(db_path, bills_module.shape(
+        {"supplier": "ACME", "number": "F-9", "bill_date": "2026-10-31", "net": 50.0, "total": 50.0},
+        source="t"))
+    today = date(2026, 11, 3)
+    opened = disputes.open_for_bill(db_path, bill_id, "T", today)
+    assert opened["claimed"] == 30.0 and opened["state"] == "open"
+    assert "billed 50.00" in opened["reason"]
+    assert bills_module.one(db_path, bill_id)["state"] == "disputed"
+    draft = outbox.one(db_path, opened["mail_id"])
+    assert draft["kind"] == "dispute" and "10 x BOLT à 2.00" in draft["body"] and "30.00 EUR" in draft["body"]
+    assert disputes.open_for_bill(db_path, bill_id, "T", today)["dispute_id"] == opened["dispute_id"]
+
+    assert disputes.listing(db_path, date(2026, 11, 20))[0]["overdue"] is True      # 14+ days, no credit
+    part = disputes.record_credit(db_path, opened["dispute_id"], "AV-1", 10.0, today)
+    assert part["state"] == "credited" and part["closed_on"] is None
+    done = disputes.record_credit(db_path, opened["dispute_id"], "AV-2", 20.0, today)
+    assert done["state"] == "closed" and done["credited"] == 30.0
+    assert "AV-2" in bills_module.one(db_path, bill_id)["note"]
+    with pytest.raises(ValueError):
+        disputes.record_credit(db_path, opened["dispute_id"], "x", 0)
+
+
+def test_a_dispatch_runs_from_an_order_to_a_signature_and_prints_its_paper(db_path):
+    from inventory import documents, outbound
+
+    list_id = db.save_purchase_order(db_path, {
+        "list_date": date(2026, 11, 2), "site": "NORD", "work_item": "W1", "drafter": "X",
+        "lines": [{"article": "BOLT", "quantity": 10.0, "designation": "Bolt M6"},
+                  {"article": "NUT", "quantity": 4.0}]}, None, None, "T")
+    made = outbound.create_from_order(db_path, list_id, planned_on="2026-11-04", user="T")
+    assert made["state"] == "planned" and [l["quantity"] for l in made["lines"]] == [10.0, 4.0]
+    with pytest.raises(ValueError):
+        outbound.create_from_order(db_path, 999)
+    assert outbound.load(db_path, made["dispatch_id"])["state"] == "loaded"
+    with pytest.raises(ValueError):
+        outbound.load(db_path, made["dispatch_id"])
+    with pytest.raises(ValueError):
+        outbound.deliver(db_path, made["dispatch_id"], " ")                 # nobody signed
+
+    part = outbound.deliver(db_path, made["dispatch_id"], "M. Durand", {2: 3})
+    assert part["state"] == "part delivered" and part["received_by"] == "M. Durand"
+    assert [l["delivered"] for l in part["lines"]] == [10.0, 3.0]
+    assert outbound.listing(db_path)[0]["dispatch_id"] == made["dispatch_id"]
+
+    pytest.importorskip("reportlab")
+    for pdf in (documents.delivery_note_pdf(db_path, made["dispatch_id"]),
+                documents.labels_pdf(db_path, made["dispatch_id"]),
+                documents.order_pdf(db_path, list_id, "ACME", [("BOLT", "Bolt M6", "10")])):
+        assert pdf.startswith(b"%PDF")
+
+
+def test_an_old_photo_becomes_a_small_array_that_still_reads_as_a_page(tmp_path):
+    import io
+
+    from PIL import Image, ImageDraw
+
+    from inventory import archive
+
+    db_path = tmp_path / "a.duckdb"
+    db.init(db_path)
+    page = Image.new("RGB", (1500, 2000), (205, 200, 190))          # grey-ish paper, uneven light
+    for y in range(0, 2000, 4):
+        ImageDraw.Draw(page).line([(0, y), (1500, y)], fill=(215 - y // 40, 210 - y // 40, 200 - y // 40))
+    draw = ImageDraw.Draw(page)
+    for row in range(30):
+        draw.text((80, 100 + row * 55), f"LINE {row} BOLT M6 x 100  23.09.2026", fill=(20, 20, 20))
+    buffer = io.BytesIO()
+    page.save(buffer, "JPEG", quality=92)
+    raw = buffer.getvalue()
+
+    images = tmp_path / "images"
+    images.mkdir()
+    shot = images / "abc.jpg"
+    shot.write_bytes(raw)
+    note_id = db.save_note(db_path, make_note(), "abc", str(shot), "T")
+    db.write(db_path, "UPDATE notes SET confirmed_at = now() - INTERVAL 60 DAY WHERE note_id = ? "
+                      "RETURNING note_id", [note_id])
+
+    done = db.purge_photos(db_path, images, days=42)
+    assert done["notes"] == 1 and not shot.exists()
+    assert db.read(db_path, "SELECT image_path FROM notes WHERE note_id = ?", [note_id]) == [(None,)]
+    stored = archive.summary(db_path)
+    assert stored["pages"] == 1 and stored["bytes"] < len(raw) / 8        # a fraction of the photo
+
+    back = Image.open(io.BytesIO(archive.get(db_path, "abc")))
+    assert back.mode == "1" and back.size[0] <= archive.LONG_SIDE
+    ink = sum(1 for px in back.convert("L").getdata() if px == 0)
+    assert 0 < ink < back.size[0] * back.size[1] * 0.2                    # print, not a black page
+    assert archive.get(db_path, "nope") is None
+    assert archive.store(db_path, "bad", b"not a picture") is None
+
+    # A PDF is kept as the file it is.
+    pdf = images / "bill.pdf"
+    pdf.write_bytes(b"%PDF-1.4 bill")
+    db.write(db_path, "INSERT INTO bills (supplier, bill_date, total, image_sha256, image_path, "
+                      "added_at) VALUES ('A', current_date, 1, 'pdfsha', ?, now() - INTERVAL 90 DAY) "
+                      "RETURNING bill_id", [str(pdf)])
+    db.purge_photos(db_path, images, days=42)
+    assert pdf.exists()
+
+
+def test_notices_appear_once_clear_when_fixed_and_are_pushed_only_when_set(db_path, monkeypatch):
+    from inventory import bills as bills_module
+    from inventory import prices, watch
+
+    today = date(2026, 11, 3)
+    bill = bills_module.save(db_path, bills_module.shape(
+        {"supplier": "ACME", "number": "F1", "bill_date": "2026-09-01", "due_date": "2026-10-01",
+         "net": 10.0, "total": 10.0}, source="t"))
+    quotes.save(db_path, {"supplier": "ACME", "needed_by": "2026-11-05"},
+                [{"article": "GRAVEL", "quantity": 3, "unit": "m3"}], "T")
+    for number, price in enumerate((1.0, 1.0, 1.1, 1.0, 1.9), 1):
+        prices.remember(db_path, "WASHER", price, supplier="ACME", seen_on=date(2026, 8, number))
+
+    new = watch.scan(db_path, today)
+    keys = set(new)
+    assert f"due:{bill}" in keys and any(k.startswith("quote:") for k in keys)
+    assert "price:WASHER" in keys
+    assert watch.scan(db_path, today) == []                       # the same trouble is one notice
+    titles = {n["key"]: n["severity"] for n in watch.open_notices(db_path)}
+    assert titles[f"due:{bill}"] == "high"
+
+    bills_module.update(db_path, bill, {"state": "paid"})
+    watch.scan(db_path, today)
+    assert f"due:{bill}" not in {n["key"] for n in watch.open_notices(db_path)}
+
+    config = make_config(db_path.parent)
+    sent = []
+    monkeypatch.delenv("NOTIFY_VIA", raising=False)
+    assert watch.run(db_path, config, today, send=lambda *a: sent.append(a) or True)["pushed"] == []
+    assert sent == []                                              # nothing is pushed unless set
+
+    monkeypatch.setenv("NOTIFY_VIA", "slack, mail")
+    monkeypatch.setenv("NOTIFY_HOUR", "8")
+    got = watch.run(db_path, config, today, now=datetime(2026, 11, 3, 7, 0),
+                    send=lambda channel, text, subject: sent.append((channel, text)) or True)
+    assert got["pushed"] == ["slack", "mail"] and "Quote #" in sent[0][1]
+    assert watch.push_new(db_path, config, send=lambda *a: True) == []     # pushed already, once
+    count = len(sent)
+    watch.digest(db_path, config, datetime(2026, 11, 3, 9, 0), send=lambda c, t, s: sent.append((c, t)) or True)
+    assert len(sent) == count + 2 and "need you" in sent[-1][1]            # the digest, both channels
+    assert watch.digest(db_path, config, datetime(2026, 11, 3, 10, 0),
+                        send=lambda *a: sent.append(a) or True) == []      # but only once a day
+
+
+def test_the_dashboard_names_what_is_short_why_and_what_to_do(db_path):
+    from inventory import dashboard, outbox, prices, stockctl
+
+    today = date(2026, 11, 3)
+    for number, day in enumerate((date(2026, 10, 5), date(2026, 10, 12), date(2026, 10, 19)), 1):
+        db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                        order_date=(day - timedelta(days=10)).isoformat(),
+                                        site="NORD", work_item="W1",
+                                        lines=[Line(article="BOLT", quantity=70)]), f"db{number}", "", "T")
+    db.save_stock_count(db_path, "BOLT", 0, "T")                   # the shelf is empty
+    prices.remember(db_path, "BOLT", 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    stockctl.reserve(db_path, "BOLT", "NORD", "W1", 5, needed_by="2026-11-05", user="T", force=True)
+
+    items = dashboard.shortages(db_path, today)
+    bolt = next(i for i in items if i["article"] == "BOLT")
+    assert bolt["status"] == "line down" and bolt["need_date"] == "2026-11-05"
+    assert bolt["blocks"] == ["NORD / W1"] and bolt["supplier"] == "ACME"
+    assert bolt["lead_days"] == 10 and bolt["cause"] == "no order placed"
+    assert "10 days" in bolt["cause_detail"] and "express" in bolt["action"]   # 10 days against 2 left
+
+    # Draft the order: the cause moves to "drafted, not sent".
+    lid = db.save_purchase_order(db_path, {"list_date": today, "site": "NORD", "work_item": "W1",
+                                           "drafter": "X", "lines": [{"article": "BOLT",
+                                                                      "quantity": 50.0, "in_stock": False}]},
+                                 None, None, "T")
+    outbox.draft_order(db_path, lid, "T")
+    again = next(i for i in dashboard.shortages(db_path, today) if i["article"] == "BOLT")
+    assert again["cause"] == "order drafted, not sent"
+    built = dashboard.build(db_path, today)
+    assert built["kpis"]["line_down"] >= 1 and built["shortages"][0]["status"] == "line down"
+
+
+def test_orders_to_come_lists_buffer_orders_the_queue_and_what_was_sent(db_path):
+    from inventory import dashboard, outbox, reorder
+
+    today = date(2026, 11, 3)
+    for number in range(1, 5):
+        day = date(2026, 10, 1) + timedelta(days=number * 5)
+        db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                        order_date=(day - timedelta(days=5)).isoformat(),
+                                        lines=[Line(article="BOLT", quantity=100)]), f"oc{number}", "", "T")
+    db.save_stock_count(db_path, "BOLT", 3, "T")
+    lid = db.save_purchase_order(db_path, {"list_date": today, "site": "NORD", "work_item": "W1",
+                                           "drafter": "X", "lines": [
+                                               {"article": "NUT", "quantity": 8.0, "in_stock": False}]},
+                                 None, None, "T")
+    reorder.collect(db_path, today)
+    got = dashboard.planned_orders(db_path, today)
+    sources = {(r["article"], r["status"]) for r in got["rows"]}
+    assert ("BOLT", "to place") in sources and ("NUT", "waiting") in sources
+    waiting = next(r for r in got["rows"] if r["article"] == "NUT")
+    assert waiting["order_on"] == "2026-11-18"                      # 15 days after it was read
+
+
+def test_autonomy_is_measured_from_the_record_and_starts_low(db_path):
+    from inventory import autonomy
+
+    empty = autonomy.measure(db_path, date(2026, 11, 3))
+    assert empty["score"] == 0.0 and sum(p["weight"] for p in empty["parts"]) == 100
+    assert all(p["points"] == 0 for p in empty["parts"])
+
+    for number in range(4):
+        who = "MAIL" if number < 3 else "T"                          # 3 of 4 notes came in by mail
+        db.save_note(db_path, make_note(), f"au{number}", "", who)
+    got = autonomy.measure(db_path, date(2026, 11, 3))
+    receiving = next(p for p in got["parts"] if p["part"] == "receiving")
+    assert receiving["rate"] == 0.75 and receiving["points"] == 11.25 and receiving["samples"] == 4
+    assert got["score"] >= 11.25 and got["measured_weight"] >= 15
+    assert got["score"] <= 100
+
+
+def test_contacts_carry_the_lead_time_learned_for_their_supplier(db_path):
+    from inventory import leadtimes
+
+    for number, wait in enumerate((4, 6, 5), 1):
+        day = date(2026, 10, 1) + timedelta(days=number * 3)
+        db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                        order_date=(day - timedelta(days=wait)).isoformat(),
+                                        lines=[Line(article=f"A{number}", quantity=1)]),
+                     f"lc{number}", "", "T")
+    known = leadtimes.per_supplier(db_path)["ACME"]
+    assert known["n"] == 3 and known["days"] == 5.0

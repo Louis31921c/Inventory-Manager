@@ -26,11 +26,12 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, audit, backorders, backup, baskets, bills, catalog,
+from . import (account, agents, alerts, archive, audit, autonomy, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
-               mail_oauth, mailbox, matching, models_info, outbox, pg, photos, prices, quotes, reorder, routing, sheets,
-               shortcuts, simulation, slack_bot, stock, stockctl, verify, vocabulary)
+               mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
+               shortcuts, simulation, slack_bot, stock, stockctl, units, verify, vocabulary, watch,
+               workdays)
 from .config import load_config, set_setting
 from .models import Note, parse_date
 
@@ -81,12 +82,14 @@ def report(request, kind, description, context=None):
 @app.on_event("startup")
 async def startup():
     simulation.init(config.db_path)
+    db.keep_open(config.db_path)
     config.images_dir.mkdir(parents=True, exist_ok=True)
     log.info("database: %s", config.db_path)
     log.info("error reports: %s", alerts.destination(config.sms))
     asyncio.create_task(_purge_loop())
     asyncio.create_task(_mail_loop())
     asyncio.create_task(_queue_loop())
+    asyncio.create_task(_watch_loop())
     if discord_bot.settings()["token"]:
         asyncio.create_task(discord_bot.run(config))
     if slack_bot.settings()["bot_token"] and slack_bot.settings()["app_token"]:
@@ -176,6 +179,21 @@ async def _read_mail_notes(intake_ids):
                      f"{note.supplier} · {len(note.lines)} line(s) · from {item['sender'] or 'mail'}")
         stored.append(note_id)
     return {"stored": len(stored), "left": left}
+
+
+async def _watch_loop():
+    """Every hour: look over the books for what needs a person, and push what is new."""
+    while True:
+        try:
+            done = await asyncio.to_thread(watch.run, config.db_path, config)
+            if done["new"] or done["pushed"]:
+                log.info("notices: %d new, %d open, pushed by %s", done["new"], done["open"],
+                         ", ".join(done["pushed"]) or "nothing")
+        except Exception as e:
+            log.exception("notice scan failed")
+            await asyncio.to_thread(report, None, "watch", f"notice scan failed: {e}",
+                                    "notice loop")
+        await asyncio.sleep(3600)
 
 
 last_mail = {"at": None, "queued": 0, "detail": "not run yet"}
@@ -1043,7 +1061,12 @@ def remove_note(request: Request, note_id: int):
     return {"deleted": note_id}
 
 
-def _photo(path):
+def _photo(path, sha=None):
+    """A stored photo, or the packed page that replaced it once the photo was old."""
+    if (not path or not Path(path).exists()) and sha:
+        page = archive.get(config.db_path, sha)
+        if page:
+            return Response(page, media_type="image/png")
     if not path or not Path(path).exists():
         raise HTTPException(404, "No photo.")
     return FileResponse(path)
@@ -1051,8 +1074,9 @@ def _photo(path):
 
 @app.get("/api/photo/{note_id}")
 def photo(note_id: int):
-    rows = db.read(config.db_path, "SELECT image_path FROM notes WHERE note_id = ?", [note_id])
-    return _photo(rows[0][0] if rows else None)
+    rows = db.read(config.db_path, "SELECT image_path, image_sha256 FROM notes WHERE note_id = ?",
+                   [note_id])
+    return _photo(*(rows[0] if rows else (None, None)))
 
 
 class BillBody(BaseModel):
@@ -1160,6 +1184,364 @@ def _outbox_work(request, action, target, work):
             "outbox": outbox.overview(config.db_path, config.mail)}
 
 
+
+# ---- dashboard, notices, autonomy ------------------------------------------
+
+_autonomy_cache = {"at": 0.0, "value": None}
+
+
+@app.get("/api/dashboard")
+def read_dashboard():
+    return dashboard.build(config.db_path)
+
+
+@app.get("/api/planned-orders")
+def read_planned_orders():
+    return dashboard.planned_orders(config.db_path)
+
+
+@app.get("/api/notices")
+def read_notices():
+    return {"notices": watch.open_notices(config.db_path), "notify_via": watch.channels()}
+
+
+@app.post("/api/notices/scan")
+def scan_notices(request: Request):
+    done = watch.run(config.db_path, config)
+    event(request, "notices.scan", f"{done['new']} new", None)
+    return {**done, "notices": watch.open_notices(config.db_path)}
+
+
+@app.get("/api/autonomy")
+def read_autonomy():
+    """The figure on the landing page. Worked out at most every few seconds."""
+    now = time.monotonic()
+    if _autonomy_cache["value"] is None or now - _autonomy_cache["at"] > 4:
+        _autonomy_cache.update(at=now, value=autonomy.measure(config.db_path))
+    return _autonomy_cache["value"]
+
+
+def _do(request, action, target, work):
+    """Writes that can be refused in words: the refusal is the person's to read."""
+    try:
+        done = work()
+    except (ValueError, documents.Unavailable) as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, action, target, None)
+    return done
+
+
+# ---- calendar, supplier terms, exchange rates ----------------------------------
+
+class ClosedDay(BaseModel):
+    day: str
+    label: str | None = None
+
+
+class Terms(BaseModel):
+    supplier: str
+    cutoff: str | None = None
+    closed_days: str | None = None
+    payment_days: int | None = None
+    currency: str | None = None
+    note: str | None = None
+
+
+class Rate(BaseModel):
+    day: str
+    currency: str
+    per_eur: float
+
+
+@app.get("/api/calendar")
+def read_calendar(year: int | None = None):
+    year = year or date.today().year
+    return {"year": year, "days": workdays.calendar_view(config.db_path, year),
+            "terms": workdays.all_terms(config.db_path),
+            "rates": [{"day": d.isoformat(), "currency": c, "per_eur": r} for d, c, r in db.read(
+                config.db_path, "SELECT day, currency, per_eur FROM fx_rates ORDER BY day DESC, "
+                                "currency LIMIT 40")]}
+
+
+@app.post("/api/calendar/close")
+def close_a_day(request: Request, body: ClosedDay):
+    day = parse_date(body.day)
+    if day is None:
+        raise HTTPException(422, "That day is not a date.")
+    workdays.close_day(config.db_path, day, body.label)
+    event(request, "calendar.close", day.isoformat(), body.label)
+    return read_calendar(day.year)
+
+
+@app.delete("/api/calendar/{day}")
+def reopen_a_day(request: Request, day: str):
+    when = parse_date(day)
+    if when is None or not workdays.reopen_day(config.db_path, when):
+        raise HTTPException(404, "That day is not one you closed.")
+    event(request, "calendar.open", when.isoformat())
+    return read_calendar(when.year)
+
+
+@app.put("/api/terms")
+def put_terms(request: Request, body: Terms):
+    name = _do(request, "terms.set", body.supplier, lambda: workdays.set_terms(
+        config.db_path, body.supplier, body.cutoff, body.closed_days, body.payment_days,
+        body.currency, body.note))
+    return {"supplier": name, "terms": workdays.all_terms(config.db_path)}
+
+
+@app.post("/api/rates")
+def put_rate(request: Request, body: Rate):
+    day = parse_date(body.day)
+    if day is None:
+        raise HTTPException(422, "That day is not a date.")
+    _do(request, "rate.set", body.currency, lambda: workdays.set_rate(
+        config.db_path, day, body.currency, body.per_eur))
+    return read_calendar(day.year)
+
+
+@app.post("/api/rates/fetch")
+def fetch_rates(request: Request):
+    try:
+        got = workdays.fetch_rates(config.db_path)
+    except Exception as e:
+        raise HTTPException(502, f"The rates could not be fetched: {e}") from e
+    event(request, "rate.fetch", got["day"], f"{got['stored']} currencies")
+    return {**got, **read_calendar()}
+
+
+# ---- pack sizes ---------------------------------------------------------------
+
+class Pack(BaseModel):
+    article: str
+    pack_qty: float
+    supplier: str | None = ""
+    base_unit: str | None = "piece"
+    pack_label: str | None = None
+    moq_packs: int = 1
+
+
+@app.get("/api/units")
+def read_units():
+    return {"packs": units.listing(config.db_path)}
+
+
+@app.put("/api/units")
+def put_pack(request: Request, body: Pack):
+    _do(request, "units.set", body.article, lambda: units.set_pack(
+        config.db_path, body.article, body.pack_qty, body.supplier or "", body.base_unit or "piece",
+        body.pack_label, body.moq_packs))
+    return read_units()
+
+
+@app.delete("/api/units")
+def delete_pack(request: Request, article: str, supplier: str = ""):
+    if not units.remove(config.db_path, article, supplier):
+        raise HTTPException(404, "No such pack size.")
+    event(request, "units.delete", article)
+    return read_units()
+
+
+# ---- quote answers, comparison, awards --------------------------------------------
+
+class Offer(BaseModel):
+    quote_id: int
+    line_no: int
+    unit_price: float
+    lead_days: int | None = None
+    valid_until: str | None = None
+    note: str | None = None
+
+
+class Award(BaseModel):
+    quote_id: int
+    line_no: int
+    valid_to: str | None = None
+
+
+class Others(BaseModel):
+    suppliers: list[str]
+
+
+@app.get("/api/offers/{quote_id}")
+def read_offers(quote_id: int):
+    return {"offers": pricing.offers(config.db_path, quote_id)}
+
+
+@app.put("/api/offers")
+def put_offer(request: Request, body: Offer):
+    _do(request, "offer.set", f"quote #{body.quote_id} line {body.line_no}", lambda: pricing.set_offer(
+        config.db_path, body.quote_id, body.line_no, body.unit_price, body.lead_days,
+        body.valid_until, body.note, who(request)[0]))
+    return {"offers": pricing.offers(config.db_path, body.quote_id), **pricing.compare(config.db_path)}
+
+
+@app.post("/api/quotes/{quote_id}/ask-others")
+def ask_other_suppliers(request: Request, quote_id: int, body: Others):
+    made = _do(request, "quote.copy", f"quote #{quote_id}", lambda: pricing.ask_others(
+        config.db_path, quote_id, body.suppliers, who(request)[0]))
+    return {"made": made, "quotes": quotes.recent(config.db_path)}
+
+
+@app.get("/api/compare")
+def compare_offers():
+    return pricing.compare(config.db_path)
+
+
+@app.post("/api/award")
+def award_offer(request: Request, body: Award):
+    done = _do(request, "offer.award", f"quote #{body.quote_id} line {body.line_no}",
+               lambda: pricing.award(config.db_path, body.quote_id, body.line_no, body.valid_to,
+                                     who(request)[0]))
+    return {**done, **pricing.compare(config.db_path)}
+
+
+@app.delete("/api/agreements/{agreement_id}")
+def end_agreement(request: Request, agreement_id: int):
+    if not pricing.end(config.db_path, agreement_id):
+        raise HTTPException(404, "That agreement is not active.")
+    event(request, "agreement.end", f"agreement #{agreement_id}")
+    return pricing.compare(config.db_path)
+
+
+# ---- disputes -------------------------------------------------------------------------
+
+class Dispute(BaseModel):
+    bill_id: int
+
+
+class Credit(BaseModel):
+    ref: str | None = None
+    amount: float
+
+
+@app.get("/api/disputes")
+def read_disputes():
+    return {"disputes": disputes.listing(config.db_path)}
+
+
+@app.post("/api/disputes")
+def open_dispute(request: Request, body: Dispute):
+    made = _do(request, "dispute.open", f"bill #{body.bill_id}", lambda: disputes.open_for_bill(
+        config.db_path, body.bill_id, who(request)[0]))
+    return {"dispute": made, "disputes": disputes.listing(config.db_path),
+            "outbox": outbox.overview(config.db_path, config.mail)}
+
+
+@app.post("/api/disputes/{dispute_id}/credit")
+def credit_dispute(request: Request, dispute_id: int, body: Credit):
+    _do(request, "dispute.credit", f"dispute #{dispute_id}", lambda: disputes.record_credit(
+        config.db_path, dispute_id, body.ref, body.amount))
+    return {"disputes": disputes.listing(config.db_path)}
+
+
+@app.post("/api/disputes/{dispute_id}/close")
+def close_dispute(request: Request, dispute_id: int):
+    if not disputes.close(config.db_path, dispute_id):
+        raise HTTPException(404, "That dispute is not open.")
+    event(request, "dispute.close", f"dispute #{dispute_id}")
+    return {"disputes": disputes.listing(config.db_path)}
+
+
+# ---- deliveries to sites ---------------------------------------------------------------
+
+class NewDispatch(BaseModel):
+    list_id: int
+    vehicle_id: int | None = None
+    planned_on: str | None = None
+    note: str | None = None
+
+
+class Handover(BaseModel):
+    received_by: str
+    delivered: dict[int, float] | None = None
+    note: str | None = None
+
+
+class Failure(BaseModel):
+    note: str = ""
+
+
+@app.get("/api/dispatches")
+def read_dispatches():
+    return {"dispatches": outbound.listing(config.db_path),
+            "vehicles": [{"vehicle_id": i, "name": n} for i, n in db.read(
+                config.db_path, "SELECT vehicle_id, name FROM vehicles ORDER BY vehicle_id")]}
+
+
+@app.get("/api/dispatches/{dispatch_id}")
+def read_dispatch(dispatch_id: int):
+    held = outbound.one(config.db_path, dispatch_id)
+    if held is None:
+        raise HTTPException(404, "No such dispatch.")
+    return held
+
+
+@app.post("/api/dispatches")
+def new_dispatch(request: Request, body: NewDispatch):
+    made = _do(request, "dispatch.create", f"order #{body.list_id}", lambda: outbound.create_from_order(
+        config.db_path, body.list_id, body.vehicle_id, body.planned_on, who(request)[0], body.note))
+    return {"dispatch": made, **read_dispatches()}
+
+
+@app.post("/api/dispatches/{dispatch_id}/load")
+def load_dispatch(request: Request, dispatch_id: int):
+    _do(request, "dispatch.load", f"dispatch #{dispatch_id}", lambda: outbound.load(
+        config.db_path, dispatch_id))
+    return read_dispatches()
+
+
+@app.post("/api/dispatches/{dispatch_id}/deliver")
+def deliver_dispatch(request: Request, dispatch_id: int, body: Handover):
+    _do(request, "dispatch.deliver", f"dispatch #{dispatch_id}", lambda: outbound.deliver(
+        config.db_path, dispatch_id, body.received_by, body.delivered, body.note))
+    return read_dispatches()
+
+
+@app.post("/api/dispatches/{dispatch_id}/fail")
+def fail_dispatch(request: Request, dispatch_id: int, body: Failure):
+    _do(request, "dispatch.fail", f"dispatch #{dispatch_id}", lambda: outbound.fail(
+        config.db_path, dispatch_id, body.note))
+    return read_dispatches()
+
+
+def _pdf(make, name):
+    return Response(make(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{name}"'})
+
+
+@app.get("/api/dispatches/{dispatch_id}/note.pdf")
+def dispatch_note_pdf(dispatch_id: int):
+    return _pdf_or_422(lambda: documents.delivery_note_pdf(config.db_path, dispatch_id),
+                       f"bl-{dispatch_id}.pdf")
+
+
+@app.get("/api/dispatches/{dispatch_id}/labels.pdf")
+def dispatch_labels_pdf(dispatch_id: int):
+    return _pdf_or_422(lambda: documents.labels_pdf(config.db_path, dispatch_id),
+                       f"etiquettes-{dispatch_id}.pdf")
+
+
+def _pdf_or_422(make, name):
+    try:
+        return _pdf(make, name)
+    except (ValueError, documents.Unavailable) as e:
+        raise HTTPException(422, str(e)) from e
+
+
+# ---- archive ---------------------------------------------------------------------------
+
+@app.get("/api/archive")
+def read_archive():
+    return archive.summary(config.db_path)
+
+
+@app.post("/api/archive/run")
+def run_archive(request: Request):
+    done = archive.sweep(config.db_path, config.images_dir, 0)
+    event(request, "archive.run", f"{done['pages']} page(s)", f"{done['before']} -> {done['after']} bytes")
+    return {**done, **archive.summary(config.db_path)}
+
 @app.get("/api/outbox")
 def read_outbox():
     return outbox.overview(config.db_path, config.mail)
@@ -1253,8 +1635,9 @@ def remove_bill(request: Request, bill_id: int):
 
 @app.get("/api/bill-photo/{bill_id}")
 def bill_photo(bill_id: int):
-    rows = db.read(config.db_path, "SELECT image_path FROM bills WHERE bill_id = ?", [bill_id])
-    return _photo(rows[0][0] if rows else None)
+    rows = db.read(config.db_path, "SELECT image_path, image_sha256 FROM bills WHERE bill_id = ?",
+                   [bill_id])
+    return _photo(*(rows[0] if rows else (None, None)))
 
 
 # ---- quote requests -------------------------------------------------------
@@ -1365,8 +1748,19 @@ def read_contacts():
             if not book:
                 contacts.load_file(config.db_path, found, "file")
                 book = contacts.all_of(config.db_path)
-    return {"contacts": book, "incoterms": contacts.terms(),
+    return {"contacts": _with_lead_times(book), "incoterms": contacts.terms(),
             "file": str(found) if found else None}
+
+
+def _with_lead_times(rows):
+    """Each contact with how long that supplier really takes, learned from the delivery notes."""
+    leads = leadtimes.per_supplier(config.db_path)
+    for row in rows:
+        known = leads.get(str(row.get("company") or "").strip().upper())
+        row["lead_days"] = known["plan_days"] if known and known["n"] >= leadtimes.MIN_SAMPLES else None
+        row["lead_usual"] = known["days"] if known else None
+        row["lead_n"] = known["n"] if known else 0
+    return rows
 
 
 @app.get("/api/contacts/file")
@@ -1374,7 +1768,9 @@ def search_contact_file(name: str | None = None, company: str | None = None,
                         all: bool = False):
     """Straight from the csv on the disk, not from the book in the database."""
     try:
-        return contacts.look_up(name, company, limit=None if all else 50)
+        found = contacts.look_up(name, company, limit=None if all else 50)
+        _with_lead_times(found["rows"])
+        return found
     except FileNotFoundError as e:
         raise HTTPException(404, str(e)) from e
     except (OSError, UnicodeDecodeError) as e:
@@ -1671,7 +2067,9 @@ def remove_list(request: Request, list_id: int):
 
 @app.get("/api/order-photo/{list_id}")
 def list_photo(list_id: int):
-    return _photo(db.order_photo_path(config.db_path, list_id))
+    rows = db.read(config.db_path, "SELECT image_path, image_sha256 FROM purchase_orders "
+                                  "WHERE list_id = ?", [list_id])
+    return _photo(*(rows[0] if rows else (None, None)))
 
 
 @app.get("/api/vocabulary")

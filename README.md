@@ -516,6 +516,33 @@ database of its own to run a simulation on; the year itself is written in
   the notes. An article with 3 or more deliveries is planned with its own (the day one
   delivery in five exceeds); the Lead setting is the fallback, and Plutus sees both.
 
+## Control tower, prices, calendars, disputes, deliveries, archive
+
+- **Landing dashboard and autonomy figure.** `/api/dashboard` lists the short articles with status,
+  need date, blocked work, root cause, supplier lead time and action; `/api/autonomy` is the
+  0 to 100 figure, eight weighted parts each measured from the record (see `autonomy.py`).
+  `/api/notices` is the list the hourly scan keeps (`watch.py`); critical and high ones are pushed
+  once to the channels in `NOTIFY_VIA` (`slack`, `sms`, `mail`), and a digest goes at `NOTIFY_HOUR`
+  (default 8). Nothing is pushed when `NOTIFY_VIA` is empty.
+- **Quote answers and awards.** `pricing.py`: one offer per quote line (price, lead days, validity),
+  `ask_others` copies a request to other suppliers, `compare` marks the cheapest and fastest, `award`
+  makes an agreement that ends the earlier one, enters the price history and decides which supplier
+  an order draft uses.
+- **Pack sizes** (`units.py`) turn a wanted quantity into whole packs, at least the minimum; the order
+  mail says so. **Calendar** (`workdays.py`): French holidays, your closures, per-supplier cut-off
+  and shut weekdays, used for every expected date. Bills in another currency are matched in euros at
+  the last rate on their date (`fx_rates`, filled by hand or from the ECB).
+- **Disputes** (`disputes.py`): opened from a mismatched bill, a mail drafted with the deliveries,
+  closed when credit notes cover 98% of the claim. **Deliveries to sites** (`outbound.py`,
+  `documents.py`): dispatch, load, sign, with a delivery note PDF, labels, and the order PDF attached
+  to supplier mails (needs `reportlab`, now a dependency).
+- **Photo archive** (`archive.py`). After `PHOTO_RETENTION_DAYS` (42) a photo is levelled, reduced to
+  one bit a pixel, packed and compressed into `photo_archive` (about 30 KB for 1.6 MB) and the file
+  is deleted; the photo routes fall back to it. Kept `DOCUMENT_RETENTION_YEARS` (10). `stock archive`
+  packs everything now. PDFs stay as files.
+- **One connection stays open** while the server runs (`db.keep_open`), so the database file is
+  never shut under a concurrent request; the SQL screen asks its read-only question on a snapshot.
+
 ## Where things are stored
 
 | What | Path |

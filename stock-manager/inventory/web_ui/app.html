@@ -83,6 +83,23 @@
     <p class="muted" id="gate-note"></p>
     <div id="gate-list"></div>
   </div>
+  <div class="card" id="dash-card">
+    <div class="autonomy">
+      <span class="autonomy-name">Autonomy</span>
+      <strong id="autonomy-score">--.--</strong><span class="autonomy-of">/ 100</span>
+      <span class="autonomy-bar"><span id="autonomy-fill"></span></span>
+      <button class="mini" id="autonomy-more" type="button">how it is worked out</button>
+    </div>
+    <div id="autonomy-detail" hidden>
+      <table id="table-autonomy"></table>
+      <p class="muted" id="autonomy-note"></p>
+    </div>
+    <div class="row" id="dash-kpis"></div>
+    <p class="eyebrow">Shortages</p>
+    <div class="scroll-x short-box"><table id="table-shortages"></table></div>
+    <p class="eyebrow">Open actions</p>
+    <div class="scroll-x short-box"><table id="table-actions"></table></div>
+  </div>
   <div class="home">
     <div class="home-logo" role="img" aria-label="Logistics Manager"></div>
     <!-- The window is WebKit, not a browser: these open outside it, so none is a link. -->
@@ -231,6 +248,23 @@
       </label>
     </div>
     <div class="scroll-x short-box"><table id="table-stock"></table></div>
+  </div>
+
+  <div class="card" id="pack-card">
+    <h2>Pack sizes</h2>
+    <p class="muted">What a supplier sells an article in. An order for 130 washers goes out as the
+      whole boxes it takes, at least the minimum.</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="pk-article" list="stock-articles" autocomplete="off"></label>
+      <label class="field grow"><span>supplier (empty: anyone)</span><input id="pk-supplier" autocomplete="off"></label>
+      <label class="field narrow"><span>holds</span><input id="pk-qty" inputmode="decimal"></label>
+      <label class="field narrow"><span>unit</span><input id="pk-unit" value="piece"></label>
+      <label class="field narrow"><span>pack is called</span><input id="pk-label" placeholder="box"></label>
+      <label class="field narrow"><span>min packs</span><input id="pk-moq" inputmode="numeric" value="1"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="pk-go">save</button></label>
+    </div>
+    <div id="pack-note"></div>
+    <div class="scroll-x short-box"><table id="table-packs"></table></div>
   </div>
 
   <div class="card" id="site-stock-card">
@@ -436,6 +470,20 @@
     <div class="scroll-x short-box"><table id="table-mail-log"></table></div>
   </div>
 
+  <div class="card" id="dispatch-card">
+    <h2>Deliveries to sites</h2>
+    <p class="muted">Turn a stored order into a delivery: a van, a day, a note to print with a box to sign,
+      labels for the pallets, and who signed for what arrived.</p>
+    <div class="row">
+      <label class="field grow"><span>order</span><select id="dp-order"></select></label>
+      <label class="field grow"><span>van</span><select id="dp-van"></select></label>
+      <label class="field narrow"><span>on</span><input id="dp-day" type="date"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="dp-go">plan it</button></label>
+    </div>
+    <div id="dispatch-note"></div>
+    <div class="scroll-x short-box"><table id="table-dispatches"></table></div>
+  </div>
+
   <div class="card" id="queue-card">
     <h2>To order, waiting</h2>
     <p class="muted" id="queue-summary"></p>
@@ -476,6 +524,23 @@
       <span class="grow"></span>
       <button class="mini" id="quote-drop">delete</button>
     </div>
+  </div>
+
+  <div class="card" id="offers-card">
+    <h2>Answers, comparison, awards</h2>
+    <p class="muted">Type in what a supplier answered, copy the request to others to compare, then award
+      one: it becomes the agreed price and supplier for that article.</p>
+    <div class="row">
+      <label class="field grow"><span>request</span><select id="of-quote"></select></label>
+      <label class="field grow"><span>ask other suppliers (comma apart)</span><input id="of-others" placeholder="TUBES SA, WURTH"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action ghost" id="of-copy">copy it to them</button></label>
+    </div>
+    <div class="scroll-x short-box"><table id="table-offer-lines"></table></div>
+    <div id="offers-note"></div>
+    <p class="eyebrow">Side by side, per article</p>
+    <div class="scroll-x short-box"><table id="table-compare"></table></div>
+    <p class="eyebrow">Agreed prices</p>
+    <div class="scroll-x short-box"><table id="table-agreements"></table></div>
   </div>
 
   <div class="card">
@@ -553,6 +618,8 @@
     <div class="scroll-x short-box"><table id="table-match"></table></div>
     <h3>Delivered, not billed</h3>
     <div class="scroll-x short-box"><table id="table-unbilled"></table></div>
+    <h3>Disputes</h3>
+    <div class="scroll-x short-box"><table id="table-disputes"></table></div>
     <h3>Ordered, against what came</h3>
     <div class="scroll-x short-box"><table id="table-order-match"></table></div>
     <div id="match-note"></div>
@@ -674,6 +741,14 @@
     <div id="buffer-note"></div>
   </div>
 
+  <div class="card" id="coming-card">
+    <h2>Orders to come</h2>
+    <p class="muted">What the buffers say to order now, what waits in the 15-day queue, and what has
+      been sent and has not arrived. Dates follow each supplier's working days and cut-off.</p>
+    <div class="row" id="coming-counts"></div>
+    <div class="scroll-x short-box"><table id="table-coming"></table></div>
+  </div>
+
   <div class="card" id="lead-card">
     <h2>Lead times</h2>
     <p class="muted" id="lead-summary"></p>
@@ -715,6 +790,42 @@
 </section>
 
 <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+  <div class="card" id="calendar-card">
+    <h2>Calendar, supplier terms, rates</h2>
+    <p class="muted">French public holidays are known. Add your own closures, and per supplier the
+      hour after which an order counts as the next day, the weekdays it is shut (0 Monday to 6 Sunday),
+      and its currency. Bills in another currency are checked in euros at the rate for their day.</p>
+    <div class="row">
+      <label class="field grow"><span>supplier</span><input id="tm-supplier" autocomplete="off"></label>
+      <label class="field narrow"><span>cut-off</span><input id="tm-cutoff" placeholder="15:00"></label>
+      <label class="field narrow"><span>shut on</span><input id="tm-closed" placeholder="4,5"></label>
+      <label class="field narrow"><span>pays in (days)</span><input id="tm-pay" inputmode="numeric"></label>
+      <label class="field narrow"><span>currency</span><input id="tm-cur" placeholder="EUR"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="tm-go">save</button></label>
+    </div>
+    <div class="scroll-x short-box"><table id="table-terms"></table></div>
+    <div class="row">
+      <label class="field narrow"><span>closed day</span><input id="cd-day" type="date"></label>
+      <label class="field grow"><span>why</span><input id="cd-label" placeholder="stocktake, bridge day..."></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="cd-go">close that day</button></label>
+    </div>
+    <div class="scroll-x short-box"><table id="table-closed"></table></div>
+    <div class="row">
+      <label class="field narrow"><span>currency</span><input id="fx-cur" placeholder="CHF"></label>
+      <label class="field narrow"><span>per 1 EUR</span><input id="fx-rate" inputmode="decimal"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="fx-go">save rate</button></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action ghost" id="fx-fetch">fetch today's (ECB)</button></label>
+    </div>
+    <div id="calendar-note"></div>
+  </div>
+
+  <div class="card" id="archive-card">
+    <h2>Photo archive</h2>
+    <p class="muted" id="archive-summary"></p>
+    <div class="row"><button class="action" id="archive-run">pack every stored photo now</button></div>
+    <div id="archive-note"></div>
+  </div>
+
   <div class="card">
     <h2>Space used</h2>
     <div class="scroll-x"><table id="table-storage"></table></div>
@@ -3296,8 +3407,9 @@ async function loadMatch() {
       const dispute = el("button", { className: "mini", textContent: "dispute" });
       dispute.addEventListener("click", async () => {
         try {
-          await api(`/api/bills/${row.bill_id}`, patchJson({ state: "disputed" }));
-          await Promise.all([loadBills(), loadMatch()]);
+          await api("/api/disputes", postJson({ bill_id: row.bill_id }));
+          notice($("match-note"), "ok", "Dispute opened. The mail to the supplier is a draft in Purchase orders, Suppliers.");
+          await Promise.all([loadBills(), loadMatch(), loadOutbox()]);
         } catch (e) {
           notice($("match-note"), "bad", e.message);
         }
@@ -4030,10 +4142,12 @@ async function askContactFile(everything = false) {
     if (everything) asked.set("all", "true");
     const answer = await api(`/api/contacts/file?${asked}`);
     renderTable($("table-contacts"),
-                answer.columns.map((field) => ({
+                [...answer.columns.map((field) => ({
                   label: field === "email" ? "e-mail" : field,
                   cell: (row) => document.createTextNode(row[field] || "—"),
-                })),
+                })), { label: "Lead time", numeric: true, cell: (row) => document.createTextNode(
+                  row.lead_days == null ? (row.lead_n ? `${row.lead_n} delivery(ies), too few` : "—")
+                    : `${showNum(row.lead_days)} days (${row.lead_n})`) }],
                 answer.rows, "No line answers to that.");
     const held = answer.found > answer.rows.length
       ? `${answer.found} line(s) found, the first ${answer.rows.length} are shown.`
@@ -4274,6 +4388,382 @@ $("queue-read").addEventListener("click", () =>
 $("queue-place").addEventListener("click", () =>
   askQueue($("queue-place"), "/api/order-queue/place",
            (data) => `${data.orders.length} order(s) placed from ${data.lines} line(s).`));
+
+// ---- landing dashboard and autonomy --------------------------------------
+
+const td = (value) => document.createTextNode(value == null || value === "" ? "—" : String(value));
+
+function drawDashboard(data) {
+  const k = data.kpis ?? {};
+  $("dash-kpis").replaceChildren(
+    statTile("line down", String(k.line_down ?? 0)), statTile("critical", String(k.critical ?? 0)),
+    statTile("at risk", String(k.at_risk ?? 0)),
+    statTile("short, units", showNum(k.shortage_units ?? 0)),
+    statTile("open actions", String(k.open_actions ?? 0)));
+  renderTable($("table-shortages"), [
+    { label: "Status", cell: (row) => el("span", {
+        className: row.status === "line down" ? "status-down" : (row.status === "critical" ? "status-critical" : ""),
+        textContent: row.status }) },
+    { label: "SKU", cell: (row) => td(row.article) },
+    { label: "Short (units)", numeric: true, cell: (row) => td(showNum(row.shortage)) },
+    { label: "Needed", cell: (row) => td(`${row.need_date} (${row.days_left}d)`) },
+    { label: "Blocks", cell: (row) => td(row.blocks.join(", ") || "stock cover") },
+    { label: "Root cause", cell: (row) => td(`${row.cause}${row.cause_detail ? `: ${row.cause_detail}` : ""}`) },
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "Lead (days)", numeric: true, cell: (row) => td(row.lead_days) },
+    { label: "Do", cell: (row) => td(row.action) },
+  ], data.shortages ?? [], "Nothing is short for the next two weeks.");
+  renderTable($("table-actions"), [
+    { label: "", cell: (row) => el("span", { className: row.severity === "critical" || row.severity === "high"
+        ? "status-down" : "muted", textContent: row.severity }) },
+    { label: "What", cell: (row) => td(row.title) },
+    { label: "Detail", cell: (row) => td(row.detail) },
+    { label: "Since", cell: (row) => td(row.since.replace("T", " ")) },
+  ], data.actions ?? [], "Nothing needs you.");
+  $("dash-card").hidden = false;
+}
+
+async function loadDashboard() {
+  try {
+    drawDashboard(await api("/api/dashboard"));
+  } catch {
+  }
+}
+
+function drawAutonomy(data) {
+  $("autonomy-score").textContent = Number(data.score).toFixed(2);
+  $("autonomy-fill").style.width = `${Math.min(100, data.score)}%`;
+  renderTable($("table-autonomy"), [
+    { label: "Part of the job", cell: (row) => td(row.part) },
+    { label: "Weight", numeric: true, cell: (row) => td(row.weight) },
+    { label: "Done by the software", numeric: true, cell: (row) => td(
+        row.rate == null ? "nothing to measure" : `${(row.rate * 100).toFixed(1)}%`) },
+    { label: "Points", numeric: true, cell: (row) => td(row.points.toFixed(2)) },
+    { label: "Samples", numeric: true, cell: (row) => td(row.samples) },
+    { label: "Worked out from", cell: (row) => td(row.basis) },
+  ], data.parts ?? [], "");
+  $("autonomy-note").textContent =
+    `Measured on ${data.measured_weight} of the 100 points. A part with nothing to measure scores 0, `
+    + "and a part the software cannot do (placing an order, paying) is capped at what it can.";
+}
+
+async function loadAutonomy() {
+  try {
+    drawAutonomy(await api("/api/autonomy"));
+  } catch {
+  }
+}
+
+$("autonomy-more").addEventListener("click", () => {
+  $("autonomy-detail").hidden = !$("autonomy-detail").hidden;
+});
+loadAutonomy();
+setInterval(() => { if (!document.hidden) loadAutonomy(); }, 5000);
+setInterval(() => { if (!document.hidden) loadDashboard(); }, 60000);
+
+// ---- calendar, supplier terms, exchange rates, the photo archive ---------
+
+function drawCalendar(data) {
+  renderTable($("table-terms"), [
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "Cut-off", cell: (row) => td(row.cutoff) },
+    { label: "Shut on", cell: (row) => td(row.closed_days) },
+    { label: "Pays in", cell: (row) => td(row.payment_days) },
+    { label: "Currency", cell: (row) => td(row.currency) },
+  ], data.terms ?? [], "No supplier terms yet.");
+  renderTable($("table-closed"), [
+    { label: "Day", cell: (row) => td(row.day) },
+    { label: "Why", cell: (row) => td(row.label) },
+    { label: "", cell: (row) => {
+      if (!row.own) return td("public holiday");
+      const open = el("button", { className: "mini", textContent: "open it again" });
+      open.addEventListener("click", async () => {
+        try { drawCalendar(await api(`/api/calendar/${row.day}`, { method: "DELETE" })); }
+        catch (e) { notice($("calendar-note"), "bad", e.message); }
+      });
+      return open;
+    } },
+  ], data.days ?? [], "");
+}
+
+async function calendarAsk(path, options, said) {
+  try {
+    const data = await api(path, options);
+    drawCalendar(data);
+    notice($("calendar-note"), "ok", said ? said(data) : "Saved.");
+  } catch (e) {
+    notice($("calendar-note"), "bad", e.message);
+  }
+}
+
+async function loadCalendar() {
+  try { drawCalendar(await api("/api/calendar")); } catch {}
+  try {
+    const a = await api("/api/archive");
+    $("archive-summary").textContent = a.pages
+      ? `${a.pages} page(s) kept as packed arrays, ${(a.bytes / 1e6).toFixed(2)} MB where the photos were `
+        + `${(a.from_bytes / 1e6).toFixed(1)} MB. Kept ${a.years} years.`
+      : `Nothing archived yet. A photo older than the retention period is packed into a small `
+        + `black-and-white array and the file is deleted; it is kept ${a.years} years.`;
+  } catch {}
+}
+
+$("tm-go").addEventListener("click", () => calendarAsk("/api/terms", putJson({
+  supplier: $("tm-supplier").value, cutoff: $("tm-cutoff").value || null,
+  closed_days: $("tm-closed").value || null, payment_days: Number($("tm-pay").value) || null,
+  currency: $("tm-cur").value || null }), () => "Saved.").then(loadCalendar));
+$("cd-go").addEventListener("click", () => $("cd-day").value && calendarAsk("/api/calendar/close",
+  postJson({ day: $("cd-day").value, label: $("cd-label").value || null })));
+$("fx-go").addEventListener("click", () => calendarAsk("/api/rates", postJson({
+  day: new Date().toISOString().slice(0, 10), currency: $("fx-cur").value,
+  per_eur: Number($("fx-rate").value) })));
+$("fx-fetch").addEventListener("click", () => calendarAsk("/api/rates/fetch", { method: "POST" },
+  (d) => `${d.stored} rate(s) for ${d.day}.`));
+$("archive-run").addEventListener("click", async () => {
+  $("archive-run").disabled = true;
+  try {
+    const done = await api("/api/archive/run", { method: "POST" });
+    notice($("archive-note"), "ok", `${done.pages} page(s) packed, ${(done.before / 1e6).toFixed(1)} MB `
+      + `became ${(done.after / 1e6).toFixed(2)} MB.`);
+    loadCalendar();
+  } catch (e) {
+    notice($("archive-note"), "bad", e.message);
+  } finally {
+    $("archive-run").disabled = false;
+  }
+});
+
+// ---- pack sizes ---------------------------------------------------------------
+
+function drawPacks(data) {
+  renderTable($("table-packs"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Supplier", cell: (row) => td(row.supplier || "anyone") },
+    { label: "Pack", cell: (row) => td(`${row.pack_label || "pack"} of ${showNum(row.pack_qty)} ${row.base_unit}`) },
+    { label: "Min packs", numeric: true, cell: (row) => td(row.moq_packs) },
+    { label: "", cell: (row) => {
+      const gone = el("button", { className: "mini", textContent: "remove" });
+      gone.addEventListener("click", async () => {
+        try {
+          drawPacks(await api(`/api/units?article=${encodeURIComponent(row.article)}&supplier=${encodeURIComponent(row.supplier)}`,
+                              { method: "DELETE" }));
+        } catch (e) { notice($("pack-note"), "bad", e.message); }
+      });
+      return gone;
+    } },
+  ], data.packs ?? [], "No pack size yet.");
+}
+
+async function loadPacks() { try { drawPacks(await api("/api/units")); } catch {} }
+
+$("pk-go").addEventListener("click", async () => {
+  try {
+    drawPacks(await api("/api/units", putJson({
+      article: $("pk-article").value, supplier: $("pk-supplier").value, pack_qty: Number($("pk-qty").value),
+      base_unit: $("pk-unit").value, pack_label: $("pk-label").value, moq_packs: Number($("pk-moq").value) || 1 })));
+    notice($("pack-note"), "ok", "Saved.");
+  } catch (e) {
+    notice($("pack-note"), "bad", e.message);
+  }
+});
+
+// ---- quote answers, comparison, awards ---------------------------------------------
+
+function fillOfferQuotes() {
+  const box = $("of-quote");
+  const keep = box.value;
+  box.replaceChildren(el("option", { value: "", textContent: "choose..." }),
+    ...quoteRows.map((q) => el("option", { value: String(q.quote_id),
+      textContent: `#${q.quote_id} · ${q.supplier ?? "?"} · ${q.state}` })));
+  box.value = keep;
+}
+
+function drawCompare(data) {
+  const rows = [];
+  for (const art of data.articles ?? []) for (const o of art.offers) rows.push({ article: art.article, ...o });
+  renderTable($("table-compare"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "Price", numeric: true, cell: (row) => el("span", {
+        className: row.cheapest ? "ok" : (row.expired ? "muted" : ""), textContent: row.unit_price.toFixed(2)
+          + (row.cheapest ? " cheapest" : "") + (row.expired ? " expired" : "") }) },
+    { label: "Lead (days)", numeric: true, cell: (row) => el("span", {
+        className: row.fastest ? "ok" : "", textContent: row.lead_days == null ? "—" : String(row.lead_days)
+          + (row.fastest ? " fastest" : "") }) },
+    { label: "For the quantity", numeric: true, cell: (row) => td(money(row.total)) },
+    { label: "", cell: (row) => {
+      const win = el("button", { className: "mini", textContent: "award" });
+      win.addEventListener("click", async () => {
+        try {
+          drawCompare(await api("/api/award", postJson({ quote_id: row.quote_id, line_no: row.line_no })));
+          notice($("offers-note"), "ok", `${row.supplier} is now the agreed supplier for ${row.article}.`);
+          loadQuotes();
+        } catch (e) { notice($("offers-note"), "bad", e.message); }
+      });
+      return win;
+    } },
+  ], rows, "No answer has been entered yet.");
+  renderTable($("table-agreements"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "Price", numeric: true, cell: (row) => td(row.unit_price.toFixed(2)) },
+    { label: "From", cell: (row) => td(row.valid_from) },
+    { label: "Until", cell: (row) => td(row.valid_to) },
+    { label: "", cell: (row) => {
+      const stop = el("button", { className: "mini", textContent: "end it" });
+      stop.addEventListener("click", async () => {
+        try { drawCompare(await api(`/api/agreements/${row.agreement_id}`, { method: "DELETE" })); }
+        catch (e) { notice($("offers-note"), "bad", e.message); }
+      });
+      return stop;
+    } },
+  ], data.agreements ?? [], "No agreed price yet.");
+}
+
+async function loadOfferLines() {
+  const id = Number($("of-quote").value);
+  if (!id) { $("table-offer-lines").replaceChildren(); return; }
+  const data = await api(`/api/offers/${id}`);
+  renderTable($("table-offer-lines"), [
+    { label: "Line", cell: (row) => td(`${showNum(row.quantity)} ${row.unit} ${row.article}`) },
+    { label: "Price", cell: (row) => { row.priceBox = el("input", { className: "cell", size: 7,
+        inputMode: "decimal", value: row.unit_price ?? "" }); return row.priceBox; } },
+    { label: "Lead (days)", cell: (row) => { row.leadBox = el("input", { className: "cell", size: 4,
+        inputMode: "numeric", value: row.lead_days ?? "" }); return row.leadBox; } },
+    { label: "Stands until", cell: (row) => { row.untilBox = el("input", { className: "cell", type: "date",
+        value: row.valid_until ?? "" }); return row.untilBox; } },
+    { label: "", cell: (row) => {
+      const save = el("button", { className: "mini", textContent: "save" });
+      save.addEventListener("click", async () => {
+        try {
+          const done = await api("/api/offers", putJson({ quote_id: id, line_no: row.line_no,
+            unit_price: Number(row.priceBox.value), lead_days: row.leadBox.value ? Number(row.leadBox.value) : null,
+            valid_until: row.untilBox.value || null }));
+          drawCompare(done);
+          notice($("offers-note"), "ok", "Answer saved.");
+          loadQuotes();
+        } catch (e) { notice($("offers-note"), "bad", e.message); }
+      });
+      return save;
+    } },
+  ], data.offers ?? [], "");
+}
+
+async function loadCompare() { try { drawCompare(await api("/api/compare")); } catch {} }
+
+$("of-quote").addEventListener("focus", fillOfferQuotes);
+$("of-quote").addEventListener("change", loadOfferLines);
+$("of-copy").addEventListener("click", async () => {
+  const id = Number($("of-quote").value);
+  const names = $("of-others").value.split(",").map((x) => x.trim()).filter(Boolean);
+  if (!id || !names.length) return;
+  try {
+    const done = await api(`/api/quotes/${id}/ask-others`, postJson({ suppliers: names }));
+    notice($("offers-note"), "ok", `${done.made.length} copy(ies) made: ${done.made.map((n) => "#" + n).join(", ")}.`);
+    await loadQuotes();
+    fillOfferQuotes();
+  } catch (e) { notice($("offers-note"), "bad", e.message); }
+});
+
+// ---- disputes, deliveries to sites, orders to come ------------------------------------
+
+function drawDisputes(data) {
+  renderTable($("table-disputes"), [
+    { label: "#", numeric: true, cell: (row) => td(row.dispute_id) },
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "Why", cell: (row) => td(row.reason) },
+    { label: "Claimed", numeric: true, cell: (row) => td(row.claimed == null ? "—" : money(row.claimed)) },
+    { label: "State", cell: (row) => el("span", { className: row.overdue ? "bad" : (row.state === "closed" ? "ok" : ""),
+        textContent: row.state + (row.overdue ? `, ${row.age_days} days without a credit note` : "")
+          + (row.credited ? `, credited ${money(row.credited)}` : "") }) },
+    { label: "Credit note", cell: (row) => {
+      if (row.state === "closed") return td(row.credit_ref);
+      const ref = el("input", { className: "cell", size: 8, placeholder: "ref" });
+      const amount = el("input", { className: "cell", size: 7, inputMode: "decimal", placeholder: "amount" });
+      const save = el("button", { className: "mini", textContent: "record" });
+      save.addEventListener("click", async () => {
+        try {
+          drawDisputes(await api(`/api/disputes/${row.dispute_id}/credit`, postJson({
+            ref: ref.value, amount: Number(amount.value) })));
+          loadBills();
+        } catch (e) { notice($("match-note"), "bad", e.message); }
+      });
+      return el("span", {}, [ref, amount, save]);
+    } },
+  ], data.disputes ?? [], "No dispute.");
+}
+
+async function loadDisputes() { try { drawDisputes(await api("/api/disputes")); } catch {} }
+
+function drawDispatches(data) {
+  $("dp-van").replaceChildren(el("option", { value: "", textContent: "no van yet" }),
+    ...(data.vehicles ?? []).map((v) => el("option", { value: String(v.vehicle_id), textContent: v.name })));
+  const orders = lists.map((sheet) => el("option", { value: String(sheet.id),
+    textContent: `#${sheet.id} · ${[sheet.list_date, sheet.site, sheet.work_item].filter(Boolean).join(" · ")}` }));
+  const keep = $("dp-order").value;
+  $("dp-order").replaceChildren(el("option", { value: "", textContent: "choose..." }), ...orders);
+  $("dp-order").value = keep;
+  const act = (path, body) => async () => {
+    try { drawDispatches(await api(path, body ? postJson(body) : { method: "POST" })); }
+    catch (e) { notice($("dispatch-note"), "bad", e.message); }
+  };
+  renderTable($("table-dispatches"), [
+    { label: "#", numeric: true, cell: (row) => td(row.dispatch_id) },
+    { label: "Site", cell: (row) => td([row.site, row.work_item].filter(Boolean).join(" / ")) },
+    { label: "Van", cell: (row) => td(row.vehicle) },
+    { label: "Planned", cell: (row) => td(row.planned_on) },
+    { label: "State", cell: (row) => td(row.state + (row.received_by ? `, signed by ${row.received_by}` : "")) },
+    { label: "Paper", cell: (row) => el("span", {}, [
+      el("a", { className: "mini", href: `/api/dispatches/${row.dispatch_id}/note.pdf`, target: "_blank", textContent: "delivery note" }), " ",
+      el("a", { className: "mini", href: `/api/dispatches/${row.dispatch_id}/labels.pdf`, target: "_blank", textContent: "labels" })]) },
+    { label: "", cell: (row) => {
+      const box = el("span");
+      if (row.state === "planned") {
+        const b = el("button", { className: "mini", textContent: "loaded" });
+        b.addEventListener("click", act(`/api/dispatches/${row.dispatch_id}/load`));
+        box.append(b);
+      }
+      if (row.state === "planned" || row.state === "loaded" || row.state === "part delivered") {
+        const who = el("input", { className: "cell", size: 10, placeholder: "signed by" });
+        const b = el("button", { className: "mini", textContent: "delivered" });
+        b.addEventListener("click", () => act(`/api/dispatches/${row.dispatch_id}/deliver`, { received_by: who.value })());
+        box.append(" ", who, b);
+      }
+      return box;
+    } },
+  ], data.dispatches ?? [], "No delivery planned.");
+}
+
+async function loadDispatches() { try { drawDispatches(await api("/api/dispatches")); } catch {} }
+
+$("dp-order").addEventListener("focus", loadDispatches);
+$("dp-go").addEventListener("click", async () => {
+  if (!$("dp-order").value) return;
+  try {
+    drawDispatches(await api("/api/dispatches", postJson({ list_id: Number($("dp-order").value),
+      vehicle_id: $("dp-van").value ? Number($("dp-van").value) : null, planned_on: $("dp-day").value || null })));
+    notice($("dispatch-note"), "ok", "Planned. Print the delivery note and the labels from the table.");
+  } catch (e) { notice($("dispatch-note"), "bad", e.message); }
+});
+
+async function loadComing() {
+  try {
+    const data = await api("/api/planned-orders");
+    const c = data.counts ?? {};
+    $("coming-counts").replaceChildren(statTile("to place", String(c["to place"] ?? 0)),
+      statTile("waiting 15 days", String(c.waiting ?? 0)), statTile("sent", String(c.sent ?? 0)),
+      statTile("confirmed", String(c.confirmed ?? 0)));
+    renderTable($("table-coming"), [
+      { label: "Article", cell: (row) => td(row.article) },
+      { label: "Qty", numeric: true, cell: (row) => td(row.packs ? `${row.packs} ${row.pack_label} (${showNum(row.quantity)})` : showNum(row.quantity)) },
+      { label: "Supplier", cell: (row) => td(row.supplier) },
+      { label: "Planned by", cell: (row) => td(row.source) },
+      { label: "Order on", cell: (row) => td(row.order_on) },
+      { label: "Expected", cell: (row) => td(row.expected_on) },
+      { label: "Status", cell: (row) => td(row.status) },
+    ], data.rows ?? [], "No order is planned or on its way.");
+  } catch {}
+}
 
 // ---- the chain, and what the two of them have been doing ------------------
 
@@ -4894,7 +5384,8 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(),
+      loadPacks(), loadCompare(), loadDisputes(), loadDispatches(), loadComing(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {

@@ -501,6 +501,154 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        21,
+        "working calendar, supplier terms, exchange rates, pack sizes",
+        """
+        CREATE TABLE IF NOT EXISTS calendar_days (
+            day   DATE PRIMARY KEY,
+            kind  VARCHAR NOT NULL DEFAULT 'closed',
+            label VARCHAR
+        );
+        CREATE TABLE IF NOT EXISTS supplier_terms (
+            supplier       VARCHAR PRIMARY KEY,
+            cutoff         VARCHAR,
+            closed_days    VARCHAR,
+            payment_days   INTEGER,
+            currency       VARCHAR,
+            note           VARCHAR
+        );
+        CREATE TABLE IF NOT EXISTS fx_rates (
+            day      DATE NOT NULL,
+            currency VARCHAR NOT NULL,
+            per_eur  DOUBLE NOT NULL,
+            PRIMARY KEY (day, currency)
+        );
+        CREATE TABLE IF NOT EXISTS article_units (
+            article    VARCHAR NOT NULL,
+            supplier   VARCHAR NOT NULL DEFAULT '',
+            base_unit  VARCHAR NOT NULL DEFAULT 'piece',
+            pack_qty   DOUBLE NOT NULL,
+            pack_label VARCHAR,
+            moq_packs  INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (article, supplier)
+        );
+        """,
+    ),
+    (
+        22,
+        "what suppliers answered to a quote, and the prices that were awarded",
+        """
+        CREATE SEQUENCE IF NOT EXISTS offer_seq START 1;
+        CREATE TABLE IF NOT EXISTS quote_offers (
+            offer_id    INTEGER PRIMARY KEY DEFAULT nextval('offer_seq'),
+            quote_id    INTEGER NOT NULL,
+            line_no     INTEGER NOT NULL,
+            supplier    VARCHAR,
+            unit_price  DOUBLE NOT NULL,
+            lead_days   INTEGER,
+            valid_until DATE,
+            note        VARCHAR,
+            received_on DATE NOT NULL DEFAULT current_date,
+            created_by  VARCHAR,
+            UNIQUE (quote_id, line_no)
+        );
+        CREATE SEQUENCE IF NOT EXISTS agreement_seq START 1;
+        CREATE TABLE IF NOT EXISTS agreements (
+            agreement_id INTEGER PRIMARY KEY DEFAULT nextval('agreement_seq'),
+            article      VARCHAR NOT NULL,
+            supplier     VARCHAR NOT NULL,
+            unit_price   DOUBLE NOT NULL,
+            lead_days    INTEGER,
+            valid_from   DATE NOT NULL DEFAULT current_date,
+            valid_to     DATE,
+            quote_id     INTEGER,
+            state        VARCHAR NOT NULL DEFAULT 'active',
+            created_by   VARCHAR,
+            created_at   TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+        """,
+    ),
+    (
+        23,
+        "bill disputes and the credit notes that settle them",
+        """
+        CREATE SEQUENCE IF NOT EXISTS dispute_seq START 1;
+        CREATE TABLE IF NOT EXISTS disputes (
+            dispute_id  INTEGER PRIMARY KEY DEFAULT nextval('dispute_seq'),
+            bill_id     INTEGER NOT NULL,
+            supplier    VARCHAR,
+            reason      VARCHAR,
+            claimed     DOUBLE,
+            state       VARCHAR NOT NULL DEFAULT 'open',
+            opened_on   DATE NOT NULL DEFAULT current_date,
+            credit_ref  VARCHAR,
+            credited    DOUBLE,
+            closed_on   DATE,
+            mail_id     INTEGER,
+            opened_by   VARCHAR
+        );
+        """,
+    ),
+    (
+        24,
+        "deliveries to sites, with proof of delivery",
+        """
+        CREATE SEQUENCE IF NOT EXISTS dispatch_seq START 1;
+        CREATE TABLE IF NOT EXISTS dispatches (
+            dispatch_id  INTEGER PRIMARY KEY DEFAULT nextval('dispatch_seq'),
+            list_id      INTEGER,
+            site         VARCHAR,
+            work_item    VARCHAR,
+            vehicle_id   INTEGER,
+            planned_on   DATE,
+            state        VARCHAR NOT NULL DEFAULT 'planned',
+            loaded_at    TIMESTAMP,
+            delivered_at TIMESTAMP,
+            received_by  VARCHAR,
+            note         VARCHAR,
+            created_at   TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            created_by   VARCHAR
+        );
+        CREATE TABLE IF NOT EXISTS dispatch_lines (
+            dispatch_id INTEGER NOT NULL,
+            line_no     INTEGER NOT NULL,
+            article     VARCHAR NOT NULL,
+            designation VARCHAR,
+            quantity    DOUBLE NOT NULL,
+            delivered   DOUBLE,
+            PRIMARY KEY (dispatch_id, line_no)
+        );
+        """,
+    ),
+    (
+        25,
+        "photos kept as packed arrays, things that need a person, what a draft was before it was edited",
+        """
+        CREATE TABLE IF NOT EXISTS photo_archive (
+            sha256      VARCHAR PRIMARY KEY,
+            width       INTEGER NOT NULL,
+            height      INTEGER NOT NULL,
+            data        BLOB NOT NULL,
+            bytes_from  BIGINT,
+            archived_on DATE NOT NULL DEFAULT current_date
+        );
+        CREATE SEQUENCE IF NOT EXISTS notice_seq START 1;
+        CREATE TABLE IF NOT EXISTS notices (
+            notice_id   INTEGER PRIMARY KEY DEFAULT nextval('notice_seq'),
+            key         VARCHAR NOT NULL UNIQUE,
+            kind        VARCHAR NOT NULL,
+            severity    VARCHAR NOT NULL DEFAULT 'normal',
+            title       VARCHAR NOT NULL,
+            detail      VARCHAR,
+            first_seen  TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            last_seen   TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            resolved_at TIMESTAMP,
+            pushed_at   TIMESTAMP
+        );
+        ALTER TABLE supplier_mail ADD COLUMN IF NOT EXISTS orig_body VARCHAR;
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

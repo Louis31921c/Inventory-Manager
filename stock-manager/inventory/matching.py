@@ -12,7 +12,7 @@ person mark a bill disputed.
 
 from datetime import date, timedelta
 
-from . import db
+from . import db, workdays
 
 # A bill is "matched" when it is within this share of what the deliveries come to, or this
 # many euros, whichever is wider: a few cents of rounding is not a finding.
@@ -55,7 +55,7 @@ def _deliveries(db_path):
             ORDER BY supplier, delivery_date, note_id""")
 
 
-def bills(db_path, today=None):
+def bills(db_path, today=None, detail_for=None):
     """Every bill against the deliveries since that supplier's previous bill, plus the
     deliveries nobody has billed yet."""
     today = today or date.today()
@@ -65,13 +65,13 @@ def bills(db_path, today=None):
         by_supplier.setdefault(supplier, []).append((day, article, float(quantity), note_id))
 
     heads = db.read(db_path, """
-            SELECT bill_id, supplier, number, bill_date, net, total, order_ref, state
+            SELECT bill_id, supplier, number, bill_date, net, total, order_ref, state, currency
             FROM bills WHERE bill_date IS NOT NULL ORDER BY supplier, bill_date, bill_id""")
     orders = {row[0] for row in db.read(db_path, "SELECT list_id FROM purchase_orders")}
 
     out = []
     covered_until = {}
-    for bill_id, supplier, number, bill_date, net, total, order_ref, state in heads:
+    for bill_id, supplier, number, bill_date, net, total, order_ref, state, currency in heads:
         since = covered_until.get(supplier)
         mine = [row for row in by_supplier.get(supplier, [])
                 if row[0] <= bill_date and (since is None or row[0] > since)]
@@ -85,11 +85,16 @@ def bills(db_path, today=None):
             else:
                 expected += quantity * price
         billed = net if net is not None else total
-        gap = None if billed is None else round(billed - expected, 2)
+        in_euros = workdays.to_eur(db_path, billed, currency, bill_date)
+        if billed is not None and in_euros is not None:
+            billed = round(in_euros, 2)
+        gap = None if in_euros is None else round(billed - expected, 2)
         if not mine:
             verdict = "nothing delivered"
         elif billed is None:
             verdict = "no amount"
+        elif in_euros is None:
+            verdict = "no rate"
         elif unpriced and abs(gap) > max(SLACK, TOLERANCE * expected):
             verdict = "unchecked"
         elif abs(gap) <= max(SLACK, TOLERANCE * expected):
@@ -103,10 +108,14 @@ def bills(db_path, today=None):
             "bill_id": bill_id, "supplier": supplier, "number": number,
             "bill_date": bill_date.isoformat(), "billed": billed,
             "expected": round(expected, 2), "gap": gap, "deliveries": len(mine),
-            "unpriced": unpriced, "verdict": verdict, "state": state,
+            "unpriced": unpriced, "verdict": verdict, "state": state, "currency": currency,
             "order_ref": order_ref, "order_found": linked,
             "order_unknown": bool(ref) and linked is None,
         })
+        if detail_for == bill_id:
+            out[-1]["lines"] = [{"day": day.isoformat(), "article": article, "quantity": quantity,
+                                 "price": price_on(prices, article, supplier, day)}
+                                for day, article, quantity, _n in mine[:60]]
 
     unbilled = []
     for supplier, rows in by_supplier.items():

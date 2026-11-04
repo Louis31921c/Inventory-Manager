@@ -16,6 +16,7 @@ dependencies = [
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",
     "pillow>=10",
+    "reportlab>=4.0",
 ]
 
 [project.optional-dependencies]

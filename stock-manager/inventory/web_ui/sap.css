@@ -792,3 +792,15 @@ select.replaced { display: none; }
 td span.ok { color: var(--green); }
 td span.bad { color: var(--red); font-weight: 700; }
 td span.muted { color: var(--ink-soft); }
+
+/* The landing dashboard: stands over the logo like the baskets card, and stops short of the doors. */
+#dash-card { background: rgba(255, 255, 255, .88); flex: 0 1 auto; margin-bottom: 8px;
+             margin-right: 240px; overflow-y: auto; z-index: 1; }
+.autonomy { align-items: baseline; display: flex; flex-wrap: wrap; gap: 8px; }
+.autonomy-name { color: var(--ink-soft); font-weight: 700; text-transform: uppercase; }
+#autonomy-score { font-size: 28px; font-variant-numeric: tabular-nums; }
+.autonomy-of { color: var(--ink-soft); }
+.autonomy-bar { background: var(--line-soft); display: inline-block; height: 8px; min-width: 120px; width: 22%; }
+.autonomy-bar > span { background: var(--accent); display: block; height: 100%; transition: width .6s; width: 0; }
+.status-down { color: var(--red); font-weight: 700; }
+.status-critical { color: #b45309; font-weight: 700; }

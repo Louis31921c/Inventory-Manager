@@ -194,3 +194,42 @@ functionnalities to developp :
 - in purchase orders>purchase orders , I'd want plutus to read everything that's "to order" and store it in a database, then order it AFTER 15 days
 
 - DONE: when I click on plutus order, I don't wanna see the buffers
+
+- DONE: the contacts (the supplier list, the csv search and the contact book) carry a
+        "Lead time" column learned from the delivery notes: the days to plan around (the
+        delay one delivery in five exceeds) and how many deliveries it rests on; a supplier
+        with fewer than 3 deliveries says too few
+- within the suppliers database, create a lead time column based on historical data
+
+- DONE: DDMRP, card "Orders to come": what the buffers say to order now (red and yellow
+        zones, in packs where a pack size is known), what waits in the 15-day queue, and
+        what was sent and has not arrived, each with the day to order and the day to expect
+        it, counted in the supplier's working days and cut-off hour
+- within ddmrp, add a table with all the order to come, planned by the bot
+
+- DONE: landing page dashboard: line down, critical and at risk counts, shortage units, and
+        a table per short SKU with its status, units short, the day it is needed, the work
+        it blocks (from reservations and lines ticked to order), the root cause (held for
+        approval, order sent without confirmation, supplier ETA after the need date, order
+        late, drafted not sent, in the 15-day queue, part delivered, or no order placed), the
+        supplier, its lead time and the action to take; below it the open actions
+- on the landing page add a dashboard with : shortage at risk critical and line down, sku's shortage units blocking next weeks activity and their need date and root cause and supplier lead time, open actions
+
+- DONE: landing page "Autonomy" figure, two decimals out of 100, refreshed every 5 seconds.
+        Eight parts of the job carry 100 points; each is measured from what the app recorded
+        (notes stored by the mailbox with no person, fields the model read right, counts that
+        found the shelf as the books said, articles fine or already covered by a planned
+        order, mails sent unedited, orders confirmed by a filed reply, bills that matched,
+        deliveries signed for). A part with nothing to measure scores 0 and a part the software
+        cannot do (placing an order, paying) is capped, so it starts low and rises as the
+        software really takes work over. "How it is worked out" shows every line
+- on the landing page, add a live software autonomous-ness rate out of 100 with 2 digits : I wanna see how efficient it would be to replace a logistics manager employee
+
+- DONE (asked in chat): alerts that push to Slack, SMS or mail (NOTIFY_VIA) plus a daily digest at
+        NOTIFY_HOUR; quote answers with price, lead time and validity, side-by-side comparison and
+        an award that becomes the agreed price and supplier; pack sizes and minimum orders; a
+        working calendar (French holidays, own closures, per supplier cut-off and shut days) used by
+        every expected date, and exchange rates for foreign bills; delivery to sites with proof of
+        delivery, a delivery note with a box to sign, labels, and the order as a PDF on supplier
+        mails; disputes followed through to the credit note; photos packed into small black-and-white
+        arrays after 42 days and kept 10 years (`stock archive` does it now)
