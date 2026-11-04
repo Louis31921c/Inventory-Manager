@@ -47,7 +47,7 @@ REASON_WORDS = {
     "first-article": "new article",
     "new-supplier": "new supplier",
     "over-ceiling": f"Basket > {CEILING:.0f} EUR",
-    "dear-line": f"{DEAR:g} the usual price",
+    "dear-line": f"{DEAR:g}x the usual price",
     "no-price": "no price",
 }
 
