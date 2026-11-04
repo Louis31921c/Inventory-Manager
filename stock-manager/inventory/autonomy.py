@@ -42,6 +42,7 @@ def _facts(config):
         "scanning": _built("scanning"),
         "payments": _built("payments"),
         "projects": _built("projects"),
+        "feedback": _built("feedback"),
         "order_step_walked": 7 not in getattr(gate, "UNBUILT", (7,)),
     }
 
@@ -65,9 +66,11 @@ def _capabilities(f):
          "Files a reply that names the order and takes the promised date" if f["mailbox"]
          else "Needs a mailbox to read replies",
          "Read prices and delivery notices out of replies; answer simple questions itself"),
-        ("Planning", "Demand and buffers", 7, 4 if f["projects"] else 3,
-         "Sizes buffers per article from history, with a demand outlook",
-         "Add demand from the project plan, and tune buffers from the stock-outs that really happened"),
+        ("Planning", "Demand and buffers", 7, 4 if f["feedback"] else 3,
+         "Sizes buffers from history and tunes them from stock-outs, short counts and the quantities "
+         "people correct" if f["feedback"] else "Sizes buffers per article from history, with a demand outlook",
+         "Add demand from the project plan" if f["feedback"]
+         else "Tune buffers from the stock-outs that really happened, and from what people correct"),
         ("Planning", "Lead times", 4, 3,
          "Learns each supplier's real lead time and plans with it",
          "Score suppliers on promised against delivered and shift orders to the reliable ones"),

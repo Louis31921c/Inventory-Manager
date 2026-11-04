@@ -43,7 +43,7 @@ def _table(rows, widths):
     return table
 
 
-def order_pdf(db_path, list_id, supplier, lines):
+def order_pdf(db_path, list_id, supplier, lines, billing=()):
     """An order for one supplier. `lines` is [(article, text, quantity)] as written in the mail."""
     _need()
     styles = getSampleStyleSheet()
@@ -62,6 +62,9 @@ def order_pdf(db_path, list_id, supplier, lines):
         [Paragraph(article, styles["Normal"]), Paragraph(text or "", styles["Normal"]), qty]
         for article, text, qty in lines]
     story.append(_table(rows, [45 * mm, 90 * mm, 35 * mm]))
+    if billing:
+        story.append(Spacer(1, 8 * mm))
+        story += [Paragraph(line, styles["Normal"]) for line in billing]
     page.build(story)
     return out.getvalue()
 

@@ -231,3 +231,12 @@ functionnalities to developp :
         delivery, a delivery note with a box to sign, labels, and the order as a PDF on supplier
         mails; disputes followed through to the credit note; photos packed into small black-and-white
         arrays after 42 days and kept 10 years (`stock archive` does it now)
+
+- DONE (asked in chat): feedback loop. Per-article learned factors (inventory/feedback.py, table
+        tuning): a quantity cut or removed on a Plutus order lowers its next proposal, a raise lifts it;
+        an article a fresh hand count found empty gets 15% more safety stock, short counts 5%, calm
+        ones ease back; refused baskets are remembered and told to Plutus. Applied in the planner and
+        the DDMRP buffers. The Plutus card lists every factor with its reason and a "forget" button
+- DONE (asked in chat): Plutus orders, "Bill to" section: company name, contact name, address.
+        Remembered for the next order, saved on the purchase order, printed on the supplier mail
+        and the order PDF

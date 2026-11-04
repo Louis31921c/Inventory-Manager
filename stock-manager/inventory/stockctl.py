@@ -13,7 +13,7 @@ a reason, and none of them rewrites the delivery notes.
 
 from datetime import date, timedelta
 
-from . import db, stock
+from . import db, feedback, stock
 from .models import normalize_name, parse_date
 
 # How often an article is counted: the ones that move most are checked most.
@@ -239,6 +239,7 @@ def count(db_path, article, quantity, user=None):
     db.save_stock_count(db_path, article, quantity, user)
     variance = round(quantity - expected, 2)
     _move(db_path, article, None, variance, "count", "cycle count", None, user)
+    feedback.short_count(db_path, article, quantity, expected, user)
     return {"article": article, "counted": quantity, "expected": round(expected, 2),
             "variance": variance}
 

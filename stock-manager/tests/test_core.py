@@ -4636,3 +4636,87 @@ def test_contacts_carry_the_lead_time_learned_for_their_supplier(db_path):
                      f"lc{number}", "", "T")
     known = leadtimes.per_supplier(db_path)["ACME"]
     assert known["n"] == 3 and known["days"] == 5.0
+
+
+def test_corrections_refusals_stockouts_and_short_counts_teach_the_planner(db_path):
+    from inventory import feedback, forecast, gate, stockctl
+
+    today = date(2026, 11, 3)
+    # An article used steadily, so the planner has something to size.
+    for number in range(1, 7):
+        day = date(2026, 9, 1) + timedelta(days=number * 7)
+        db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                        order_date=(day - timedelta(days=5)).isoformat(),
+                                        lines=[Line(article="BOLT", quantity=70)]), f"fb{number}", "", "T")
+    db.save_stock_count(db_path, "BOLT", 100, "T")
+
+    def suggested():
+        rows, _span = forecast.articles(db_path, lead=7)
+        return next(r for r in rows if r["article"] == "BOLT")
+
+    base = suggested()
+    assert base["qty_factor"] == 1.0 and base["safety_factor"] == 1.0
+
+    # A person cuts Plutus's 100 to 60, twice: the proposal comes back smaller.
+    for _ in range(2):
+        moved = feedback.review_order(db_path, [{"article": "bolt", "proposed": 100, "final": 60},
+                                                {"article": "NUT", "proposed": 10, "final": 10}], "T")
+    assert moved == [{"article": "BOLT", "ratio": 0.6}]
+    got = {r["article"]: r for r in feedback.listing(db_path)}
+    assert round(got["BOLT"]["qty_factor"], 3) == 0.64               # 0.8 x 0.8
+    assert "NUT" not in got                                            # accepted: nothing moves
+    smaller = suggested()
+    assert smaller["qty_factor"] == 0.64 and smaller["suggested"] < base["suggested"]
+
+    # Removed from an order: the strongest message, and the factor stops at its floor.
+    for _ in range(6):
+        feedback.review_order(db_path, [{"article": "BOLT", "proposed": 50, "final": 0}])
+    assert feedback.factors(db_path)["BOLT"][0] == feedback.QTY_BOUNDS[0]
+    feedback.forget(db_path, "BOLT")
+    assert suggested()["qty_factor"] == 1.0
+
+    # A refused basket is remembered per article, and shows up for the buyer.
+    request_id = gate.ask(db_path, {"reasons": ["first-article"], "total": 900.0, "lines": [
+        {"article": "BOLT", "quantity": 5, "found": []}]}, channel="c", shop="s", asked_by="T",
+        site="NORD", work_item="W1")
+    gate.cancel(db_path, request_id, "T", "too dear")
+    assert feedback.refusals(db_path, today=date.today()) == {"BOLT": 1}
+
+    # A short count lifts the safety stock a little.
+    stockctl.count(db_path, "BOLT", 40, "T")                           # the books said far more
+    assert feedback.factors(db_path)["BOLT"][1] == feedback.SHORT_COUNT_LIFT
+
+    # An article that ran out gets more safety; a calm one drifts back to 1.
+    db.save_stock_count(db_path, "BOLT", 0, "T")
+    first = feedback.learn(db_path, today)
+    assert first["ran_out"] == 1
+    lifted = feedback.factors(db_path)["BOLT"][1]
+    assert lifted > feedback.SHORT_COUNT_LIFT
+    assert feedback.learn(db_path, today)["ran_out"] == 0              # once in a week, not hourly
+    db.write(db_path, "UPDATE feedback SET happened_at = now() - INTERVAL 90 DAY RETURNING 1")
+    db.write(db_path, "UPDATE tuning SET updated_at = now() - INTERVAL 2 DAY RETURNING 1")
+    db.save_stock_count(db_path, "BOLT", 50, "T")
+    feedback.learn(db_path, today)
+    assert feedback.factors(db_path)["BOLT"][1] < lifted
+
+
+def test_an_order_is_saved_with_who_it_is_billed_to_and_the_mail_says_so(db_path):
+    from inventory import outbox, prices
+
+    prices.remember(db_path, "BOLT", 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    list_id = db.save_purchase_order(db_path, {
+        "list_date": date(2026, 11, 2), "site": "NORD", "work_item": "W1", "drafter": "PLUTUS",
+        "bill_company": "  Chantiers du Sud  ", "bill_contact": "Mme Roux",
+        "bill_address": "12 rue des Artisans\n33000 BORDEAUX",
+        "lines": [{"article": "BOLT", "quantity": 10.0, "in_stock": False}]}, None, None, "T")
+    assert outbox.bill_to(db_path, list_id) == {"company": "Chantiers du Sud", "contact": "Mme Roux",
+                                                "address": "12 rue des Artisans\n33000 BORDEAUX"}
+    draft = outbox.draft_order(db_path, list_id)["drafts"][0]
+    assert "Facturation à : Chantiers du Sud" in draft["body"]
+    assert "À l'attention de : Mme Roux" in draft["body"] and "33000 BORDEAUX" in draft["body"]
+
+    plain = db.save_purchase_order(db_path, {"list_date": date(2026, 11, 2), "site": "N", "drafter": "X",
+                                             "lines": [{"article": "BOLT", "quantity": 1.0}]},
+                                   None, None, "T")
+    assert outbox.bill_to(db_path, plain) is None
+    assert outbox.bill_to_lines(None) == []

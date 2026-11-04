@@ -181,6 +181,28 @@ def _line_text(db_path, supplier, article, designation, reference, quantity):
         f" réf. {reference}" if reference else ""), shown
 
 
+def bill_to(db_path, list_id):
+    """Who the order is billed to, as written when it was saved, or None."""
+    rows = db.read(db_path, "SELECT bill_company, bill_contact, bill_address FROM purchase_orders "
+                            "WHERE list_id = ?", [list_id])
+    if not rows or not any(rows[0]):
+        return None
+    company, contact, address = rows[0]
+    return {"company": company, "contact": contact, "address": address}
+
+
+def bill_to_lines(billing):
+    """The lines of a mail or a PDF that say where the bill goes."""
+    if not billing:
+        return []
+    out = ["Facturation à : " + (billing["company"] or "")]
+    if billing["contact"]:
+        out.append("À l'attention de : " + billing["contact"])
+    if billing["address"]:
+        out += [line.strip() for line in billing["address"].splitlines() if line.strip()]
+    return out
+
+
 def draft_order(db_path, list_id, user=None):
     """One draft a supplier for a stored purchase order. Lines nobody can say a supplier
     for come back apart: they are the ones to ring about."""
@@ -198,6 +220,9 @@ def draft_order(db_path, list_id, user=None):
         for article, designation, reference, quantity in rows:
             body.append("- " + _line_text(db_path, supplier, article, designation, reference,
                                           quantity)[0])
+        billing = bill_to_lines(bill_to(db_path, list_id))
+        if billing:
+            body += [""] + billing
         body += ["", "Merci de nous confirmer la commande et la date de livraison.",
                  "", "Cordialement"]
         mail_id = _add(db_path, direction="out", kind="order", supplier=supplier,
@@ -224,7 +249,8 @@ def order_attachment(db_path, row):
         if not lines:
             return None
         return (f"commande-{row['ref_id']}.pdf",
-                documents.order_pdf(db_path, row["ref_id"], row["supplier"], lines))
+                documents.order_pdf(db_path, row["ref_id"], row["supplier"], lines,
+                                    bill_to_lines(bill_to(db_path, row["ref_id"]))))
     except Exception:
         return None
 

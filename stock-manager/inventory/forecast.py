@@ -1,7 +1,7 @@
 import math
 from datetime import date, timedelta
 
-from . import db, leadtimes
+from . import db, feedback, leadtimes
 
 SERVICE_Z = {80: 0.84, 85: 1.04, 90: 1.28, 95: 1.65, 98: 2.05, 99: 2.33}
 
@@ -138,11 +138,12 @@ def _risk(cover_days, horizon, backorders, daily):
 
 
 def articles(db_path, lead=DEFAULT_LEAD, service=DEFAULT_SERVICE, horizon=DEFAULT_HORIZON,
-             use_learned=True):
+             use_learned=True, use_tuning=True):
     """One row per article. `lead` is the days to plan for when nothing better is known; an
     article with enough dated deliveries is planned with what its suppliers really took."""
     first, last, days = _window(db_path)
     taken = leadtimes.learned(db_path) if use_learned else {}
+    tuned = feedback.factors(db_path) if use_tuning else {}
     usage = _usage(db_path)
     counted = _on_hand(db_path)
     ordered = _on_order(db_path)
@@ -160,7 +161,8 @@ def articles(db_path, lead=DEFAULT_LEAD, service=DEFAULT_SERVICE, horizon=DEFAUL
         own = taken.get(article)
         lead_here = max(own, 1.0) if own else lead
         lead_demand = daily * lead_here
-        safety = z * daily_spread * math.sqrt(lead_here)
+        qty_factor, safety_factor = tuned.get(article, (1.0, 1.0))
+        safety = z * daily_spread * math.sqrt(lead_here) * safety_factor
         reorder_point = lead_demand + safety
 
         on_hand, counted_on = counted.get(article, (None, None))
@@ -203,7 +205,8 @@ def articles(db_path, lead=DEFAULT_LEAD, service=DEFAULT_SERVICE, horizon=DEFAUL
             "counted_on": counted_on.isoformat() if counted_on else None,
             "on_order": round(open_order, 2),
             "cover_days": round(cover_days, 1) if cover_days is not None else None,
-            "suggested": max(0, int(math.ceil(want))) if daily > 0 else 0,
+            "suggested": max(0, int(math.ceil(want * qty_factor))) if daily > 0 else 0,
+            "qty_factor": qty_factor, "safety_factor": safety_factor,
             "state": state,
             "risk": _risk(cover_days, horizon, entry["backorders"], daily),
         })

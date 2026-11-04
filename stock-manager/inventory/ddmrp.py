@@ -1,7 +1,7 @@
 import math
 from datetime import timedelta
 
-from . import db, stock
+from . import db, feedback, stock
 
 DEFAULT_CYCLE = 7
 DEFAULT_HORIZON = 4
@@ -178,6 +178,7 @@ def buffers(db_path, cycle=DEFAULT_CYCLE, horizon=DEFAULT_HORIZON):
 
     calendar = _every_week(first, last)
     per_article, per_supplier, overall = lead_times(db_path)
+    tuned = feedback.factors(db_path)
     on_hand = _on_hand(db_path)
     open_demand = _open_demand(db_path)
 
@@ -197,8 +198,9 @@ def buffers(db_path, cycle=DEFAULT_CYCLE, horizon=DEFAULT_HORIZON):
         lead_class, lead_factor = _classify(lead, LEAD_CLASSES)
         variability, variability_factor = _classify(cv, VARIABILITY_CLASSES)
 
+        qty_factor, safety_factor = tuned.get(article, (1.0, 1.0))
         red_base = adu * lead * lead_factor
-        red_safety = red_base * variability_factor
+        red_safety = red_base * variability_factor * safety_factor
         red = red_base + red_safety
         yellow = adu * lead
         green = max(adu * lead * lead_factor, adu * cycle)
@@ -250,7 +252,8 @@ def buffers(db_path, cycle=DEFAULT_CYCLE, horizon=DEFAULT_HORIZON):
             "net_flow": round(flow, 1),
             "buffer_share": round(100 * share, 1),
             "zone": zone,
-            "to_order": max(0, int(math.ceil(top_of_green - flow))) if adu > 0 else 0,
+            "to_order": max(0, int(math.ceil((top_of_green - flow) * qty_factor))) if adu > 0 else 0,
+            "qty_factor": qty_factor, "safety_factor": safety_factor,
             "state": states[-1] if states else "quiet",
             "weeks": [round(value, 2) for value in series],
         })

@@ -649,6 +649,40 @@ MIGRATIONS = [
         ALTER TABLE supplier_mail ADD COLUMN IF NOT EXISTS orig_body VARCHAR;
         """,
     ),
+    (
+        26,
+        "what the app learns from corrections and refusals, and who an order is billed to",
+        """
+        CREATE TABLE IF NOT EXISTS tuning (
+            article       VARCHAR PRIMARY KEY,
+            qty_factor    DOUBLE NOT NULL DEFAULT 1.0,
+            safety_factor DOUBLE NOT NULL DEFAULT 1.0,
+            samples       INTEGER NOT NULL DEFAULT 0,
+            last_reason   VARCHAR,
+            updated_at    TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+        CREATE SEQUENCE IF NOT EXISTS feedback_seq START 1;
+        CREATE TABLE IF NOT EXISTS feedback (
+            feedback_id INTEGER PRIMARY KEY DEFAULT nextval('feedback_seq'),
+            article     VARCHAR NOT NULL,
+            kind        VARCHAR NOT NULL,
+            proposed    DOUBLE,
+            final       DOUBLE,
+            detail      VARCHAR,
+            happened_at TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            done_by     VARCHAR
+        );
+        CREATE TABLE IF NOT EXISTS bill_to_default (
+            id      INTEGER PRIMARY KEY,
+            company VARCHAR,
+            contact VARCHAR,
+            address VARCHAR
+        );
+        ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS bill_company VARCHAR;
+        ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS bill_contact VARCHAR;
+        ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS bill_address VARCHAR;
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

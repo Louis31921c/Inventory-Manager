@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, archive, audit, autonomy, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
+from . import (account, agents, alerts, archive, audit, autonomy, feedback, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
@@ -185,6 +185,7 @@ async def _watch_loop():
     """Every hour: look over the books for what needs a person, and push what is new."""
     while True:
         try:
+            await asyncio.to_thread(feedback.learn, config.db_path)
             done = await asyncio.to_thread(watch.run, config.db_path, config)
             if done["new"] or done["pushed"]:
                 log.info("notices: %d new, %d open, pushed by %s", done["new"], done["open"],
@@ -1600,6 +1601,45 @@ def outbox_close(request: Request, mail_id: int):
     return {"outbox": outbox.overview(config.db_path, config.mail)}
 
 
+@app.get("/api/tuning")
+def read_tuning():
+    """What the app has learned from corrections, refusals, stock-outs and short counts."""
+    return {"tuning": feedback.listing(config.db_path), "recent": feedback.recent(config.db_path)}
+
+
+@app.delete("/api/tuning/{article}")
+def forget_tuning(request: Request, article: str):
+    if not feedback.forget(config.db_path, article):
+        raise HTTPException(404, "Nothing is learned for that article.")
+    event(request, "tuning.forget", article)
+    return read_tuning()
+
+
+class BillTo(BaseModel):
+    company: str = ""
+    contact: str = ""
+    address: str = ""
+
+
+@app.get("/api/bill-to")
+def read_bill_to():
+    """Who orders are billed to unless said otherwise."""
+    rows = db.read(config.db_path, "SELECT company, contact, address FROM bill_to_default WHERE id = 1")
+    company, contact, address = rows[0] if rows else (None, None, None)
+    return {"company": company or "", "contact": contact or "", "address": address or ""}
+
+
+@app.put("/api/bill-to")
+def put_bill_to(request: Request, body: BillTo):
+    db.write(config.db_path, """
+            INSERT INTO bill_to_default (id, company, contact, address) VALUES (1, ?, ?, ?)
+            ON CONFLICT (id) DO UPDATE SET company = excluded.company, contact = excluded.contact,
+                address = excluded.address RETURNING id""",
+             [body.company.strip(), body.contact.strip(), body.address.strip()])
+    event(request, "billto.set", body.company.strip() or "empty")
+    return read_bill_to()
+
+
 @app.get("/api/leadtimes")
 def read_lead_times():
     """How long each supplier really takes, from the delivery notes."""
@@ -1985,6 +2025,9 @@ class HardwareList(BaseModel):
     site: str | None = None
     work_item: str | None = None
     drafter: str | None = None
+    bill_company: str | None = None
+    bill_contact: str | None = None
+    bill_address: str | None = None
     lines: list[ListLine] = []
 
 
@@ -1992,6 +2035,8 @@ class SaveList(BaseModel):
     sha256: str | None = None
     list: HardwareList
     measurement: Measurement | None = None
+    # What Plutus showed and what was kept, line by line, so the app can learn from the edit.
+    proposal: list[dict] | None = None
 
 
 @app.post("/api/orders")
@@ -2014,6 +2059,9 @@ def save_list(request: Request, body: SaveList):
                                         _stored_photo(body.sha256), who(request)[0])
     except duckdb.ConstraintException as e:
         raise HTTPException(409, "This list is already stored.") from e
+
+    if body.proposal:
+        feedback.review_order(config.db_path, body.proposal, who(request)[0])
 
     if body.measurement:
         db.record_reading(config.db_path, "list", body.measurement.fields,
@@ -2373,8 +2421,9 @@ async def draft_order(request: Request, body: OrderDraft):
             raise HTTPException(422,
                                 "Nothing worth ordering: no article is under its reorder point.")
 
+    refused = feedback.refusals(config.db_path)
     keep = ("article", "designation", "reference", "supplier", "per_week", "on_hand", "on_order",
-            "lead_days", "lead_source", "lead_demand", "safety_stock", "reorder_point", "cover_days", "suggested", "state",
+            "lead_days", "lead_source", "qty_factor", "safety_factor", "lead_demand", "safety_stock", "reorder_point", "cover_days", "suggested", "state",
             "risk", "backorders")
     planner = {
         "settings": plan["settings"],
@@ -2383,7 +2432,10 @@ async def draft_order(request: Request, body: OrderDraft):
         "history_is_thin": plan["thin"],
         # Named by the person, which is a different question from "what should we order?"
         "asked_for_by_name": asked_for,
-        "articles": [{key: row[key] for key in keep} for row in rows[:60]],
+        "articles": [dict({key: row[key] for key in keep},
+                          refused_90_days=refused.get(row["article"], 0)) for row in rows[:60]],
+        "note_on_factors": "qty_factor and safety_factor are what people's corrections have taught "
+                           "the app about each article: the numbers above already include them.",
     }
 
     try:
@@ -2393,15 +2445,19 @@ async def draft_order(request: Request, body: OrderDraft):
         raise HTTPException(502, str(e)) from e
 
     lines = []
+    taught = {row["article"].upper(): row for row in feedback.listing(config.db_path)
+              if row["qty_factor"] != 1.0 or row["safety_factor"] != 1.0}
     for line in answer.get("lines", []):
         article = str(line.get("article") or "").strip()
         quantity = line.get("quantity")
         if not article or quantity is None:
             continue
+        learned = taught.get(article.upper())
         lines.append({"article": article, "quantity": float(quantity),
                       "unit": line.get("unit"), "supplier": line.get("supplier"),
                       "reference": line.get("reference"),
-                      "reason": str(line.get("reason") or "")})
+                      "reason": str(line.get("reason") or ""),
+                      "learned": learned})
     # No line is an answer, not a failure: the agent is told to leave out what is
     # comfortable, so a shelf in good order is meant to come back empty.
     event(request, "order.draft", f"{len(lines)} line(s)", "by Plutus")

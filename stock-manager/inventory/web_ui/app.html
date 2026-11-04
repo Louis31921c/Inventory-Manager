@@ -769,6 +769,12 @@
                placeholder="leave empty and Plutus picks what is thin; or name them, comma apart">
       </label>
     </div>
+    <p class="eyebrow">Bill to</p>
+    <div class="row">
+      <label class="field grow"><span>company name</span><input id="bill-company" autocomplete="organization"></label>
+      <label class="field grow"><span>contact name</span><input id="bill-contact" autocomplete="off"></label>
+    </div>
+    <label class="field"><span>address</span><textarea id="bill-address" rows="2" autocomplete="off"></textarea></label>
     <div class="row">
       <button class="action" id="ask-agent">draft the order</button>
       <button class="action ghost" id="drop-draft" hidden>discard</button>
@@ -781,6 +787,11 @@
         <button class="action" id="save-draft">save as purchase order</button>
       </div>
     </div>
+    <p class="eyebrow">What Plutus has learned</p>
+    <p class="muted">When you change a quantity, a basket is refused, an article runs out or a count
+      comes up short, the quantity proposed or the safety stock for that article moves. Forget one to
+      start it again from the numbers alone.</p>
+    <div class="scroll-x short-box"><table id="table-tuning"></table></div>
   </div>
 </section>
 
@@ -3097,7 +3108,7 @@ function renderDraft() {
   $("drop-draft").hidden = !drawn;
   if (!drawn) return;
 
-  const head = ["Article", "Quantity", "Unit", "Supplier", "Why"];
+  const head = ["Article", "Quantity", "Unit", "Supplier", "Why", "Learned"];
   $("table-draft").replaceChildren(
     el("thead", {}, [el("tr", {}, head.map((name) => el("th", { textContent: name })))]),
     el("tbody", {}, orderDraft.lines.map((line, index) => {
@@ -3118,6 +3129,9 @@ function renderDraft() {
         el("td", { textContent: line.unit ?? "—" }),
         el("td", { textContent: line.supplier ?? "—" }),
         el("td", { className: "desig", textContent: line.reason }),
+        el("td", { className: "desig", textContent: line.learned
+          ? `x${line.learned.qty_factor.toFixed(2)} order, x${line.learned.safety_factor.toFixed(2)} safety: ${line.learned.last_reason ?? ""}`
+          : "" }),
       ]);
     })),
   );
@@ -3192,6 +3206,7 @@ $("ask-agent").addEventListener("click", async () => {
       work_item: $("order-work").value.trim() || null,
       only: named.length ? named : null,
     }));
+    for (const line of orderDraft.lines) line.proposed = line.quantity;
     const read = (orderDraft.read ?? []).join(", ");
     notice($("agent-note"), orderDraft.lines.length ? "ok" : "warn",
       orderDraft.lines.length
@@ -3231,14 +3246,20 @@ $("save-draft").addEventListener("click", async () => {
         site: $("order-site").value.trim() || null,
         work_item: $("order-work").value.trim() || null,
         drafter: "PLUTUS",
+        bill_company: $("bill-company").value.trim() || null,
+        bill_contact: $("bill-contact").value.trim() || null,
+        bill_address: $("bill-address").value.trim() || null,
         lines,
       },
+      proposal: orderDraft.lines.map((line) => ({
+        article: line.article, proposed: line.proposed ?? line.quantity,
+        final: line.quantity > 0 ? line.quantity : 0 })),
     }));
     notice($("agent-note"), "ok",
       `Saved as purchase order #${answer.list_id}. It is in the Purchase orders tab now.`);
     orderDraft = null;
     renderDraft();
-    await loadDdmrp();
+    await Promise.all([loadDdmrp(), loadTuning()]);
   } catch (e) {
     notice($("agent-note"), "bad", e.message);
   } finally {
@@ -4466,6 +4487,52 @@ loadAutonomy();
 setInterval(() => { if (!document.hidden) loadAutonomy(); }, 5000);
 setInterval(() => { if (!document.hidden) loadDashboard(); }, 60000);
 
+// ---- Plutus: who the order is billed to, and what it has learned ----------
+
+async function loadBillTo() {
+  try {
+    const kept = await api("/api/bill-to");
+    $("bill-company").value = kept.company;
+    $("bill-contact").value = kept.contact;
+    $("bill-address").value = kept.address;
+  } catch {
+  }
+}
+
+// What is typed here is remembered for the next order, and goes on this one when it is saved.
+for (const id of ["bill-company", "bill-contact", "bill-address"]) {
+  $(id).addEventListener("change", async () => {
+    try {
+      await api("/api/bill-to", putJson({
+        company: $("bill-company").value, contact: $("bill-contact").value,
+        address: $("bill-address").value }));
+    } catch (e) {
+      notice($("agent-note"), "bad", e.message);
+    }
+  });
+}
+
+function drawTuning(data) {
+  renderTable($("table-tuning"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Order quantity", numeric: true, cell: (row) => td(`x${row.qty_factor.toFixed(2)}`) },
+    { label: "Safety stock", numeric: true, cell: (row) => td(`x${row.safety_factor.toFixed(2)}`) },
+    { label: "Times", numeric: true, cell: (row) => td(row.samples) },
+    { label: "Why", cell: (row) => td(row.last_reason) },
+    { label: "", cell: (row) => {
+      const gone = el("button", { className: "mini", textContent: "forget" });
+      gone.addEventListener("click", async () => {
+        try {
+          drawTuning(await api(`/api/tuning/${encodeURIComponent(row.article)}`, { method: "DELETE" }));
+        } catch (e) { notice($("agent-note"), "bad", e.message); }
+      });
+      return gone;
+    } },
+  ], data.tuning ?? [], "Nothing learned yet.");
+}
+
+async function loadTuning() { try { drawTuning(await api("/api/tuning")); } catch {} }
+
 // ---- calendar, supplier terms, exchange rates, the photo archive ---------
 
 function drawCalendar(data) {
@@ -5389,7 +5456,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(),
       loadPacks(), loadCompare(), loadDisputes(), loadDispatches(), loadComing(),
     ]);
     notice($("global-notice"), "", "");

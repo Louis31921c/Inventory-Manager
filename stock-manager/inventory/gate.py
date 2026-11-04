@@ -496,6 +496,11 @@ def cancel(db_path, request_id, who, why=None):
             WHERE request_id = ?
             """, (CANCELLED, who, request_id))
     seal(db_path, request_id, "cancelled", {"was": now["state"], "why": why}, who)
+    # A basket turned down is something to remember about its articles: Plutus is told.
+    from . import feedback
+
+    for line in now.get("lines") or []:
+        feedback.refused(db_path, line.get("article"), why, who)
     return one(db_path, request_id)
 
 

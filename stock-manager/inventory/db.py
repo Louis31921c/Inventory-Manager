@@ -402,6 +402,13 @@ def save_purchase_order(db_path, data, image_sha256, image_path, user=None):
                  image_sha256, image_path, user],
             ).fetchone()[0]
 
+            bill = [(data.get("bill_company") or "").strip() or None,
+                    (data.get("bill_contact") or "").strip() or None,
+                    (data.get("bill_address") or "").strip() or None]
+            if any(bill):
+                con.execute("UPDATE purchase_orders SET bill_company = ?, bill_contact = ?, "
+                            "bill_address = ? WHERE list_id = ?", bill + [list_id])
+
             lines = data.get("lines", [])
             articles = [vocabulary.resolve(con, line["article"]) for line in lines]
             con.executemany(
