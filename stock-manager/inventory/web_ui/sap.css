@@ -809,7 +809,7 @@ td span.muted { color: var(--ink-soft); }
 #dash-card .stat { flex: 1 1 0; min-width: 0; padding: 2px 5px 3px; }
 #dash-card .stat .stat-name { font-size: 9px; white-space: nowrap; }
 #dash-card .stat strong { font-size: 12px; }
-#dash-card table { font-size: 10px; }
+#dash-card table { font-size: 12px; }
 #dash-card th, #dash-card td { padding: 1px 4px; }
 #dash-card .short-box { max-height: 160px; }
 #dash-card .eyebrow { margin: 4px 0 2px; }
