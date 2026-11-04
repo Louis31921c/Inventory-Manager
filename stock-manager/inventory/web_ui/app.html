@@ -4447,7 +4447,7 @@ function showDashboardButton() {
 function setDashboard(open) {
   dashOpen = open;
   $("dash-toggle").setAttribute("aria-expanded", String(open));
-  $("dash-toggle").textContent = open ? "Fold the short watch dashboard" : "Short watch dashboard";
+  $("dash-toggle").textContent = open ? "Fold dashboard" : "Bugs dashboard";
   showDashboardButton();
   try {
     localStorage.setItem("dash-open", open ? "1" : "0");
