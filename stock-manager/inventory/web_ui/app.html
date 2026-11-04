@@ -43,6 +43,7 @@
 </nav>
 
 <div class="toolbar">
+  <button class="tool" id="dash-toggle" type="button" aria-expanded="false" hidden>Short watch dashboard</button>
   <span class="toolbar-gap"></span>
   <form method="post" action="/lock" id="lock-form">
     <button class="tool" type="submit" title="Lock the session (F8)">Remember me</button>
@@ -83,26 +84,16 @@
     <p class="muted" id="gate-note"></p>
     <div id="gate-list"></div>
   </div>
-  <div class="card" id="dash-card">
-    <div class="row tight">
-      <button class="action ghost" id="dash-toggle" type="button" aria-expanded="false">Short watch dashboard</button>
+  <div class="card" id="dash-card" hidden>
+    <div class="autonomy">
+      <span class="autonomy-name">DEV-SCORE</span>
+      <strong id="autonomy-score">--.--</strong><span class="autonomy-of">/ 100</span>
     </div>
-    <div id="dash-body" hidden>
-      <div class="autonomy">
-        <span class="autonomy-name">DEV-Score</span>
-        <strong id="autonomy-score">--.--</strong><span class="autonomy-of">/ 100</span>
-      </div>
-      <div id="autonomy-detail">
-        <p class="eyebrow">Where the points are, by value</p>
-        <ol id="autonomy-next"></ol>
-        <div class="row" id="autonomy-areas"></div>
-        <table id="table-autonomy"></table>
-        <p class="muted" id="autonomy-note"></p>
-      </div>
-      <div class="row" id="dash-kpis"></div>
-      <p class="eyebrow">Shortages</p>
-      <div class="scroll-x short-box"><table id="table-shortages"></table></div>
-    </div>
+    <div class="row" id="dash-kpis"></div>
+    <p class="eyebrow">Shortages</p>
+    <div class="scroll-x short-box"><table id="table-shortages"></table></div>
+    <p class="eyebrow">Open actions</p>
+    <div class="scroll-x short-box"><table id="table-actions"></table></div>
   </div>
   <div class="home">
     <div class="home-logo" role="img" aria-label="Logistics Manager"></div>
@@ -1146,6 +1137,7 @@ function openTab(name) {
     $(`panel-${other}`).hidden = other !== name;
   }
   if (name !== "chain") watchChain(false);
+  if (typeof showDashboardButton === "function") showDashboardButton();
   // Browsing a site is reading, not scanning: the capture cards stay out of the way.
   if (treePick) {
     orderCard = "stored-po";
@@ -4416,14 +4408,13 @@ function drawDashboard(data) {
     { label: "Supplier", cell: (row) => td(row.supplier) },
     { label: "Lead (days)", numeric: true, cell: (row) => td(row.lead_days) },
   ], data.shortages ?? [], "Nothing is short for the next two weeks.");
-  if ($("table-actions")) renderTable($("table-actions"), [
+  renderTable($("table-actions"), [
     { label: "", cell: (row) => el("span", { className: row.severity === "critical" || row.severity === "high"
         ? "status-down" : "muted", textContent: row.severity }) },
     { label: "What", cell: (row) => td(row.title) },
     { label: "Detail", cell: (row) => td(row.detail) },
     { label: "Since", cell: (row) => td(row.since.replace("T", " ")) },
   ], data.actions ?? [], "Nothing needs you.");
-  $("dash-card").hidden = false;
 }
 
 async function loadDashboard() {
@@ -4435,24 +4426,6 @@ async function loadDashboard() {
 
 function drawAutonomy(data) {
   $("autonomy-score").textContent = Number(data.score).toFixed(2);
-  $("autonomy-areas").replaceChildren(...(data.areas ?? []).map((a) =>
-    statTile(a.area, `${a.points.toFixed(1)} / ${a.weight}`)));
-  $("autonomy-next").replaceChildren(...(data.next_steps ?? []).map((n) => el("li", {
-    textContent: `+${n.to_win.toFixed(1)} points, ${n.capability}: ${n.step}` })));
-  renderTable($("table-autonomy"), [
-    { label: "Area", cell: (row) => td(row.area) },
-    { label: "Capability", cell: (row) => td(row.capability) },
-    { label: "Weight", numeric: true, cell: (row) => td(row.weight) },
-    { label: "Level", cell: (row) => td(`${row.level} ${row.level_name}`) },
-    { label: "Points", numeric: true, cell: (row) => td(row.points.toFixed(2)) },
-    { label: "What it does now", cell: (row) => td(row.why) },
-    { label: "To raise it", cell: (row) => td(row.next) },
-  ], data.parts ?? [], "");
-  $("autonomy-note").textContent =
-    "Levels: 0 not built, 1 records only, 2 assisted (it prepares, a person carries out), "
-    + "3 supervised (it acts alone on routine cases, a person takes the exceptions), 4 autonomous. "
-    + "Points are weight x level / 4. It rates the architecture, and moves when something is built "
-    + "or switched on (a mailbox, outgoing mail, alert pushing, the Claude command line).";
 }
 
 async function loadAutonomy() {
@@ -4462,22 +4435,32 @@ async function loadAutonomy() {
   }
 }
 
+// The dashboard is the landing page's, folded away until the button on the bar is pressed.
+var dashOpen = false;
+
+function showDashboardButton() {
+  const home = !$("panel-home").hidden;
+  $("dash-toggle").hidden = !home;
+  $("dash-card").hidden = !(home && dashOpen);
+}
+
 function setDashboard(open) {
-  $("dash-body").hidden = !open;
+  dashOpen = open;
   $("dash-toggle").setAttribute("aria-expanded", String(open));
   $("dash-toggle").textContent = open ? "Fold the short watch dashboard" : "Short watch dashboard";
+  showDashboardButton();
   try {
     localStorage.setItem("dash-open", open ? "1" : "0");
   } catch {
   }
 }
 
-$("dash-toggle").addEventListener("click", () => setDashboard($("dash-body").hidden));
+$("dash-toggle").addEventListener("click", () => setDashboard(!dashOpen));
 try {
-  setDashboard(localStorage.getItem("dash-open") === "1");
+  dashOpen = localStorage.getItem("dash-open") === "1";
 } catch {
 }
-
+setDashboard(dashOpen);
 
 loadAutonomy();
 setInterval(() => { if (!document.hidden) loadAutonomy(); }, 5000);
