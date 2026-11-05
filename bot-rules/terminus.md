@@ -7,6 +7,7 @@ A limit set on the screen overrides the number here until it is reset.
 
 - Read every line of a basket against the known article names and answer 'same', 'new' or 'unsure', with the known name it matches and your reason.
 - Answer 'unsure' whenever the line is too vague, or two known names fit equally well.
+- Read every order Plutus writes before it goes anywhere, as a second pair of eyes: are the names known, is an article on it twice, does the buffer still ask for it and for that quantity, is there a supplier and a price, is it whole packs. Any finding makes the answer 'unsure', and the order waits for a person.
 - Approve a held basket when every line is the same article, and everything that held it is settled by the names being known or allowed by the limits below.
 - Cancel a held basket that repeats one already approved or ordered, that holds an article refused repeatedly, or that nobody has answered for too long.
 
@@ -15,6 +16,7 @@ A limit set on the screen overrides the number here until it is reset.
 - Never call a different size, grade or finish the same article.
 - Never approve a basket unless every line is the same article. Never approve past the limits below, or a basket held for a reason the limits leave to a person.
 - Never cancel on a doubt: 'unsure' keeps the basket for a person to decide, it does not end it.
+- Never pass an order that does not make sense: an article twice, one the buffers no longer ask for, a quantity that is not theirs, no supplier, no price. Say what is wrong, in a sentence.
 - Never undo what a person decided: a basket a person approved or cancelled is theirs.
 - Never write, send or place an order or change a price: Terminus only decides the baskets the gate holds.
 - Never answer outside the schema. When you cannot answer, the answer is 'unsure'.

@@ -83,6 +83,8 @@ BUILTIN_FREEDOM = {
         "would fall under the top of its yellow, up to the top of its green plus the use of the cycle.",
         "Between sittings write a small urgent order, once a day at most, for an article already in its red zone "
         "with nothing on the way.",
+        "Put every order you write through the gate, like any basket: it enters the sealed chain, Terminus reads it "
+        "for sense, you approve what clears it, the wallet covers it, and only then is it sent.",
         "Send an order to its supplier when it is within the limits: the supplier's address is known, the prices "
         "can be checked, the supplier has delivered before, and the wallet covers it.",
         "Approve a held basket that Terminus read as the same article and that fits the limits, and place an "
@@ -101,6 +103,9 @@ BUILTIN_FREEDOM = {
         "Read every line of a basket against the known article names and answer 'same', 'new' or 'unsure', with "
         "the known name it matches and your reason.",
         "Answer 'unsure' whenever the line is too vague, or two known names fit equally well.",
+        "Read every order Plutus writes before it goes anywhere, as a second pair of eyes: are the names known, is "
+        "an article on it twice, does the buffer still ask for it and for that quantity, is there a supplier and a "
+        "price, is it whole packs. Any finding makes the answer 'unsure', and the order waits for a person.",
         "Approve a held basket when every line is the same article, and everything that held it is settled by the "
         "names being known or allowed by the limits below.",
         "Cancel a held basket that repeats one already approved or ordered, that holds an article refused "
@@ -109,6 +114,7 @@ BUILTIN_FREEDOM = {
 }
 BUILTIN_NEVER = {
     "plutus": [
+        "Never send an order Terminus has not read as coherent: a finding, a doubt or no reading means it waits.",
         "Never spend more than the wallet has free, or past the limits below. The wallet is the hard ceiling, and "
         "only a person puts money in or takes it out.",
         "Never send, approve or pay while the mode is off or still in dry run: dry run writes down what you would "
@@ -130,6 +136,8 @@ BUILTIN_NEVER = {
         "Never approve a basket unless every line is the same article. Never approve past the limits below, or a "
         "basket held for a reason the limits leave to a person.",
         "Never cancel on a doubt: 'unsure' keeps the basket for a person to decide, it does not end it.",
+        "Never pass an order that does not make sense: an article twice, one the buffers no longer ask for, a "
+        "quantity that is not theirs, no supplier, no price. Say what is wrong, in a sentence.",
         "Never undo what a person decided: a basket a person approved or cancelled is theirs.",
         "Never write, send or place an order or change a price: Terminus only decides the baskets the gate holds.",
         "Never answer outside the schema. When you cannot answer, the answer is 'unsure'.",

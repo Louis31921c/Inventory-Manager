@@ -104,7 +104,7 @@ def _open_demand(db_path):
     return {article: float(quantity or 0) for article, quantity in db.read(db_path, f"""
             SELECT l.article, sum(l.quantity)
             FROM purchase_order_lines l JOIN purchase_orders h USING (list_id)
-            WHERE l.quantity IS NOT NULL
+            WHERE l.quantity IS NOT NULL AND upper(coalesce(h.drafter, '')) <> 'PLUTUS'
               AND {stock.ORDER_DAY} > current_date - {stock.SHIPPING_DAYS}
             GROUP BY l.article
             """)}

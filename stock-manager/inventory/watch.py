@@ -98,6 +98,18 @@ def conditions(db_path, today=None):
         add(f"quote:{quote_id}", "quote", "high", f"Quote #{quote_id} ({supplier or '?'}) is needed by {needed}",
             f"still {state}")
 
+    from . import purchasing
+
+    for stop in purchasing.blocked(db_path):
+        what = {"send_order": "send an order", "approve": "approve a basket", "place_basket": "place a basket",
+                "pay_bill": "pay a bill", "open_gate": "open an order", "coherence": "pass an order"}.get(
+                    stop["action"], stop["action"])
+        who = "Plutus" if stop["who"] == "PLUTUS" else "Terminus"
+        dry = " (dry run)" if stop["mode"] == "dry_run" else ""
+        add(f"blocked:{stop['who']}:{stop['action']}:{stop['subject']}", "blocked", "high",
+            f"{who} could not {what}{dry}: {stop['subject'].replace(':', ' ')}"
+            + (f", {stop['supplier']}" if stop.get("supplier") else ""), stop.get("reasons") or "")
+
     waiting = db.read(db_path, "SELECT count(*) FROM intake WHERE state = 'waiting' "
                                "AND arrived_at < now() - INTERVAL 1 DAY")[0][0]
     if waiting:

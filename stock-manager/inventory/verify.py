@@ -12,7 +12,7 @@ cannot be reached, or is not sure, the answer is "unsure" and the basket waits f
 
 import re
 
-from . import agents, charters, llm, vocabulary
+from . import agents, charters, coherence, db, llm, vocabulary
 from .models import normalize_name
 
 # How many known names a line is held up against. More than this and the prompt is noise.
@@ -115,6 +115,13 @@ async def check(db_path, lines, model=None):
     """
     known = vocabulary.known_articles(db_path)
     rules = charters.limits(db_path, "terminus")
+    # Every name exactly a known article: nothing to read, so nothing to ask the model.
+    held = {normalize_name(name): name for name in known}
+    if lines and all(normalize_name(line.get("article")) in held for line in lines):
+        return {"verdict": SAME, "note": "Every name is a known article, exactly.",
+                "lines": [{"asked": normalize_name(line.get("article")), "verdict": SAME,
+                           "match": held[normalize_name(line.get("article"))], "confidence": 1.0,
+                           "reason": "the name is already known, letter for letter"} for line in lines]}
     if len(lines) > rules["max_lines"]:
         return {"verdict": UNSURE, "lines": [],
                 "note": f"The basket has {len(lines)} lines, over Terminus's limit of "
@@ -157,3 +164,18 @@ def learn(db_path, asked, match, who=None):
                 VALUES (?, ?, ?) ON CONFLICT (alias) DO NOTHING
                 """, [alias, article, who])
     return True
+
+
+async def check_order(db_path, list_id, today=None, model=None):
+    """Read an order Plutus wrote before it goes anywhere: the names, and whether it still makes sense.
+    Any finding makes the answer "unsure", so the order waits for a person."""
+    found = coherence.findings(db_path, list_id, today)
+    lines = [{"article": article} for (article,) in db.read(
+        db_path, "SELECT article FROM purchase_order_lines WHERE list_id = ? ORDER BY line_no", [list_id])]
+    named = await check(db_path, lines, model=model)
+    if not found:
+        return dict(named, findings=[])
+    note = "Not coherent: " + "; ".join(found)
+    if named.get("note"):
+        note += f" | names: {named['note']}"
+    return {"verdict": UNSURE, "note": note, "lines": named.get("lines", []), "findings": found}

@@ -33,7 +33,7 @@ def shipped(db_path):
                             THEN l.quantity ELSE 0 END),
                    max({ORDER_DAY})
             FROM purchase_order_lines l JOIN purchase_orders h USING (list_id)
-            WHERE l.quantity IS NOT NULL
+            WHERE l.quantity IS NOT NULL AND upper(coalesce(h.drafter, '')) <> 'PLUTUS'
             GROUP BY l.article
             """)
     return {article: {"out": float(out or 0), "picking": float(picking or 0), "last": last}

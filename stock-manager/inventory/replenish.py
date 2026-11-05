@@ -78,21 +78,29 @@ def cycle_due(db_path, now=None):
 
 # ---- what is already on its way ---------------------------------------------
 
-def covered_by(db_path, article, lead_days, today):
+def covered_by(db_path, article, lead_days, today, ignore_list=None):
     """Why this article need not be ordered now: something is already on its way. None if not."""
     window = max(MIN_COVER_DAYS, int(round(lead_days or 0)))
     since = today - timedelta(days=window)
     if db.read(db_path, "SELECT 1 FROM order_queue WHERE state = 'waiting' AND article = ?", [article]):
         return "it waits in the 15-day queue"
+    # Plutus's own order is on its way from the day it is written until something of it is delivered, or
+    # two months have passed, whichever comes first.
     if db.read(db_path, """
             SELECT 1 FROM purchase_order_lines l JOIN purchase_orders h USING (list_id)
             WHERE l.article = ? AND l.in_stock = FALSE AND upper(coalesce(h.drafter, '')) = 'PLUTUS'
-              AND coalesce(h.list_date, CAST(h.created_at AS DATE)) >= ?""", [article, since]):
-        return f"Plutus ordered it in the last {window} days"
+              AND h.list_id IS DISTINCT FROM ?
+              AND coalesce(h.list_date, CAST(h.created_at AS DATE)) >= ?
+              AND NOT EXISTS (SELECT 1 FROM inventory_lines d WHERE d.article = l.article
+                              AND d.delivery_date >= coalesce(h.list_date, CAST(h.created_at AS DATE))
+                              AND NOT coalesce(d.backorder, FALSE))""",
+                [article, ignore_list, today - timedelta(days=max(60, window))]):
+        return "Plutus has an order out for it that has not arrived"
     if db.read(db_path, """
             SELECT 1 FROM supplier_mail WHERE direction = 'out' AND kind = 'order'
               AND state IN ('draft', 'failed', 'sent', 'confirmed')
-              AND CAST(created_at AS DATE) >= ? AND upper(body) LIKE ?""", [since, f"%{article}%"]):
+              AND CAST(created_at AS DATE) >= ? AND upper(body) LIKE ?
+              AND ref_id IS DISTINCT FROM ?""", [since, f"%{article}%", ignore_list]):
         return "an order mail for it is drafted or sent"
     if db.read(db_path, "SELECT 1 FROM inventory_lines WHERE article = ? AND backorder "
                         "AND settled_on IS NULL", [article]):
@@ -102,7 +110,7 @@ def covered_by(db_path, article, lead_days, today):
 
 # ---- what to order ----------------------------------------------------------
 
-def _build(db_path, today, kind):
+def _build(db_path, today, kind, ignore_list=None):
     """(lines to order, left alone with the reason, articles to count) for a cycle or urgent order."""
     rules = charters.limits(db_path, "plutus")
     cycle = int(rules["cycle_days"])
@@ -148,7 +156,7 @@ def _build(db_path, today, kind):
         if quantity < 1:
             left.append({"article": article, "zone": row["zone"], "why": "it already holds the cover limit"})
             continue
-        why = covered_by(db_path, article, row["lead_days"], today)
+        why = covered_by(db_path, article, row["lead_days"], today, ignore_list)
         if why:
             left.append({"article": article, "zone": row["zone"], "why": why})
             continue

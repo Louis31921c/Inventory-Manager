@@ -138,6 +138,8 @@ def decide(db_path, request_id=None, now=None):
     for request in gate.waiting(db_path):
         if request_id is not None and request["request_id"] != request_id:
             continue
+        if str(request.get("channel") or "").startswith("po:"):
+            continue                       # Plutus's own order: it goes through the process, and is read, not cancelled
         why = _cancel_reason(db_path, request, rules, now)
         if why:
             if not _seen_today(db_path, "cancel", request["request_id"], now):

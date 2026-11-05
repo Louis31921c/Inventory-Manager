@@ -47,7 +47,8 @@ def requirements(db_path, today, horizon=HORIZON_DAYS):
             SELECT l.article, l.quantity, h.site, h.work_item, h.ship_by,
                    coalesce(h.list_date, CAST(h.created_at AS DATE))
             FROM purchase_order_lines l JOIN purchase_orders h USING (list_id)
-            WHERE l.in_stock = FALSE AND l.quantity IS NOT NULL"""):
+            WHERE l.in_stock = FALSE AND l.quantity IS NOT NULL
+              AND upper(coalesce(h.drafter, '')) <> 'PLUTUS'"""):
         need = ship_by or max(day, today)
         if need <= until:
             out.setdefault(article, []).append({

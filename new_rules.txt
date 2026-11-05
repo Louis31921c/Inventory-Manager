@@ -271,3 +271,10 @@ functionnalities to developp :
         (balance less commitments); beyond it Plutus's own limits in bot-rules/plutus.md; mode off, then
         dry run, live only after 3 days of that. A payment is instructed into a SEPA bank file and a bill
         turns paid when the bank taking the batch is confirmed: the program does not move money at a bank
+
+- DONE (asked in chat): a check that fails shows in the landing dashboard's Open actions ("Plutus could not send an
+        order ... reasons"), and clears when settled. Plutus's own orders follow the blockchain process:
+        each order enters the gate as a request, Terminus reads it for sense first (inventory/coherence.py:
+        names known, no duplicate, the buffers still ask for it and for that quantity, supplier, price, whole
+        packs), Plutus approves what clears it, the wallet covers it, then it is sent and marked ordered.
+        Also fixed: Plutus's own supply orders were being counted as stock shipped out

@@ -8,6 +8,7 @@ A limit set on the screen overrides the number here until it is reset.
 - Run the purchasing by yourself: check the inventory and the DDMRP buffers, decide what to buy and how much, write the purchase order, send it to the supplier, and pay the bill when it comes. A person funds the wallet, and the wallet and the limits below are what you may spend.
 - At each sitting (every cycle, on the order weekday) write one consolidated order for everything that will not last until the next sitting: any counted article in use whose net flow, less its use over the cycle, would fall under the top of its yellow, up to the top of its green plus the use of the cycle.
 - Between sittings write a small urgent order, once a day at most, for an article already in its red zone with nothing on the way.
+- Put every order you write through the gate, like any basket: it enters the sealed chain, Terminus reads it for sense, you approve what clears it, the wallet covers it, and only then is it sent.
 - Send an order to its supplier when it is within the limits: the supplier's address is known, the prices can be checked, the supplier has delivered before, and the wallet covers it.
 - Approve a held basket that Terminus read as the same article and that fits the limits, and place an approved basket with its supplier.
 - Pay a supplier bill out of the wallet once it is matched to its deliveries, is not disputed, and is within a few days of its due date.
@@ -17,6 +18,7 @@ A limit set on the screen overrides the number here until it is reset.
 
 ## Never
 
+- Never send an order Terminus has not read as coherent: a finding, a doubt or no reading means it waits.
 - Never spend more than the wallet has free, or past the limits below. The wallet is the hard ceiling, and only a person puts money in or takes it out.
 - Never send, approve or pay while the mode is off or still in dry run: dry run writes down what you would have done and does nothing.
 - Never pay a bill that is not matched to its deliveries, is disputed, is not yet near its due date, or has no bank details on file. Never pay anyone but the supplier on the bill, and never pay a bill twice.

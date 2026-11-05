@@ -19,10 +19,11 @@ that could send twice: an order that has gone is no longer a draft, a basket tha
 longer approved, a bill that has a payment is no longer to pay.
 """
 
+import asyncio
 from datetime import date, datetime, timedelta
 
 from . import (audit, charters, db, gate, judge, matching, outbox, payments, policies, prices,
-               wallet, workdays)
+               verify, wallet, workdays)
 from .policies import MIN_DRY_DAYS
 
 MODES = ("off", "dry_run", "live")
@@ -141,39 +142,78 @@ def check_send(db_path, mail, now, rules):
     return reasons, value
 
 
-def _send_orders(db_path, config, now, current, rules, connect):
-    sent = 0
-    for (list_id,) in db.read(db_path, """
-            SELECT list_id FROM purchase_orders h WHERE upper(coalesce(drafter, '')) = 'PLUTUS'
-              AND created_at >= now() - INTERVAL 3 DAY
-              AND NOT EXISTS (SELECT 1 FROM supplier_mail m WHERE m.ref_kind = 'po' AND m.ref_id = h.list_id
-                              AND m.direction = 'out')"""):
-        try:
-            outbox.draft_order(db_path, list_id, WHO)
-        except ValueError:
-            pass
-    ready = outbox.readiness(config.mail)["ready"]
-    for row in outbox.overview(db_path, config.mail)["drafts"]:
-        if row["kind"] != "order" or row["state"] != "draft" or row["ref_kind"] != "po":
-            continue
-        head = db.read(db_path, "SELECT upper(coalesce(drafter, '')) FROM purchase_orders WHERE list_id = ?",
-                       [row["ref_id"]])
-        if not head or head[0][0] != "PLUTUS":
-            continue                                     # a person's order is a person's to send
-        reasons, value = check_send(db_path, row, now, rules)
-        if not ready:
-            reasons.append("outgoing mail is not set up")
+def _po_of(request):
+    """The purchase order a gate request stands for, or None when it is a chat basket."""
+    channel = str(request.get("channel") or "")
+    return int(channel[3:]) if channel.startswith("po:") and channel[3:].isdigit() else None
 
-        def go(r=row, v=value):
-            wallet.commit(db_path, r["supplier"], v, "po", r["ref_id"], rules["wallet_reserve"], WHO)
-            try:
-                outbox.send(db_path, r["mail_id"], config.mail, WHO, **({"connect": connect} if connect else {}))
-            except Exception:
-                db.write(db_path, "UPDATE commitments SET state = 'released', released_on = current_date "
-                                  "WHERE ref_kind = 'po' AND ref_id = ? AND state = 'open' RETURNING 1", [r["ref_id"]])
-                raise
-        sent += _offer(db_path, "send_order", f"mail:{row['mail_id']}", row["supplier"], value, reasons,
-                       now, current, go)
+
+def _open_requests(db_path, now, current, rules):
+    """Step 1 and 2: an order Plutus wrote enters the gate, like any basket, so it leaves a sealed trail."""
+    opened = 0
+    have = {_po_of(r) for r in gate.history(db_path, 500)} - {None}
+    for list_id, site, work in db.read(db_path, """
+            SELECT list_id, site, work_item FROM purchase_orders
+            WHERE upper(coalesce(drafter, '')) = 'PLUTUS' AND created_at >= now() - INTERVAL 3 DAY
+            ORDER BY list_id"""):
+        if list_id in have:
+            continue
+
+        def go(i=list_id, st=site, wk=work):
+            rows = [{"article": a, "quantity": float(q), "supplier": outbox.supplier_of(db_path, a),
+                     "unit_price": (prices.sightings(db_path, a, 1) or [None])[0]}
+                    for a, q in db.read(db_path, "SELECT article, quantity FROM purchase_order_lines "
+                                                 "WHERE list_id = ? AND in_stock IS NOT TRUE ORDER BY line_no", [i])]
+            gate.ask(db_path, gate.look(db_path, rows), channel=f"po:{i}", shop=f"PO #{i}",
+                     asked_by=WHO, site=st, work_item=wk)
+        opened += _offer(db_path, "open_gate", f"po:{list_id}", None, None, [], now, current, go)
+    return opened
+
+
+def _terminus_reads(db_path, now, current):
+    """Step 3: Terminus reads each order for sense before Plutus may approve it."""
+    read = 0
+    for request in gate.waiting(db_path):
+        list_id = _po_of(request)
+        if list_id is None or request.get("agent_verdict") is not None:
+            continue
+        answer = asyncio.run(verify.check_order(db_path, list_id, now.date()))
+        gate.record_check(db_path, request["request_id"], answer["verdict"], answer["note"], answer["lines"])
+        read += 1
+    return read
+
+
+def _send_orders(db_path, config, now, current, rules, connect):
+    """Step 6 and 7 for an order Plutus wrote: once it is approved, send it from the wallet."""
+    sent = 0
+    ready = outbox.readiness(config.mail)["ready"]
+    for request in [r for r in gate.history(db_path, 200) if r["state"] == "approved"]:
+        list_id = _po_of(request)
+        if list_id is None:
+            continue
+        drafts = outbox.draft_order(db_path, list_id, WHO)["drafts"]
+        for row in drafts:
+            if row["state"] != "draft":
+                continue
+            reasons, value = check_send(db_path, row, now, rules)
+            if not ready:
+                reasons.append("outgoing mail is not set up")
+
+            def go(r=row, v=value):
+                wallet.commit(db_path, r["supplier"], v, "po", r["ref_id"], rules["wallet_reserve"], WHO)
+                try:
+                    outbox.send(db_path, r["mail_id"], config.mail, WHO,
+                                **({"connect": connect} if connect else {}))
+                except Exception:
+                    db.write(db_path, "UPDATE commitments SET state = 'released', released_on = current_date "
+                                      "WHERE ref_kind = 'po' AND ref_id = ? AND supplier = ? AND state = 'open' "
+                                      "RETURNING 1", [r["ref_id"], r["supplier"]])
+                    raise
+            sent += _offer(db_path, "send_order", f"mail:{row['mail_id']}", row["supplier"], value, reasons,
+                           now, current, go)
+        fresh = outbox.draft_order(db_path, list_id, WHO)["drafts"]
+        if fresh and all(r["state"] == "sent" for r in fresh):
+            gate.mark_ordered(db_path, request["request_id"], WHO, reference=f"PO #{list_id}")
     return sent
 
 
@@ -186,17 +226,20 @@ def _approve_baskets(db_path, now, current, rules):
             "allow_no_price": rules["allow_no_price"]}
     terminus = charters.limits(db_path, "terminus")
     for request in gate.waiting(db_path):
-        if judge._cancel_reason(db_path, request, terminus, now):
+        own = _po_of(request) is not None
+        if not own and judge._cancel_reason(db_path, request, terminus, now):
             continue                                     # a repeat or a refused article is Terminus's to cancel
+        lim = (dict(mine, approve_max_total=rules["send_max_total"], approve_per_day=rules["send_per_day"])
+               if own else mine)                         # its own order: the order limits are the limits
         reasons = []
         if not rules["approve_baskets"]:
             reasons.append("approving baskets is switched off in its limits")
         if request.get("agent_verdict") is None:
             continue                                     # Terminus has not read it yet
-        reasons += judge._approve_blockers(db_path, request, dict(terminus, **mine), now)
+        reasons += judge._approve_blockers(db_path, request, dict(terminus, **lim), now)
         total = float(request.get("total") or 0)
-        if _spent_today(db_path, "approve", now) + total > rules["approve_per_day"]:
-            reasons.append(f"it would pass {rules['approve_per_day']:g} EUR approved today")
+        if _spent_today(db_path, "approve", now) + total > lim["approve_per_day"]:
+            reasons.append(f"it would pass {lim['approve_per_day']:g} EUR approved today")
         if total > wallet.available(db_path, rules["wallet_reserve"]) + 1e-9:
             reasons.append(f"the wallet has {wallet.available(db_path, rules['wallet_reserve']):.2f} EUR free")
         reasons += policies._window(_WINDOW, now, workdays.Calendar(db_path))
@@ -243,7 +286,7 @@ def place_basket(db_path, request, config, rules, connect=None):
 
 def _place_baskets(db_path, config, now, current, rules, connect):
     placed = 0
-    for request in [r for r in gate.history(db_path, 100) if r["state"] == "approved"]:
+    for request in [r for r in gate.history(db_path, 100) if r["state"] == "approved" and _po_of(r) is None]:
         subject = f"basket:{request['request_id']}"
         reasons = []
         if not rules["send_orders"]:
@@ -302,9 +345,61 @@ def run(db_path, config, now=None, connect=None):
     if current == "off":
         return {"skipped": "Plutus is off", "done": 0}
     rules = charters.limits(db_path, "plutus")
-    done = {"sent": _send_orders(db_path, config, now, current, rules, connect),
-            "approved": _approve_baskets(db_path, now, current, rules)}
+    # The blockchain process, for an order Plutus wrote as for any basket: it enters the gate, Terminus
+    # reads it for sense, Plutus approves what is inside its limits, the wallet covers it, it is sent.
+    done = {"opened": _open_requests(db_path, now, current, rules)}
+    if current == "live":
+        done["read"] = _terminus_reads(db_path, now, current)
+    done["approved"] = _approve_baskets(db_path, now, current, rules)
+    done["sent"] = _send_orders(db_path, config, now, current, rules, connect)
     done["placed"] = _place_baskets(db_path, config, now, current, rules, connect)
     done["paid"] = _pay_bills(db_path, now, current, rules)
     done["done"] = sum(done.values())
     return done
+
+
+# ---- what a check stopped ------------------------------------------------------
+
+def _pending(db_path, subject):
+    """Whether what a refused decision was about is still waiting for somebody."""
+    kind, _, ident = subject.partition(":")
+    if kind == "mail" and ident.isdigit():
+        return bool(db.read(db_path, "SELECT 1 FROM supplier_mail WHERE mail_id = ? AND state IN ('draft', 'failed')",
+                            [int(ident)]))
+    if kind == "basket" and ident.isdigit():
+        return bool(db.read(db_path, "SELECT 1 FROM gate_requests WHERE request_id = ? "
+                                     "AND state IN ('waiting', 'checked', 'approved')", [int(ident)]))
+    if kind == "bill" and ident.isdigit():
+        return bool(db.read(db_path, "SELECT 1 FROM bills b WHERE bill_id = ? AND state = 'to pay' AND NOT EXISTS "
+                                     "(SELECT 1 FROM payments p WHERE p.bill_id = b.bill_id "
+                                     "AND p.state IN ('instructed', 'executed'))", [int(ident)]))
+    if kind == "po":
+        return bool(db.read(db_path, "SELECT 1 FROM gate_requests WHERE channel = ? AND state IN "
+                                     "('waiting', 'checked', 'approved')", [subject]))
+    return False
+
+
+def blocked(db_path):
+    """Everything a check has stopped and nobody has settled: the latest refusal for each subject, as long
+    as it is still the latest word and the thing is still waiting."""
+    rows = db.read(db_path, """
+            SELECT l.policy_name, l.action, l.subject, l.supplier, l.amount, l.reasons, l.mode, l.happened_at
+            FROM policy_log l
+            WHERE l.decision = 'denied' AND l.policy_name IN ('PLUTUS', 'TERMINUS')
+              AND l.log_id = (SELECT max(m.log_id) FROM policy_log m WHERE m.policy_name = l.policy_name
+                              AND m.action = l.action AND m.subject = l.subject)
+            ORDER BY l.log_id DESC""")
+    out = []
+    for who, action, subject, supplier, amount, reasons, current, at in rows:
+        if _pending(db_path, subject):
+            out.append({"who": who, "action": action, "subject": subject, "supplier": supplier,
+                        "amount": amount, "reasons": reasons, "mode": current,
+                        "at": at.isoformat(timespec="minutes")})
+    # A request Terminus read as not coherent is stopped too, whatever the log says.
+    for request_id, shop, said in db.read(db_path, """
+            SELECT request_id, shop, agent_said FROM gate_requests
+            WHERE channel LIKE 'po:%' AND state IN ('waiting', 'checked') AND agent_verdict = 'unsure'"""):
+        out.append({"who": "TERMINUS", "action": "coherence", "subject": f"basket:{request_id}",
+                    "supplier": None, "amount": None, "reasons": said, "mode": "live",
+                    "at": datetime.now().isoformat(timespec="minutes"), "order": shop})
+    return out

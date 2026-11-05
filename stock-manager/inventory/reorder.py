@@ -44,7 +44,7 @@ def collect(db_path, today=None):
                 SELECT l.list_id, l.line_no, l.article, l.designation, l.reference,
                        l.quantity, h.site, h.work_item, ?, ?
                 FROM purchase_order_lines l JOIN purchase_orders h USING (list_id)
-                WHERE l.in_stock = FALSE AND NOT EXISTS (
+                WHERE l.in_stock = FALSE AND upper(coalesce(h.drafter, '')) <> 'PLUTUS' AND NOT EXISTS (
                     SELECT 1 FROM order_queue q
                     WHERE q.list_id = l.list_id AND q.line_no = l.line_no)
                 RETURNING queue_id""", [today, due]).fetchall()

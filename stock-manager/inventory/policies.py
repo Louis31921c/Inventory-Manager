@@ -383,6 +383,8 @@ def auto_decide(db_path, request_id=None, now=None, policies=None):
     for request in gate.waiting(db_path):
         if request_id is not None and request["request_id"] != request_id:
             continue
+        if str(request.get("channel") or "").startswith("po:"):
+            continue                       # Plutus's own order is decided by Plutus
         supplier = next((l.get("supplier") for l in request["lines"] if l.get("supplier")), None)
         who = _try(db_path, policies, "approve", f"basket:{request['request_id']}", supplier,
                    lambda p, r=request: check_basket(db_path, p, r, now), now,

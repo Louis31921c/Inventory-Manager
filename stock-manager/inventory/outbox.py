@@ -210,6 +210,13 @@ def draft_order(db_path, list_id, user=None):
     made = []
     for supplier, rows in groups.items():
         known = _existing(db_path, "order", "po", list_id, supplier)
+        if known is None:                        # one already sent for this order is the order: not a new draft
+            gone = db.read(db_path, """
+                    SELECT mail_id FROM supplier_mail WHERE direction = 'out' AND kind = 'order'
+                      AND ref_kind = 'po' AND ref_id = ? AND supplier IS NOT DISTINCT FROM ?
+                      AND state IN ('sent', 'confirmed', 'closed') ORDER BY mail_id DESC LIMIT 1""",
+                           [list_id, supplier])
+            known = gone[0][0] if gone else None
         if known:
             made.append(one(db_path, known))
             continue

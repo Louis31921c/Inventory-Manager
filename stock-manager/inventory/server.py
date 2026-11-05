@@ -1817,6 +1817,7 @@ def set_plutus_mode(request: Request, body: Mode):
 @app.post("/api/plutus/run")
 def run_plutus(request: Request):
     done = purchasing.run(config.db_path, config)
+    watch.scan(config.db_path)
     event(request, "plutus.run", str(done.get("done", 0)), done.get("skipped"))
     return {**done, **_wallet_overview()}
 

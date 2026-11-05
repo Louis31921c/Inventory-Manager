@@ -5256,65 +5256,115 @@ def _purchasing_world(db_path, funded=2000.0):
     list_id, mail = _policy_world(db_path)
     db.write(db_path, "UPDATE purchase_orders SET drafter = 'PLUTUS', created_at = now() WHERE list_id = ? RETURNING 1",
              [list_id])
+    db.write(db_path, "DELETE FROM purchase_order_lines WHERE list_id = ? AND article = 'ODDITY' RETURNING 1", [list_id])
     if funded:
         wallet.deposit(db_path, funded, "float", "ALEX")
     return list_id, mail
 
 
-def test_plutus_sends_its_orders_from_the_wallet_only_when_live_and_inside_its_limits(db_path):
-    from inventory import charters, outbox, purchasing, wallet
+def test_plutus_puts_its_orders_through_the_gate_and_sends_only_what_clears_every_step(db_path, monkeypatch):
+    from inventory import charters, coherence, gate, outbox, purchasing, wallet, watch
 
     _Link.sent = []
     config = make_config(db_path.parent, mail=_ready_mail())
-    list_id, mail = _purchasing_world(db_path)                          # 10 BOLT x 2.00 + 4 NUT x 1.00 = 24 EUR
+    list_id, mail = _purchasing_world(db_path)                  # BOLT and NUT for ACME, PIPE for TUBES SA (no address)
     tuesday = datetime(2026, 11, 3, 10, 0)
     link = lambda m, f: _Link()
+    monkeypatch.setattr(coherence, "findings", lambda *a, **k: [])
 
     assert purchasing.run(db_path, config, tuesday, link)["skipped"] == "Plutus is off"
     purchasing.set_mode(db_path, "dry_run", "ALEX", today=date(2026, 11, 3))
     purchasing.run(db_path, config, tuesday, link)
-    assert _Link.sent == [] and outbox.one(db_path, mail["mail_id"])["state"] == "draft"
-    log = db.read(db_path, "SELECT action, decision, acted, mode, amount FROM policy_log "
-                           "WHERE policy_name = 'PLUTUS' AND supplier = 'ACME'")
-    assert log == [("send_order", "allowed", False, "dry_run", 24.0)]
-    tubes = db.read(db_path, "SELECT decision, reasons FROM policy_log WHERE policy_name = 'PLUTUS' "
-                             "AND supplier = 'TUBES SA'")
-    assert tubes[0][0] == "denied" and "no address" in tubes[0][1]      # the pipe lines have nobody to be sent to
+    assert _Link.sent == [] and gate.history(db_path, 10) == []        # dry run opens nothing
+    assert db.read(db_path, "SELECT action, decision, acted, mode FROM policy_log WHERE policy_name = 'PLUTUS'") == [
+        ("open_gate", "allowed", False, "dry_run")]
     with pytest.raises(ValueError):
         purchasing.set_mode(db_path, "live", "ALEX", today=date(2026, 11, 4))
     purchasing.set_mode(db_path, "live", "ALEX", today=date(2026, 11, 7))
 
-    # Refused: outside hours, over the wallet, over its own limit; the draft stays for a person.
-    purchasing.run(db_path, config, datetime(2026, 11, 3, 21, 0), link)
+    # Out of hours: the order enters the gate and Terminus reads it, but nobody approves it at night.
+    done = purchasing.run(db_path, config, datetime(2026, 11, 3, 21, 0), link)
+    assert done["opened"] == 1 and done["read"] == 1 and done["approved"] == 0 and done["sent"] == 0
+    request = gate.history(db_path, 10)[0]
+    assert request["channel"] == f"po:{list_id}" and request["agent_verdict"] == "same" and request["state"] == "checked"
+    assert "outside 8h to 17h" in " ".join(r["reasons"] or "" for r in policies_log(db_path))
+    # With the wallet empty it is held for a person too.
     wallet.withdraw(db_path, 1990, "emptied", "ALEX")
     purchasing.run(db_path, config, datetime(2026, 11, 3, 11, 0), link)
-    reasons = " | ".join(r["reasons"] or "" for r in policies_log(db_path) if r["supplier"] == "ACME")
-    assert "outside 8h to 17h" in reasons and "the wallet has 10.00 EUR free" in reasons
-    assert _Link.sent == [] and outbox.one(db_path, mail["mail_id"])["state"] == "draft"
+    assert gate.one(db_path, request["request_id"])["state"] == "checked"
+    assert "the wallet has 10.00 EUR free" in " ".join(r["reasons"] or "" for r in policies_log(db_path))
     wallet.deposit(db_path, 1990, "refilled", "ALEX")
-    charters.set_limit(db_path, "plutus", "send_max_total", 10)
-    purchasing.run(db_path, config, datetime(2026, 11, 3, 12, 0), link)
-    assert any("over the 10 a person must send" in (r["reasons"] or "") for r in policies_log(db_path))
-    charters.reset(db_path, "plutus", "send_max_total")
 
-    # Inside everything: it sends, commits the money, and does not do it twice.
-    done = purchasing.run(db_path, config, datetime(2026, 11, 3, 13, 0), link)
-    assert done["sent"] == 1 and len(_Link.sent) == 1
-    assert outbox.one(db_path, mail["mail_id"])["state"] == "sent"
-    assert wallet.committed(db_path) == 24.0 and wallet.available(db_path) == 1976.0
-    assert purchasing.run(db_path, config, datetime(2026, 11, 3, 14, 0), link)["sent"] == 0
-    assert len(_Link.sent) == 1
+    # In hours, funded: approved by PLUTUS, ACME's mail goes, the money is committed. TUBES has no address,
+    # so the order is not complete and stays approved, with the reason on the landing page's list.
+    done = purchasing.run(db_path, config, datetime(2026, 11, 3, 12, 0), link)
+    assert done["approved"] == 1 and done["sent"] == 1 and len(_Link.sent) == 1
+    now = gate.one(db_path, request["request_id"])
+    assert now["state"] == "approved" and now["decided_by"] == "PLUTUS"
+    assert outbox.one(db_path, mail["mail_id"])["state"] == "sent" and wallet.committed(db_path) == 24.0
+    stops = [(b["action"], b["supplier"]) for b in purchasing.blocked(db_path)]
+    assert ("send_order", "TUBES SA") in stops
+    watch.scan(db_path, tuesday.date())
+    assert any(n["kind"] == "blocked" and "could not send an order" in n["title"] and "no address" in n["detail"]
+               for n in watch.open_notices(db_path))
+    assert purchasing.run(db_path, config, datetime(2026, 11, 3, 13, 0), link)["sent"] == 0      # never twice
 
-    # A person's order is a person's to send.
+    # A person gives the draft an address: the next run sends it, and the order is complete.
+    tubes = next(r for r in outbox.overview(db_path, config.mail)["drafts"] if r["supplier"] == "TUBES SA")
+    outbox.update_draft(db_path, tubes["mail_id"], to="tubes@tubes.example")
+    purchasing.run(db_path, config, datetime(2026, 11, 3, 14, 0), link)
+    assert gate.one(db_path, request["request_id"])["state"] == "approved"                    # a new supplier: still held
+    assert "delivered fewer than 1" in " ".join(b["reasons"] or "" for b in purchasing.blocked(db_path))
+    charters.set_limit(db_path, "plutus", "send_min_deliveries", 0)                           # a person trusts it
+    purchasing.run(db_path, config, datetime(2026, 11, 3, 14, 30), link)
+    assert gate.one(db_path, request["request_id"])["state"] == "ordered" and len(_Link.sent) == 2
+    watch.scan(db_path, tuesday.date())
+    assert not any(n["kind"] == "blocked" for n in watch.open_notices(db_path))              # settled: gone from the list
+
+    # A person's order is a person's to send, and with the mode off nothing happens.
     other = db.save_purchase_order(db_path, {"list_date": date(2026, 11, 3), "site": "N", "drafter": "ALEX",
                                              "lines": [{"article": "BOLT", "quantity": 1.0, "in_stock": False}]},
                                    None, None, "ALEX")
     outbox.draft_order(db_path, other)
     purchasing.run(db_path, config, datetime(2026, 11, 3, 15, 0), link)
-    assert len(_Link.sent) == 1
-    # And with the mode off nothing else happens.
+    assert len(_Link.sent) == 2
     purchasing.set_mode(db_path, "off", "ALEX")
     assert purchasing.run(db_path, config, datetime(2026, 11, 3, 16, 0), link)["skipped"]
+
+
+def test_terminus_reads_an_order_for_sense_before_plutus_may_act_on_it(db_path, monkeypatch):
+    from inventory import coherence, replenish, verify
+
+    counts = _ddmrp_shelf(db_path)
+    for article, quantity in counts.items():
+        db.save_stock_count(db_path, article, quantity, "T")
+    from inventory import prices
+
+    for article in ("BOLT", "NUT", "WASHER"):
+        prices.remember(db_path, article, 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    monday = date(2026, 11, 9)
+    placed = replenish.place(db_path, today=monday, kind="cycle")
+    list_id = placed["list_id"]
+    assert coherence.findings(db_path, list_id, monday) == []              # written from the books, so it agrees with them
+
+    got = asyncio.run(verify.check_order(db_path, list_id, monday))
+    assert got["verdict"] == "same" and got["findings"] == []             # the names are exact: no model needed
+
+    # The shelf moves after the order was written: BOLT is now plentiful, so the order no longer makes sense.
+    db.save_stock_count(db_path, "BOLT", 100000, "T")
+    late = coherence.findings(db_path, list_id, monday)
+    assert any("BOLT is no longer asked for" in f for f in late)
+    got = asyncio.run(verify.check_order(db_path, list_id, monday))
+    assert got["verdict"] == "unsure" and "Not coherent" in got["note"] and got["findings"] == late
+
+    # A line twice, a quantity that is not the buffers', a supplier nobody knows.
+    db.save_stock_count(db_path, "BOLT", 5, "T")
+    line = db.read(db_path, "SELECT article, quantity FROM purchase_order_lines WHERE list_id = ? LIMIT 1", [list_id])[0]
+    db.write(db_path, "INSERT INTO purchase_order_lines (list_id, line_no, article, quantity, in_stock) "
+                      "VALUES (?, 99, ?, ?, FALSE) RETURNING 1", [list_id, line[0], line[1]])
+    db.write(db_path, "UPDATE purchase_order_lines SET quantity = quantity * 3 WHERE list_id = ? AND line_no = 1", [list_id])
+    odd = coherence.findings(db_path, list_id, monday)
+    assert any("on the order twice" in f for f in odd) and any("the buffers now ask for" in f for f in odd)
 
 
 def policies_log(db_path):
