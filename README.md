@@ -551,6 +551,9 @@ database of its own to run a simulation on; the year itself is written in
   on; a new policy is inactive and in dry run and needs `MIN_DRY_DAYS` (3) before it can go live;
   `HARD_CEILING` (5000 EUR) cannot be raised. Run hourly by the server and, for baskets, right after
   Terminus has checked one. Every decision is a row in `policy_log`; actions are audited as POLICY.
+- `bot-rules/` (next to this file): `plutus.md` and `terminus.md`, the charters as plain text, read when
+  `BOT_RULES_DIR` points at the folder (the built-in text is used otherwise, and for anything a file
+  leaves out). Edited files apply on the next request.
 - `charters.py`: freedom, prohibitions and numeric limits for Plutus and Terminus (`bot_limits`).
   Added to the model's prompt and enforced again on its answer: `enforce_plutus` cuts or corrects
   draft lines, and `verify.check` turns a doubtful "same" into "unsure".

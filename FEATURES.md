@@ -142,7 +142,7 @@ Vans with volume and payload (default two Renault Partner at 3.3 m3 and 650 kg, 
 | Plutus (buyer) | choose quantities inside a band around the planner's suggestion, leave out what is comfortable, group by supplier, round to boxes | order, sign, send or approve; invent an article, supplier, price or quantity; pass the limits | 20 lines; 0.5 to 2 times the suggested quantity; only planner articles or named ones; skip articles whose baskets were refused twice; 5,000 EUR a draft; a reason on every line; whole packs |
 | Terminus (name reader) | say same, new or unsure with the known name and a reason | approve, cancel, price or recommend buying; call a different size or grade the same; answer outside the schema | a "same" under 0.8 confidence becomes unsure; "same" must name a known article exactly; baskets over 60 lines come back unsure |
 
-Lines Plutus wrote that break a limit are cut or corrected, and the draft says which and why.
+Lines Plutus wrote that break a limit are cut or corrected, and the draft says which and why. The charters live as plain files in the `bot-rules` folder next to the program (`plutus.md`, `terminus.md`): edit the text or the default limits there, and the next request uses them. A limit set on the screen overrides the file until it is reset.
 
 ## 12. Security and traceability
 

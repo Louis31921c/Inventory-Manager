@@ -4964,3 +4964,59 @@ def test_a_policy_approves_a_held_basket_only_for_its_reasons_and_when_terminus_
     assert policies.auto_decide(db_path, None, datetime(2026, 11, 3, 22, 0)) == []     # not at night
     policies.set_enabled(db_path, False)
     assert policies.auto_decide(db_path, None, now) == []
+
+
+def test_the_bot_rules_can_be_read_from_a_folder_and_a_half_edited_file_cannot_switch_a_rule_off(
+        db_path, tmp_path, monkeypatch):
+    import os
+
+    from inventory import charters
+
+    monkeypatch.delenv("BOT_RULES_DIR", raising=False)
+    assert charters.source("plutus") == "built in" and charters.limits(db_path, "plutus")["max_lines"] == 20
+
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    (rules / "plutus.md").write_text("""# Plutus
+## Free to
+- Order only what the numbers show.
+## Never
+- Never touch the lines of another order.
+## Limits
+- max_lines = 7 : seven at most
+- max_qty_multiple = 3 : three times
+- made_up_limit = 9 : ignored
+""", encoding="utf-8")
+    monkeypatch.setenv("BOT_RULES_DIR", str(rules))
+    assert charters.source("plutus") == str(rules / "plutus.md")
+    now = charters.limits(db_path, "plutus")
+    assert now["max_lines"] == 7 and now["max_qty_multiple"] == 3.0 and isinstance(now["max_qty_multiple"], float)
+    assert now["max_order_value"] == 5000.0                       # left out of the file: the built-in value
+    assert "made_up_limit" not in now
+    text = charters.prompt_block(db_path, "plutus")
+    assert "Order only what the numbers show." in text and "Never touch the lines of another order." in text
+    assert "max_lines = 7: seven at most" in text
+
+    # A limit set on the screen wins over the file until it is reset, which goes back to the file.
+    charters.set_limit(db_path, "plutus", "max_lines", 4)
+    assert charters.limits(db_path, "plutus")["max_lines"] == 4
+    shown = {row["key"]: row for row in charters.overview(db_path)["plutus"]["limits"]}
+    assert shown["max_lines"]["default"] == 7 and shown["max_lines"]["changed"] is True
+    charters.reset(db_path, "plutus", "max_lines")
+    assert charters.limits(db_path, "plutus")["max_lines"] == 7
+
+    # A file that is empty of rules leaves the built-in text in place; a change is picked up at once.
+    (rules / "plutus.md").write_text("nothing useful here", encoding="utf-8")
+    os.utime(rules / "plutus.md", (1_900_000_000, 1_900_000_000))
+    assert charters.limits(db_path, "plutus")["max_lines"] == 20
+    assert "Never order, sign" in charters.prompt_block(db_path, "plutus")
+    assert charters.source("terminus") == "built in"             # no terminus.md in that folder
+
+    # The files that ship are the built-in charters, word for word.
+    here = pathlib.Path(__file__).resolve().parents[2] / "bot-rules"
+    if here.is_dir():
+        monkeypatch.setenv("BOT_RULES_DIR", str(here))
+        for bot in charters.BUILTIN:
+            free, never, numbers = charters.rules(bot)
+            assert free == charters.BUILTIN_FREEDOM[bot] and never == charters.BUILTIN_NEVER[bot]
+            assert {k: v[0] for k, v in numbers.items()} == {k: v[0] for k, v in charters.BUILTIN[bot].items()}

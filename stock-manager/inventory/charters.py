@@ -13,9 +13,16 @@ what it wrote is cut back to the limits before anybody sees it.
              approves, never prices, and a doubt is an "unsure", which keeps the gate shut.
 """
 
+import os
+import re
+from pathlib import Path
+
 from . import db, prices, units
 from .models import normalize_name
 
+# The built-in charters. They are what the bots follow when no rules folder is set, and what a
+# file falls back to for anything it leaves out. With BOT_RULES_DIR set, the folder's plutus.md and
+# terminus.md are read instead, so the rules can be edited as plain text.
 # (default, what it means). Stored as text; the second is the sentence the screen shows.
 PLUTUS = {
     "max_lines": (20, "the most lines on one order"),
@@ -32,9 +39,9 @@ TERMINUS = {
     "same_needs_known_match": (1, "'same' must name a known article exactly, or it becomes 'unsure' (1 yes, 0 no)"),
     "max_lines": (60, "the most lines it will read in one basket; a longer basket comes back 'unsure'"),
 }
-DEFAULTS = {"plutus": PLUTUS, "terminus": TERMINUS}
+BUILTIN = {"plutus": PLUTUS, "terminus": TERMINUS}
 
-FREEDOM = {
+BUILTIN_FREEDOM = {
     "plutus": [
         "Choose each quantity inside the band around the planner's suggestion.",
         "Leave out any article that is comfortable, and say which and why in the note.",
@@ -46,7 +53,7 @@ FREEDOM = {
         "Say 'unsure' whenever the line is too vague or two known names fit equally well.",
     ],
 }
-NEVER = {
+BUILTIN_NEVER = {
     "plutus": [
         "Never order, sign, send or approve anything: you write a draft for a person.",
         "Never invent an article, a supplier, a price or a quantity the numbers do not support.",
@@ -61,9 +68,83 @@ NEVER = {
 }
 
 
+# ---- the rules folder -------------------------------------------------------
+
+TITLES = {"plutus": "Plutus, the buyer", "terminus": "Terminus, the name reader"}
+_LIMIT = re.compile(r"^-\s*([a-z_]+)\s*=\s*([-0-9.]+)\s*(?::\s*(.*))?$")
+_cache = {}
+
+
+def folder():
+    """The folder holding plutus.md and terminus.md, or None when none is set."""
+    named = os.environ.get("BOT_RULES_DIR", "").strip()
+    return Path(named).expanduser() if named else None
+
+
+def _parse(text):
+    """(freedom lines, never lines, {limit: (value, meaning)}) from a rules file."""
+    section, free, never, numbers = None, [], [], {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("## "):
+            section = line[3:].strip().lower()
+            continue
+        if not line.startswith("-") or section is None:
+            continue
+        if section.startswith("free"):
+            free.append(line[1:].strip())
+        elif section.startswith("never"):
+            never.append(line[1:].strip())
+        elif section.startswith("limit"):
+            found = _LIMIT.match(line)
+            if found:
+                number = float(found.group(2))
+                numbers[found.group(1)] = (int(number) if number.is_integer() and "." not in found.group(2)
+                                           else number, (found.group(3) or "").strip())
+    return free, never, numbers
+
+
+def rules(bot):
+    """(freedom, never, limit defaults) for a bot: the file where there is one, the built-in
+    text for anything the file leaves out."""
+    free, never, numbers = list(BUILTIN_FREEDOM[bot]), list(BUILTIN_NEVER[bot]), dict(BUILTIN[bot])
+    where = folder()
+    path = where / f"{bot}.md" if where else None
+    if path is not None and path.is_file():
+        stamp = path.stat().st_mtime
+        if _cache.get(bot, (None,))[0] != stamp:
+            _cache[bot] = (stamp, _parse(path.read_text(encoding="utf-8")))
+        got_free, got_never, got_numbers = _cache[bot][1]
+        free, never = got_free or free, got_never or never
+        for key, (value, what) in got_numbers.items():
+            if key in numbers:                 # a limit the code does not know does nothing
+                kind = type(numbers[key][0])
+                numbers[key] = (kind(value), what or numbers[key][1])
+    return free, never, numbers
+
+
+def source(bot):
+    where = folder()
+    path = where / f"{bot}.md" if where else None
+    return str(path) if path is not None and path.is_file() else "built in"
+
+
+def render(bot):
+    """A rules file for a bot, as the built-in charter reads."""
+    out = [f"# {TITLES[bot]}", "",
+           "Edit this file to change what the bot is told and its default limits.",
+           "A limit set on the screen overrides the number here until it is reset.", "",
+           "## Free to", ""]
+    out += [f"- {text}" for text in BUILTIN_FREEDOM[bot]]
+    out += ["", "## Never", ""] + [f"- {text}" for text in BUILTIN_NEVER[bot]]
+    out += ["", "## Limits", "", "One per line: `- name = number : what it means`.", ""]
+    out += [f"- {key} = {value:g} : {what}" for key, (value, what) in BUILTIN[bot].items()]
+    return "\n".join(out) + "\n"
+
+
 def limits(db_path, bot):
     """The bot's numbers: what a person has set, over the defaults."""
-    out = {key: value for key, (value, _what) in DEFAULTS[bot].items()}
+    out = {key: value for key, (value, _what) in rules(bot)[2].items()}
     for key, value in db.read(db_path, "SELECT key, value FROM bot_limits WHERE bot = ?", [bot]):
         if key in out:
             try:
@@ -74,7 +155,7 @@ def limits(db_path, bot):
 
 
 def set_limit(db_path, bot, key, value):
-    if bot not in DEFAULTS or key not in DEFAULTS[bot]:
+    if bot not in BUILTIN or key not in BUILTIN[bot]:
         raise ValueError(f"{bot} has no limit called {key}.")
     try:
         number = float(value)
@@ -95,9 +176,10 @@ def reset(db_path, bot, key):
 
 def overview(db_path):
     out = {}
-    for bot, table in DEFAULTS.items():
+    for bot in BUILTIN:
+        free, never, table = rules(bot)
         now = limits(db_path, bot)
-        out[bot] = {"freedom": FREEDOM[bot], "never": NEVER[bot],
+        out[bot] = {"freedom": free, "never": never, "source": source(bot),
                     "limits": [{"key": key, "value": now[key], "default": default, "what": what,
                                 "changed": now[key] != default}
                                for key, (default, what) in table.items()]}
@@ -107,11 +189,12 @@ def overview(db_path):
 def prompt_block(db_path, bot):
     """The charter as the model reads it, numbers included."""
     now = limits(db_path, bot)
+    free, never, table = rules(bot)
     lines = [f"YOUR CHARTER ({bot.upper()})", "", "You are free to:"]
-    lines += [f"- {text}" for text in FREEDOM[bot]]
-    lines += ["", "You must never:"] + [f"- {text}" for text in NEVER[bot]]
+    lines += [f"- {text}" for text in free]
+    lines += ["", "You must never:"] + [f"- {text}" for text in never]
     lines += ["", "Limits, set by a person, applied again to your answer in code:"]
-    lines += [f"- {key} = {now[key]:g}: {what}" for key, (_d, what) in DEFAULTS[bot].items()]
+    lines += [f"- {key} = {now[key]:g}: {what}" for key, (_d, what) in table.items()]
     return "\n".join(lines)
 
 
