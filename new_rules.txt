@@ -240,3 +240,11 @@ functionnalities to developp :
 - DONE (asked in chat): Plutus orders, "Bill to" section: company name, contact name, address.
         Remembered for the next order, saved on the purchase order, printed on the supplier mail
         and the order PDF
+
+- DONE (asked in chat): policies (inventory/policies.py) and charters for the two bots
+        (inventory/charters.py). Policies: send an order, send a reminder, approve a held basket,
+        inside limits; kill switch off by default; dry run for 3 days before live; 5000 EUR hard
+        ceiling; working days and hours only; price band; minimum history; budgets; Terminus must
+        have read the names as the same; every decision logged. Charters: what each bot is free to do,
+        must never do, and numeric limits a person sets, added to the prompt and enforced again in
+        code on the answer. Settings, Policies and Rules for the two bots

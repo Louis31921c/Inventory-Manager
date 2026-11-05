@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, archive, audit, autonomy, feedback, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
+from . import (account, agents, alerts, archive, audit, autonomy, charters, feedback, policies, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
@@ -186,6 +186,9 @@ async def _watch_loop():
     while True:
         try:
             await asyncio.to_thread(feedback.learn, config.db_path)
+            did = await asyncio.to_thread(policies.run, config.db_path, config)
+            if did.get("acted"):
+                log.info("policies acted %d time(s)", did["acted"])
             done = await asyncio.to_thread(watch.run, config.db_path, config)
             if done["new"] or done["pushed"]:
                 log.info("notices: %d new, %d open, pushed by %s", done["new"], done["open"],
@@ -854,6 +857,7 @@ async def check_gate(request: Request, request_id: int):
     gate.record_check(config.db_path, request_id, answer["verdict"], answer["note"],
                       answer["lines"])
     event(request, "gate.check", f"request #{request_id}", answer["verdict"])
+    await asyncio.to_thread(policies.auto_decide, config.db_path, request_id)
     return {"request": gate.one(config.db_path, request_id), "agent": answer}
 
 
@@ -1599,6 +1603,102 @@ def outbox_close(request: Request, mail_id: int):
         raise HTTPException(404, "That order is not waiting.")
     event(request, "supplier.close", f"mail #{mail_id}")
     return {"outbox": outbox.overview(config.db_path, config.mail)}
+
+
+# ---- policies and the bots' charters ---------------------------------------------
+
+class PolicyBody(BaseModel):
+    name: str = ""
+    action: str = ""
+    supplier: str | None = None
+    max_total: float | None = None
+    per_day: float | None = None
+    per_month: float | None = None
+    price_band: float = 0.10
+    min_deliveries: int = 3
+    allowed_reasons: str = ""
+    terminus_same: bool = True
+    hours_from: int = 8
+    hours_to: int = 17
+    per_supplier_day: int = 2
+    max_chases: int = 2
+
+
+class PolicyChange(BaseModel):
+    active: bool | None = None
+    mode: str | None = None
+    max_total: float | None = None
+    price_band: float | None = None
+    per_day: float | None = None
+    per_month: float | None = None
+
+
+class Switch(BaseModel):
+    on: bool
+
+
+class LimitValue(BaseModel):
+    value: float
+
+
+@app.get("/api/policies")
+def read_policies():
+    return policies.overview(config.db_path)
+
+
+@app.post("/api/policies")
+def create_policy(request: Request, body: PolicyBody):
+    made = _do(request, "policy.create", body.name, lambda: policies.create(
+        config.db_path, body.model_dump(), who(request)[0]))
+    return {"policy": made, **policies.overview(config.db_path)}
+
+
+@app.patch("/api/policies/{policy_id}")
+def change_policy(request: Request, policy_id: int, body: PolicyChange):
+    _do(request, "policy.update", f"policy #{policy_id}", lambda: policies.update(
+        config.db_path, policy_id, body.model_dump(exclude_none=True), who(request)[0]))
+    return policies.overview(config.db_path)
+
+
+@app.delete("/api/policies/{policy_id}")
+def delete_policy(request: Request, policy_id: int):
+    if not policies.remove(config.db_path, policy_id):
+        raise HTTPException(404, "No such policy.")
+    event(request, "policy.delete", f"policy #{policy_id}")
+    return policies.overview(config.db_path)
+
+
+@app.post("/api/policies/switch")
+def switch_policies(request: Request, body: Switch):
+    policies.set_enabled(config.db_path, body.on, who(request)[0])
+    return policies.overview(config.db_path)
+
+
+@app.post("/api/policies/run")
+def run_policies(request: Request):
+    """Offer what is waiting to the policies now, rather than at the next hour."""
+    done = policies.run(config.db_path, config)
+    event(request, "policy.run", str(done.get("acted", 0)), done.get("skipped"))
+    return {**done, **policies.overview(config.db_path)}
+
+
+@app.get("/api/charters")
+def read_charters():
+    return charters.overview(config.db_path)
+
+
+@app.put("/api/charters/{bot}/{key}")
+def put_limit(request: Request, bot: str, key: str, body: LimitValue):
+    _do(request, "charter.set", f"{bot} {key}", lambda: charters.set_limit(
+        config.db_path, bot, key, body.value))
+    return charters.overview(config.db_path)
+
+
+@app.delete("/api/charters/{bot}/{key}")
+def reset_limit(request: Request, bot: str, key: str):
+    charters.reset(config.db_path, bot, key)
+    event(request, "charter.reset", f"{bot} {key}")
+    return charters.overview(config.db_path)
 
 
 @app.get("/api/tuning")
@@ -2439,7 +2539,8 @@ async def draft_order(request: Request, body: OrderDraft):
     }
 
     try:
-        answer = await agents.draft_order(planner, model=config.model or None)
+        answer = await agents.draft_order(planner, model=config.model or None,
+                                          charter=charters.prompt_block(config.db_path, "plutus"))
     except llm.ExtractionError as e:
         report(request, "draft", str(e), "Predictions window")
         raise HTTPException(502, str(e)) from e
@@ -2458,12 +2559,15 @@ async def draft_order(request: Request, body: OrderDraft):
                       "reference": line.get("reference"),
                       "reason": str(line.get("reason") or ""),
                       "learned": learned})
+    # The charter's limits are applied again here, to whatever the model wrote.
+    lines, cuts, changed = charters.enforce_plutus(config.db_path, lines, rows, asked_for, refused)
     # No line is an answer, not a failure: the agent is told to leave out what is
     # comfortable, so a shelf in good order is meant to come back empty.
     event(request, "order.draft", f"{len(lines)} line(s)", "by Plutus")
     return {"lines": lines, "note": str(answer.get("note") or ""),
             "model": config.model or "claude", "agent": agents.PLUTUS,
             "drafted_from": len(planner["articles"]),
+            "cuts": cuts, "adjusted": changed,
             "asked_for": asked_for,
             "read": [row["article"] for row in rows[:60]],
             "site": body.site, "work_item": body.work_item}

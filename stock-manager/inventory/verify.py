@@ -13,7 +13,7 @@ it never falls open.
 
 import re
 
-from . import agents, llm, vocabulary
+from . import agents, charters, llm, vocabulary
 from .models import normalize_name
 
 # How many known names a line is held up against. More than this and the prompt is noise.
@@ -115,8 +115,14 @@ async def check(db_path, lines, model=None):
     or slow comes back as "unsure", which leaves the gate shut.
     """
     known = vocabulary.known_articles(db_path)
+    rules = charters.limits(db_path, "terminus")
+    if len(lines) > rules["max_lines"]:
+        return {"verdict": UNSURE, "lines": [],
+                "note": f"The basket has {len(lines)} lines, over Terminus's limit of "
+                        f"{rules['max_lines']:g}: a person reads it."}
     try:
-        answer = await agents.ask(_question(lines, known), SCHEMA, model=model)
+        answer = await agents.ask(_question(lines, known) + "\n\n"
+                                  + charters.prompt_block(db_path, "terminus"), SCHEMA, model=model)
     except llm.ExtractionError as e:
         return {"verdict": UNSURE, "note": f"Terminus could not answer: {e}",
                 "lines": []}
@@ -124,6 +130,18 @@ async def check(db_path, lines, model=None):
         return {"verdict": UNSURE, "note": f"Terminus failed: {e}", "lines": []}
 
     answers = answer.get("lines") or []
+    held = {normalize_name(name) for name in known}
+    for line in answers:
+        if line.get("verdict") != SAME:
+            continue
+        weak = float(line.get("confidence") or 0) < rules["min_confidence"]
+        unknown = (rules["same_needs_known_match"]
+                   and normalize_name(line.get("match")) not in held)
+        if weak or unknown:           # the charter's limit, whatever the model said
+            line["verdict"] = UNSURE
+            line["reason"] = (f"{line.get('reason') or ''} [held back by the charter: "
+                              + ("confidence under " + f"{rules['min_confidence']:g}" if weak
+                                 else "the match is not a known article") + "]").strip()
     return {"verdict": overall(answers), "note": answer.get("note") or "", "lines": answers}
 
 

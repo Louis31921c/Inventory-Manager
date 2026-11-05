@@ -125,7 +125,26 @@ Vans with volume and payload (default two Renault Partner at 3.3 m3 and 650 kg, 
 - **Deliveries to sites:** a stored order becomes a dispatch (van, day, lines), then loaded, then delivered with the name of who signed and what really arrived per line. A shortfall marks it part delivered. PDFs: a delivery note with a box to sign, 100 x 60 mm labels (site, work item, article, quantity), and the order itself, attached automatically to the supplier mail.
 - **Retention:** a stored photo is kept as taken for 42 days, then packed into a small array in the database and the file deleted. The array is the page levelled for uneven light, flattened to one bit a pixel, packed eight to a byte and compressed: about 30 KB for a 1.6 MB photo, print still readable, colour gone. Kept for 10 years (`DOCUMENT_RETENTION_YEARS`). PDFs are kept as they are. `stock archive` packs everything now.
 
-## 11. Security and traceability
+## 11. Policies and the rules for the two bots
+
+**Policies** let routine work go through without a person, inside limits a person sets. Three actions: send a drafted order, send an order reminder, approve a held basket. Settings, Policies.
+
+- **Kill switch:** everything is off until it is switched on, and switching it off stops all policies at once.
+- **Dry run first:** a new policy is inactive and in dry run, which writes down what it would have done and does nothing. It can go live only after 3 days of that. The screen shows what each policy allowed and refused over the last 7 days.
+- **Limits per policy:** supplier (or any), maximum euros per action, euros per day and per month, price band (default 10% off the agreed or usual price), minimum deliveries from the supplier (default 3), hours (default 8h to 17h), mails to one supplier per day (default 2), reminders per order (default 2). For baskets, the gate reasons it may cover (over-ceiling, dear-line, first-article, new-supplier, no-price).
+- **Absolute limits no policy can raise:** 5,000 EUR in one action; nothing outside working days and the policy's hours; an order is never sent without an address, with a price that cannot be checked, or from a supplier with too little history; a basket is never approved unless Terminus read the names as the same, and only for the reasons the policy lists; an order for a price that moved more than the band is not sent.
+- **Everything is logged:** each decision, allowed or refused, live or dry, with its reasons, in a log on the screen; actions are signed POLICY in the audit with the policy's name.
+
+**Rules for the two bots** (Settings, Rules for the two bots). Each bot has a charter: what it is free to do, what it must never do, and numbers a person sets. The charter is added to the model's instructions, and the limits are applied again in code to whatever the model answers, so a model that ignores its instructions changes nothing.
+
+| Bot | Free to | Never | Limits (defaults) |
+|---|---|---|---|
+| Plutus (buyer) | choose quantities inside a band around the planner's suggestion, leave out what is comfortable, group by supplier, round to boxes | order, sign, send or approve; invent an article, supplier, price or quantity; pass the limits | 20 lines; 0.5 to 2 times the suggested quantity; only planner articles or named ones; skip articles whose baskets were refused twice; 5,000 EUR a draft; a reason on every line; whole packs |
+| Terminus (name reader) | say same, new or unsure with the known name and a reason | approve, cancel, price or recommend buying; call a different size or grade the same; answer outside the schema | a "same" under 0.8 confidence becomes unsure; "same" must name a known article exactly; baskets over 60 lines come back unsure |
+
+Lines Plutus wrote that break a limit are cut or corrected, and the draft says which and why.
+
+## 12. Security and traceability
 
 | Guard | Detail |
 |---|---|
@@ -137,13 +156,13 @@ Vans with volume and payload (default two Renault Partner at 3.3 m3 and 650 kg, 
 | Backups | `stock backup`, encrypted with AES-256-CBC (PBKDF2, 200,000 rounds) when `BACKUP_PASSPHRASE` is set |
 | Audit | Every change recorded with user, time and detail. Failures are logged and can raise an SMS alert (Twilio or a webhook, 6 an hour at most) |
 
-## 12. Data model (main tables)
+## 13. Data model (main tables)
 
-Paperwork: `notes`, `inventory_lines`, `purchase_orders`, `purchase_order_lines`, `quotes`, `quote_lines`, `bills`, `intake`. Catalogue: `catalog`, `article_names`, `article_aliases`, `article_prices`, `contacts`. Stock: `stock_counts`, `stock_moves`, `reservations`, `article_units`. Buying: `baskets`, `gate_requests`, `gate_log`, `order_queue`, `supplier_mail`, `quote_offers`, `agreements`, `disputes`. Logistics: `places`, `vehicles`, `dispatches`, `dispatch_lines`, `calendar_days`, `supplier_terms`, `fx_rates`. Control: `notices`, `photo_archive`. System: `audit`, `errors`, `readings`, `users`, `schema_migrations`.
+Paperwork: `notes`, `inventory_lines`, `purchase_orders`, `purchase_order_lines`, `quotes`, `quote_lines`, `bills`, `intake`. Catalogue: `catalog`, `article_names`, `article_aliases`, `article_prices`, `contacts`. Stock: `stock_counts`, `stock_moves`, `reservations`, `article_units`. Buying: `baskets`, `gate_requests`, `gate_log`, `order_queue`, `supplier_mail`, `quote_offers`, `agreements`, `disputes`. Logistics: `places`, `vehicles`, `dispatches`, `dispatch_lines`, `calendar_days`, `supplier_terms`, `fx_rates`. Control: `notices`, `photo_archive`, `policies`, `policy_log`, `policy_settings`, `bot_limits`, `tuning`, `feedback`. System: `audit`, `errors`, `readings`, `users`, `schema_migrations`.
 
 Exports: inventory, purchase orders, bills and quotes as CSV, XLSX or Parquet (`stock export`), and any table through the SQL screen.
 
-## 13. What leaves the machine
+## 14. What leaves the machine
 
 | To | When |
 |---|---|
@@ -152,10 +171,10 @@ Exports: inventory, purchase orders, bills and quotes as CSV, XLSX or Parquet (`
 | Slack, Discord | Only if their tokens are set |
 | OpenStreetMap services | Only when a route is asked for |
 
-## 14. Command line
+## 15. Command line
 
 `stock run | read | search | ask | sql | export | backup | restore | vocab | audit | errors | sync | password | where | shrink | archive | sample`. `stock sample` adds made-up quotes, part deliveries, bills and baskets to an existing database; a new database fills itself with about six months of made-up paperwork in around 20 seconds (`SAMPLE_DATA=0` to start empty).
 
-## 15. Not built
+## 16. Not built
 
-Carrier booking and tracking, export to accounting software, a payment or wallet step, and placing the order with the supplier (steps 6 and 7 of the round), site requisitions, and rules that let routine buys pass the gate by themselves. Microsoft mailboxes cannot send. Proton mail needs a paid plan for Bridge.
+Carrier booking and tracking, export to accounting software, a payment or wallet step, and placing the order with the supplier (steps 6 and 7 of the round), and site requisitions. Microsoft mailboxes cannot send. Proton mail needs a paid plan for Bridge.

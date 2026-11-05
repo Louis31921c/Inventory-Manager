@@ -683,6 +683,59 @@ MIGRATIONS = [
         ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS bill_address VARCHAR;
         """,
     ),
+    (
+        27,
+        "policies that let routine work go through alone, what they did, and the bots' limits",
+        """
+        CREATE SEQUENCE IF NOT EXISTS policy_seq START 1;
+        CREATE TABLE IF NOT EXISTS policies (
+            policy_id        INTEGER PRIMARY KEY DEFAULT nextval('policy_seq'),
+            name             VARCHAR NOT NULL,
+            action           VARCHAR NOT NULL,
+            active           BOOLEAN NOT NULL DEFAULT FALSE,
+            mode             VARCHAR NOT NULL DEFAULT 'dry_run',
+            supplier         VARCHAR NOT NULL DEFAULT '*',
+            max_total        DOUBLE NOT NULL,
+            per_day          DOUBLE,
+            per_month        DOUBLE,
+            price_band       DOUBLE NOT NULL DEFAULT 0.10,
+            min_deliveries   INTEGER NOT NULL DEFAULT 3,
+            allowed_reasons  VARCHAR NOT NULL DEFAULT '',
+            terminus_same    BOOLEAN NOT NULL DEFAULT TRUE,
+            hours_from       INTEGER NOT NULL DEFAULT 8,
+            hours_to         INTEGER NOT NULL DEFAULT 17,
+            per_supplier_day INTEGER NOT NULL DEFAULT 2,
+            max_chases       INTEGER NOT NULL DEFAULT 2,
+            created_by       VARCHAR,
+            created_at       TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+        CREATE TABLE IF NOT EXISTS policy_settings (
+            key   VARCHAR PRIMARY KEY,
+            value VARCHAR
+        );
+        CREATE SEQUENCE IF NOT EXISTS policy_log_seq START 1;
+        CREATE TABLE IF NOT EXISTS policy_log (
+            log_id      INTEGER PRIMARY KEY DEFAULT nextval('policy_log_seq'),
+            happened_at TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            policy_id   INTEGER,
+            policy_name VARCHAR,
+            action      VARCHAR NOT NULL,
+            subject     VARCHAR NOT NULL,
+            supplier    VARCHAR,
+            amount      DOUBLE,
+            decision    VARCHAR NOT NULL,
+            reasons     VARCHAR,
+            mode        VARCHAR,
+            acted       BOOLEAN NOT NULL DEFAULT FALSE
+        );
+        CREATE TABLE IF NOT EXISTS bot_limits (
+            bot   VARCHAR NOT NULL,
+            key   VARCHAR NOT NULL,
+            value VARCHAR NOT NULL,
+            PRIMARY KEY (bot, key)
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

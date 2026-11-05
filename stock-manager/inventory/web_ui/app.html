@@ -796,6 +796,56 @@
 </section>
 
 <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+  <div class="card" id="policies-card">
+    <h2>Policies</h2>
+    <p class="muted">A policy lets routine work go through without a person: send an order, send a
+      reminder, or approve a held basket. Everything is off until the kill switch is on. A new policy is
+      inactive and in dry-run, which only writes down what it would have done; it can go live after
+      <span id="pol-days">3</span> days of that. No policy can pass <span id="pol-ceiling">5000</span> EUR
+      in one action, act outside working days and its hours, send an order whose price cannot be checked,
+      or approve a basket Terminus did not read as the same.</p>
+    <div class="row">
+      <button class="action" id="pol-switch" type="button">...</button>
+      <button class="action ghost" id="pol-run" type="button">offer what is waiting now</button>
+    </div>
+    <div id="pol-note"></div>
+    <div class="scroll-x short-box"><table id="table-policies"></table></div>
+    <p class="eyebrow">New policy</p>
+    <div class="row">
+      <label class="field grow"><span>name</span><input id="np-name" autocomplete="off"></label>
+      <label class="field narrow"><span>action</span><select id="np-action">
+        <option value="send_order">send an order</option><option value="send_chase">send a reminder</option>
+        <option value="approve">approve a basket</option></select></label>
+      <label class="field grow"><span>supplier (empty: any)</span><input id="np-supplier" autocomplete="off"></label>
+      <label class="field narrow"><span>max EUR</span><input id="np-max" inputmode="decimal"></label>
+      <label class="field narrow"><span>EUR a day</span><input id="np-day" inputmode="decimal"></label>
+      <label class="field narrow"><span>EUR a month</span><input id="np-month" inputmode="decimal"></label>
+    </div>
+    <div class="row">
+      <label class="field narrow"><span>price band %</span><input id="np-band" inputmode="decimal" value="10"></label>
+      <label class="field narrow"><span>min deliveries</span><input id="np-hist" inputmode="numeric" value="3"></label>
+      <label class="field narrow"><span>from hour</span><input id="np-from" inputmode="numeric" value="8"></label>
+      <label class="field narrow"><span>to hour</span><input id="np-to" inputmode="numeric" value="17"></label>
+      <label class="field narrow"><span>mails a supplier a day</span><input id="np-per" inputmode="numeric" value="2"></label>
+      <label class="field narrow"><span>max reminders</span><input id="np-chases" inputmode="numeric" value="2"></label>
+      <label class="field grow"><span>baskets: reasons it may cover</span><input id="np-reasons" placeholder="over-ceiling, dear-line"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="np-go" type="button">create</button></label>
+    </div>
+    <p class="eyebrow">What the policies would do, and did, over 7 days</p>
+    <div class="scroll-x short-box"><table id="table-policy-summary"></table></div>
+    <p class="eyebrow">Log</p>
+    <div class="scroll-x short-box"><table id="table-policy-log"></table></div>
+  </div>
+
+  <div class="card" id="charters-card">
+    <h2>Rules for the two bots</h2>
+    <p class="muted">What Plutus (the buyer) and Terminus (the name reader) are free to do and what they
+      must never do. Both go to the model with its instructions, and the limits are applied again in code
+      to whatever it answers.</p>
+    <div id="charters-body"></div>
+    <div id="charters-note"></div>
+  </div>
+
   <div class="card" id="calendar-card">
     <h2>Calendar, supplier terms, rates</h2>
     <p class="muted">French public holidays are known. Add your own closures, and per supplier the
@@ -3207,12 +3257,17 @@ $("ask-agent").addEventListener("click", async () => {
       only: named.length ? named : null,
     }));
     for (const line of orderDraft.lines) line.proposed = line.quantity;
+    const ruled = [...(orderDraft.cuts ?? []).map((c) => `${c.article}: cut, ${c.why}`),
+                   ...(orderDraft.adjusted ?? []).map((c) => `${c.article}: ${c.from} to ${c.to}, ${c.why}`)];
     const read = (orderDraft.read ?? []).join(", ");
     notice($("agent-note"), orderDraft.lines.length ? "ok" : "warn",
       orderDraft.lines.length
         ? `${orderDraft.lines.length} line(s) drafted from ${orderDraft.drafted_from} `
           + `article(s). Check them, then save.`
         : `Nothing worth ordering${read ? ` in ${read}` : ""}. ${orderDraft.note}`);
+    if (ruled.length) {
+      $("agent-note").append(el("p", { className: "muted", textContent: `Plutus's charter applied: ${ruled.join("; ")}.` }));
+    }
     renderDraft();
   } catch (e) {
     notice($("agent-note"), "bad", e.message);
@@ -4533,6 +4588,133 @@ function drawTuning(data) {
 
 async function loadTuning() { try { drawTuning(await api("/api/tuning")); } catch {} }
 
+// ---- policies and the bots' charters -----------------------------------------------
+
+function drawPolicies(data) {
+  $("pol-days").textContent = data.min_dry_days;
+  $("pol-ceiling").textContent = data.hard_ceiling;
+  $("pol-switch").textContent = data.enabled ? "Policies are ON: turn them off" : "Policies are OFF: turn them on";
+  $("pol-switch").dataset.on = data.enabled ? "1" : "0";
+  const act = (path, options) => async () => {
+    try { drawPolicies(await api(path, options)); }
+    catch (e) { notice($("pol-note"), "bad", e.message); }
+  };
+  renderTable($("table-policies"), [
+    { label: "Name", cell: (row) => td(row.name) },
+    { label: "Does", cell: (row) => td({ send_order: "sends orders", send_chase: "sends reminders",
+        approve: "approves baskets" }[row.action]) },
+    { label: "Supplier", cell: (row) => td(row.supplier === "*" ? "any" : row.supplier) },
+    { label: "Limits", cell: (row) => td([`max ${row.max_total} EUR`,
+        row.per_day ? `${row.per_day}/day` : null, row.per_month ? `${row.per_month}/month` : null,
+        `price ±${Math.round(row.price_band * 100)}%`, `${row.hours_from}h-${row.hours_to}h`,
+        row.action === "approve" ? `reasons: ${row.allowed_reasons || "none"}` : `${row.min_deliveries}+ deliveries`]
+        .filter(Boolean).join(", ")) },
+    { label: "State", cell: (row) => el("span", { className: row.active ? (row.mode === "live" ? "bad" : "ok") : "muted",
+        textContent: !row.active ? "inactive" : (row.mode === "live" ? "LIVE" : "dry run")
+          + ` (${row.dry_days} day(s) old)` }) },
+    { label: "", cell: (row) => {
+      const box = el("span");
+      const add = (label, path, options, cls = "mini") => {
+        const b = el("button", { className: cls, textContent: label });
+        b.addEventListener("click", act(path, options));
+        box.append(b, " ");
+      };
+      add(row.active ? "switch off" : "switch on", `/api/policies/${row.policy_id}`, patchJson({ active: !row.active }));
+      add(row.mode === "live" ? "back to dry run" : "go live", `/api/policies/${row.policy_id}`,
+          patchJson({ mode: row.mode === "live" ? "dry_run" : "live" }));
+      add("delete", `/api/policies/${row.policy_id}`, { method: "DELETE" });
+      return box;
+    } },
+  ], data.policies ?? [], "No policy. Nothing goes through without a person.");
+  renderTable($("table-policy-summary"), [
+    { label: "Policy", cell: (row) => td(row.name) },
+    { label: "Mode", cell: (row) => td(row.mode) },
+    { label: "Allowed", numeric: true, cell: (row) => td(`${row.allowed} (${money(row.allowed_value)})`) },
+    { label: "Refused", numeric: true, cell: (row) => td(row.denied) },
+  ], data.summary ?? [], "");
+  renderTable($("table-policy-log"), [
+    { label: "When", cell: (row) => td(row.at.replace("T", " ")) },
+    { label: "Policy", cell: (row) => td(row.policy) },
+    { label: "What", cell: (row) => td(`${row.action} ${row.subject}${row.supplier ? ` (${row.supplier})` : ""}`) },
+    { label: "EUR", numeric: true, cell: (row) => td(row.amount == null ? "" : row.amount.toFixed(2)) },
+    { label: "Decision", cell: (row) => el("span", { className: row.decision === "allowed" ? "ok" : "muted",
+        textContent: row.decision + (row.decision === "allowed" ? (row.acted ? ", done" : ", dry run") : "") }) },
+    { label: "Why", cell: (row) => td(row.reasons) },
+  ], data.log ?? [], "Nothing logged yet.");
+}
+
+async function loadPolicies() { try { drawPolicies(await api("/api/policies")); } catch {} }
+
+$("pol-switch").addEventListener("click", async () => {
+  try { drawPolicies(await api("/api/policies/switch", postJson({ on: $("pol-switch").dataset.on !== "1" }))); }
+  catch (e) { notice($("pol-note"), "bad", e.message); }
+});
+$("pol-run").addEventListener("click", async () => {
+  try {
+    const done = await api("/api/policies/run", { method: "POST" });
+    drawPolicies(done);
+    notice($("pol-note"), "ok", done.skipped ? `Nothing run: ${done.skipped}.` : `${done.acted} thing(s) done.`);
+  } catch (e) { notice($("pol-note"), "bad", e.message); }
+});
+$("np-go").addEventListener("click", async () => {
+  const num = (id) => ($(id).value.trim() === "" ? null : Number($(id).value));
+  try {
+    const done = await api("/api/policies", postJson({
+      name: $("np-name").value, action: $("np-action").value, supplier: $("np-supplier").value || null,
+      max_total: num("np-max"), per_day: num("np-day"), per_month: num("np-month"),
+      price_band: (num("np-band") ?? 10) / 100, min_deliveries: num("np-hist") ?? 3,
+      hours_from: num("np-from") ?? 8, hours_to: num("np-to") ?? 17, per_supplier_day: num("np-per") ?? 2,
+      max_chases: num("np-chases") ?? 2, allowed_reasons: $("np-reasons").value.replace(/\s+/g, "") }));
+    drawPolicies(done);
+    notice($("pol-note"), "ok", "Created: inactive and in dry run. Switch it on to see what it would do.");
+  } catch (e) { notice($("pol-note"), "bad", e.message); }
+});
+
+function drawCharters(data) {
+  const body = $("charters-body");
+  body.replaceChildren();
+  for (const bot of ["plutus", "terminus"]) {
+    const c = data[bot];
+    const box = el("div", { className: "sheet" }, [
+      el("div", { className: "sheet-title" }, [el("strong", { textContent: bot === "plutus" ? "Plutus, the buyer" : "Terminus, the name reader" })]),
+      el("p", { className: "eyebrow", textContent: "Free to" }),
+      el("ul", {}, c.freedom.map((t) => el("li", { textContent: t }))),
+      el("p", { className: "eyebrow", textContent: "Never" }),
+      el("ul", {}, c.never.map((t) => el("li", { textContent: t }))),
+      el("p", { className: "eyebrow", textContent: "Limits" }),
+    ]);
+    const table = el("table", {});
+    renderTable(table, [
+      { label: "Limit", cell: (row) => td(row.key) },
+      { label: "Value", cell: (row) => {
+        const input = el("input", { className: "cell", size: 7, inputMode: "decimal", value: row.value });
+        const save = el("button", { className: "mini", textContent: "save" });
+        save.addEventListener("click", async () => {
+          try { drawCharters(await api(`/api/charters/${bot}/${row.key}`, putJson({ value: Number(input.value) })));
+                notice($("charters-note"), "ok", "Saved."); }
+          catch (e) { notice($("charters-note"), "bad", e.message); }
+        });
+        return el("span", {}, [input, save]);
+      } },
+      { label: "Default", numeric: true, cell: (row) => td(row.default) },
+      { label: "What it does", cell: (row) => td(row.what) },
+      { label: "", cell: (row) => {
+        if (!row.changed) return td("");
+        const back = el("button", { className: "mini", textContent: "reset" });
+        back.addEventListener("click", async () => {
+          try { drawCharters(await api(`/api/charters/${bot}/${row.key}`, { method: "DELETE" })); }
+          catch (e) { notice($("charters-note"), "bad", e.message); }
+        });
+        return back;
+      } },
+    ], c.limits, "");
+    box.append(el("div", { className: "scroll-x" }, [table]));
+    body.append(box);
+  }
+}
+
+async function loadCharters() { try { drawCharters(await api("/api/charters")); } catch {} }
+
 // ---- calendar, supplier terms, exchange rates, the photo archive ---------
 
 function drawCalendar(data) {
@@ -5456,7 +5638,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(), loadPolicies(), loadCharters(),
       loadPacks(), loadCompare(), loadDisputes(), loadDispatches(), loadComing(),
     ]);
     notice($("global-notice"), "", "");

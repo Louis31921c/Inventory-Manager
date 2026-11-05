@@ -237,6 +237,11 @@ def build_app(config, channels):
             answer = await verify.check(config.db_path, reading["lines"])
             await asyncio.to_thread(gate.record_check, config.db_path, request_id,
                                     answer["verdict"], answer["note"], answer["lines"])
+            try:
+                from . import policies
+                await asyncio.to_thread(policies.auto_decide, config.db_path, request_id)
+            except Exception:
+                pass
             await respond(say_it(chat.held_text(request_id, reading, answer)))
             return
 

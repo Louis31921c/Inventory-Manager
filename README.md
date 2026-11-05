@@ -545,6 +545,16 @@ database of its own to run a simulation on; the year itself is written in
 - **One connection stays open** while the server runs (`db.keep_open`), so the database file is
   never shut under a concurrent request; the SQL screen asks its read-only question on a snapshot.
 
+## Policies and the bots' charters
+
+- `policies.py`: rules for `send_order`, `send_chase` and `approve`. Off until the kill switch is
+  on; a new policy is inactive and in dry run and needs `MIN_DRY_DAYS` (3) before it can go live;
+  `HARD_CEILING` (5000 EUR) cannot be raised. Run hourly by the server and, for baskets, right after
+  Terminus has checked one. Every decision is a row in `policy_log`; actions are audited as POLICY.
+- `charters.py`: freedom, prohibitions and numeric limits for Plutus and Terminus (`bot_limits`).
+  Added to the model's prompt and enforced again on its answer: `enforce_plutus` cuts or corrects
+  draft lines, and `verify.check` turns a doubtful "same" into "unsure".
+
 ## Where things are stored
 
 | What | Path |

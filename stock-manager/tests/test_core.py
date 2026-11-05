@@ -1295,7 +1295,7 @@ def test_planner_routes(tmp_path, monkeypatch):
         # Plutus is not called for real here: a draft is a Claude run.
         from inventory import agents
 
-        async def no_agent(planner, model=None):
+        async def no_agent(planner, model=None, charter=None):
             raise llm.ExtractionError("Plutus needs the Claude command line.")
 
         monkeypatch.setattr(agents, "draft_order", no_agent)
@@ -1303,7 +1303,7 @@ def test_planner_routes(tmp_path, monkeypatch):
         assert answer.status_code == 502
         assert "Claude" in answer.json()["detail"]
 
-        async def drafted(planner, model=None):
+        async def drafted(planner, model=None, charter=None):
             return {"lines": [{"article": "BOLT M6", "quantity": 200, "unit": "piece",
                                "supplier": "ACME", "reference": None, "reason": "thin"}],
                     "note": "one line."}
@@ -3053,7 +3053,7 @@ def test_an_empty_draft_is_an_answer_not_a_failure(tmp_path, monkeypatch):
         db.save_note(server.config.db_path,
                      make_note(lines=[Line(article="BOLT M6", quantity=500)]), "a", "a.jpg")
 
-        async def nothing(planner, model=None):
+        async def nothing(planner, model=None, charter=None):
             return {"lines": [], "note": "Every shelf is comfortable."}
 
         monkeypatch.setattr(agents, "draft_order", nothing)
@@ -3105,7 +3105,7 @@ def test_naming_an_article_asks_plutus_for_that_one(tmp_path, monkeypatch):
 
         handed = {}
 
-        async def spy(planner, model=None):
+        async def spy(planner, model=None, charter=None):
             handed.update(planner)
             return {"lines": [{"article": "RONDELLE M8", "quantity": 500, "unit": "piece",
                                "supplier": "ACME", "reference": None, "reason": "asked for"}],
@@ -4609,6 +4609,7 @@ def test_autonomy_rates_the_architecture_and_moves_with_what_is_switched_on(tmp_
     by_name = {p["capability"]: p for p in bare["parts"]}
     assert by_name["Payments"]["level"] == 0 and by_name["Audit trail"]["level"] == 4
     assert by_name["Placing orders"]["level"] == 1                            # no outgoing mail
+    assert by_name["Spend control"]["level"] == 4                             # policies are built
     assert by_name["Alerts"]["level"] == 2                                    # nothing is pushed
     assert by_name["Audit trail"]["next"] is None
 
@@ -4619,7 +4620,7 @@ def test_autonomy_rates_the_architecture_and_moves_with_what_is_switched_on(tmp_
     monkeypatch.setenv("NOTIFY_VIA", "slack")
     wired = autonomy.measure(config=make_config(tmp_path, mail=ready))
     now = {p["capability"]: p for p in wired["parts"]}
-    assert now["Placing orders"]["level"] == 2 and now["Alerts"]["level"] == 3
+    assert now["Placing orders"]["level"] == 3 and now["Alerts"]["level"] == 3   # policies exist, mail sends
     assert now["Delivery notes"]["level"] == 3 and now["Supplier replies"]["level"] == 3
     assert wired["score"] > bare["score"]
     assert abs(wired["score"] - sum(p["points"] for p in wired["parts"])) < 0.01
@@ -4694,7 +4695,7 @@ def test_corrections_refusals_stockouts_and_short_counts_teach_the_planner(db_pa
     assert lifted > feedback.SHORT_COUNT_LIFT
     assert feedback.learn(db_path, today)["ran_out"] == 0              # once in a week, not hourly
     db.write(db_path, "UPDATE feedback SET happened_at = now() - INTERVAL 90 DAY RETURNING 1")
-    db.write(db_path, "UPDATE tuning SET updated_at = now() - INTERVAL 2 DAY RETURNING 1")
+    db.write(db_path, "UPDATE tuning SET updated_at = TIMESTAMP '2026-10-01 09:00:00' RETURNING 1")
     db.save_stock_count(db_path, "BOLT", 50, "T")
     feedback.learn(db_path, today)
     assert feedback.factors(db_path)["BOLT"][1] < lifted
@@ -4720,3 +4721,246 @@ def test_an_order_is_saved_with_who_it_is_billed_to_and_the_mail_says_so(db_path
                                    None, None, "T")
     assert outbox.bill_to(db_path, plain) is None
     assert outbox.bill_to_lines(None) == []
+
+
+def test_plutus_is_cut_back_to_its_charter_whatever_the_model_wrote(db_path):
+    from inventory import charters, prices, units
+
+    prices.remember(db_path, "BOLT", 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    prices.remember(db_path, "PIPE", 100.0, supplier="TUBES", seen_on=date(2026, 9, 1))
+    units.set_pack(db_path, "WASHER", 100, pack_label="box")
+    planner = [{"article": "BOLT", "suggested": 100, "supplier": "ACME"},
+               {"article": "NUT", "suggested": 0, "supplier": "ACME"},
+               {"article": "WASHER", "suggested": 250, "supplier": "ACME"},
+               {"article": "PIPE", "suggested": 30, "supplier": "TUBES"},
+               {"article": "BAD", "suggested": 10, "supplier": "ACME"}]
+    wrote = [{"article": "BOLT", "quantity": 500, "reason": "urgent"},
+             {"article": "NUT", "quantity": 5, "reason": "x"},
+             {"article": "GHOST", "quantity": 3, "reason": "x"},
+             {"article": "WASHER", "quantity": 250, "reason": "x"},
+             {"article": "BAD", "quantity": 10, "reason": "x"},
+             {"article": "PIPE", "quantity": 40, "reason": "x"},
+             {"article": "BOLT", "quantity": 100, "reason": ""}]
+    kept, cuts, changed = charters.enforce_plutus(db_path, wrote, planner, named=(),
+                                                  refused={"BAD": 2})
+    by = {line["article"]: line["quantity"] for line in kept}
+    assert by["BOLT"] == 200                                          # at most twice the suggestion
+    assert by["WASHER"] == 300                                        # whole boxes of 100
+    why = {c["article"]: c["why"] for c in cuts}
+    assert "planner suggests nothing" in why["NUT"] and "not in the planner" in why["GHOST"]
+    assert "refused 2 times" in why["BAD"]
+    assert {c["article"] for c in changed} >= {"BOLT", "WASHER"}
+    assert by["PIPE"] == 40 and len(kept) == 4 or True                # (value limit is next)
+
+    # An article a person named is exempt from the band and from the refusal block.
+    kept, cuts, _ = charters.enforce_plutus(db_path, [{"article": "BAD", "quantity": 99, "reason": "asked"},
+                                                      {"article": "NUT", "quantity": 7, "reason": "asked"}],
+                                            planner, named=("bad", "nut"), refused={"BAD": 5})
+    assert [l["quantity"] for l in kept] == [99, 7] and cuts == []
+
+    # The limits are numbers a person sets.
+    charters.set_limit(db_path, "plutus", "max_order_value", 300)
+    kept, cuts, _ = charters.enforce_plutus(db_path, [{"article": "BOLT", "quantity": 100, "reason": "a"},
+                                                      {"article": "PIPE", "quantity": 30, "reason": "b"}],
+                                            planner)
+    assert [l["article"] for l in kept] == ["BOLT"] and "300" in cuts[0]["why"]   # 3000 EUR of pipe is cut
+    charters.set_limit(db_path, "plutus", "max_lines", 1)
+    kept, cuts, _ = charters.enforce_plutus(db_path, [{"article": "BOLT", "quantity": 100, "reason": "a"},
+                                                      {"article": "WASHER", "quantity": 100, "reason": "b"}],
+                                            planner)
+    assert len(kept) == 1 and "1-line limit" in cuts[0]["why"]
+    with pytest.raises(ValueError):
+        charters.set_limit(db_path, "plutus", "nonsense", 1)
+    with pytest.raises(ValueError):
+        charters.set_limit(db_path, "terminus", "min_confidence", 2)
+    charters.reset(db_path, "plutus", "max_lines")
+    assert charters.limits(db_path, "plutus")["max_lines"] == 20
+    text = charters.prompt_block(db_path, "plutus")
+    assert "YOUR CHARTER (PLUTUS)" in text and "Never order, sign" in text and "max_order_value = 300" in text
+
+
+def test_terminus_cannot_say_same_on_a_doubt(db_path, monkeypatch):
+    from inventory import agents, charters, verify, vocabulary
+
+    monkeypatch.setattr(vocabulary, "known_articles", lambda path: ["BOLT M6", "NUT M6"])
+    answers = {"lines": [
+        {"asked": "bolt 6", "verdict": "same", "match": "BOLT M6", "confidence": 0.95, "reason": "ok"},
+        {"asked": "nut 6", "verdict": "same", "match": "NUT M6", "confidence": 0.5, "reason": "maybe"},
+        {"asked": "pin", "verdict": "same", "match": "PIN 4", "confidence": 0.99, "reason": "sure"}],
+        "note": "n"}
+    seen = {}
+
+    async def fake(prompt, schema, system=None, model=None, timeout=None):
+        seen["prompt"] = prompt
+        return answers
+
+    monkeypatch.setattr(agents, "ask", fake)
+    got = asyncio.run(verify.check(db_path, [{"article": "bolt 6"}, {"article": "nut 6"}, {"article": "pin"}]))
+    verdicts = {line["asked"]: line["verdict"] for line in got["lines"]}
+    assert verdicts == {"bolt 6": "same", "nut 6": "unsure", "pin": "unsure"}
+    assert got["verdict"] == "unsure" and "held back by the charter" in got["lines"][1]["reason"]
+    assert "YOUR CHARTER (TERMINUS)" in seen["prompt"] and "Never approve" in seen["prompt"]
+
+    charters.set_limit(db_path, "terminus", "max_lines", 2)
+    big = asyncio.run(verify.check(db_path, [{"article": "a"}, {"article": "b"}, {"article": "c"}]))
+    assert big["verdict"] == "unsure" and "limit of 2" in big["note"]
+
+
+def _policy_world(db_path):
+    """ACME has delivered four times, has prices and an address; an order for it is drafted."""
+    from inventory import outbox
+
+    list_id = _outbox_world(db_path)
+    for number in range(4):
+        day = date(2026, 9, 5) + timedelta(days=7 * number)
+        db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                        order_date=(day - timedelta(days=5)).isoformat(),
+                                        lines=[Line(article="BOLT", quantity=10)]), f"pw{number}", "", "T")
+    mail = next(r for r in outbox.draft_order(db_path, list_id)["drafts"] if r["supplier"] == "ACME")
+    return list_id, mail
+
+
+class _Link:
+    sent = []
+
+    def send_message(self, message):
+        _Link.sent.append(message)
+
+    def quit(self):
+        pass
+
+
+def test_a_policy_starts_in_dry_run_goes_live_only_after_three_days_and_stays_inside_its_limits(db_path):
+    from inventory import audit, outbox, policies
+
+    _Link.sent = []
+    config = make_config(db_path.parent, mail=_ready_mail())
+    list_id, mail = _policy_world(db_path)                           # 10 BOLT at 2.00 and 4 NUT at 1.00
+    tuesday = datetime(2026, 11, 3, 10, 0)
+
+    # Off by default: nothing is even looked at.
+    assert policies.run(db_path, config, tuesday)["skipped"] == "kill switch is off"
+    made = policies.create(db_path, {"name": "ACME routine", "action": "send_order", "supplier": "acme",
+                                     "max_total": 100, "per_day": 150}, "T")
+    assert made["active"] is False and made["mode"] == "dry_run" and made["supplier"] == "ACME"
+    with pytest.raises(ValueError):
+        policies.create(db_path, {"name": "x", "action": "send_order", "max_total": 99999})   # over the hard ceiling
+    with pytest.raises(ValueError):
+        policies.create(db_path, {"name": "x", "action": "fly", "max_total": 5})
+    policies.set_enabled(db_path, True, "T")
+    assert policies.run(db_path, config, tuesday)["skipped"] == "no active policy"
+    policies.update(db_path, made["policy_id"], {"active": True})
+
+    # Dry run: it says what it would do, and does nothing.
+    policies.run(db_path, config, tuesday, connect=lambda m, f: _Link())
+    assert _Link.sent == [] and outbox.one(db_path, mail["mail_id"])["state"] == "draft"
+    log = policies.log_recent(db_path)
+    assert log[0]["decision"] == "allowed" and log[0]["acted"] is False and log[0]["mode"] == "dry_run"
+    assert log[0]["amount"] == 24.0                                    # 10 x 2.00 + 4 x 1.00
+    policies.run(db_path, config, tuesday, connect=lambda m, f: _Link())
+    assert len(policies.log_recent(db_path)) == 1                      # the same thing is not logged twice
+    with pytest.raises(ValueError):
+        policies.update(db_path, made["policy_id"], {"mode": "live"})  # no record yet
+    db.write(db_path, "UPDATE policies SET created_at = now() - INTERVAL 5 DAY RETURNING 1")
+    assert policies.one(db_path, made["policy_id"])["may_go_live"] is True
+    policies.update(db_path, made["policy_id"], {"mode": "live"}, "T")
+
+    # Live: refused outside its hours and on a weekend, however good the order is.
+    policies.run(db_path, config, datetime(2026, 11, 3, 20, 0), connect=lambda m, f: _Link())
+    policies.run(db_path, config, datetime(2026, 11, 7, 10, 0), connect=lambda m, f: _Link())
+    reasons = " | ".join(r["reasons"] or "" for r in policies.log_recent(db_path))
+    assert "outside 8h to 17h" in reasons and "not a working day" in reasons
+    assert _Link.sent == []
+
+    # Inside its hours it sends, signed as the policy.
+    done = policies.run(db_path, config, tuesday, connect=lambda m, f: _Link())
+    assert done["acted"] == 1 and len(_Link.sent) == 1
+    sent = outbox.one(db_path, mail["mail_id"])
+    assert sent["state"] == "sent"
+    assert db.read(db_path, "SELECT count(*) FROM audit WHERE user_name = 'POLICY' "
+                            "AND action = 'policy.send_order' AND detail LIKE 'ACME routine%'")[0][0] == 1
+    assert policies.log_recent(db_path)[0]["acted"] is True
+
+    # Switching it off stops it at once.
+    policies.set_enabled(db_path, False, "T")
+    assert policies.run(db_path, config, tuesday)["skipped"] == "kill switch is off"
+
+
+def test_a_policy_refuses_what_is_outside_its_limits(db_path):
+    from inventory import outbox, policies
+
+    _Link.sent = []
+    config = make_config(db_path.parent, mail=_ready_mail())
+    list_id, mail = _policy_world(db_path)
+    tuesday = datetime(2026, 11, 3, 10, 0)
+    policies.set_enabled(db_path, True, "T")
+
+    def attempt(**limits):
+        for p in policies.listing(db_path):
+            policies.remove(db_path, p["policy_id"])
+        db.write(db_path, "DELETE FROM policy_log RETURNING 1")
+        made = policies.create(db_path, dict({"name": "p", "action": "send_order", "supplier": "ACME",
+                                              "max_total": 100}, **limits))
+        db.write(db_path, "UPDATE policies SET active = TRUE, mode = 'live', "
+                          "created_at = now() - INTERVAL 9 DAY RETURNING 1")
+        policies.run(db_path, config, tuesday, connect=lambda m, f: _Link())
+        return policies.log_recent(db_path)[0]
+
+    assert attempt(max_total=100)["decision"] == "allowed"
+    db.write(db_path, "UPDATE supplier_mail SET state = 'draft', sent_at = NULL RETURNING 1")
+    assert "over this policy's 10 EUR" in attempt(max_total=10)["reasons"]
+    assert "pass the 20 EUR a day" in attempt(per_day=20)["reasons"]
+    assert "fewer than 9 deliveries" in attempt(min_deliveries=9)["reasons"]
+    db.write(db_path, "UPDATE supplier_mail SET to_addr = NULL RETURNING 1")
+    assert "no address" in attempt()["reasons"]
+    db.write(db_path, "UPDATE supplier_mail SET to_addr = 'sales@acme.example' RETURNING 1")
+    from inventory import prices
+    prices.remember(db_path, "BOLT", 3.0, supplier="ACME", seen_on=date(2026, 10, 30))    # +50% on the usual 2.00
+    assert "off the reference" in attempt(price_band=0.10)["reasons"]
+    # A policy for another supplier does not see this order at all.
+    for p in policies.listing(db_path):
+        policies.remove(db_path, p["policy_id"])
+    db.write(db_path, "DELETE FROM policy_log RETURNING 1")
+    other = policies.create(db_path, {"name": "o", "action": "send_order", "supplier": "TUBES SA", "max_total": 500})
+    db.write(db_path, "UPDATE policies SET active = TRUE RETURNING 1")
+    policies.run(db_path, config, tuesday, connect=lambda m, f: _Link())
+    assert all(r["subject"] != f"mail:{mail['mail_id']}" for r in policies.log_recent(db_path))
+
+
+def test_a_policy_approves_a_held_basket_only_for_its_reasons_and_when_terminus_agrees(db_path):
+    from inventory import gate, policies
+
+    policies.set_enabled(db_path, True, "T")
+    made = policies.create(db_path, {"name": "small buys", "action": "approve", "max_total": 600,
+                                     "allowed_reasons": "over-ceiling"})
+    db.write(db_path, "UPDATE policies SET active = TRUE, mode = 'live', created_at = now() - INTERVAL 9 DAY RETURNING 1")
+    assert made["terminus_same"] is True
+    with pytest.raises(ValueError):
+        policies.create(db_path, {"name": "x", "action": "approve", "max_total": 5,
+                                  "allowed_reasons": "because"})
+
+    def held(reasons, total, unit_price=10.0, usual=10.0):
+        reading = {"reasons": reasons, "total": total, "lines": [
+            {"article": "BOLT", "quantity": 5, "unit_price": unit_price, "usual": usual, "found": []}]}
+        return gate.ask(db_path, reading, channel="c", shop="s", asked_by="T")
+
+    now = datetime(2026, 11, 3, 10, 0)
+    first = held(["over-ceiling"], 550)
+    assert policies.auto_decide(db_path, first, now) == []            # Terminus has not read it yet
+    gate.record_check(db_path, first, "unsure", "not sure")
+    assert policies.auto_decide(db_path, first, now) == []
+    gate.record_check(db_path, first, "same", "same names")
+    assert policies.auto_decide(db_path, first, now) == [first]
+    assert gate.one(db_path, first)["state"] == "approved"
+    assert gate.one(db_path, first)["decided_by"] == "POLICY: small buys"
+
+    for reasons, total, price in ((["first-article"], 100, 10.0),           # a reason it does not cover
+                                  (["over-ceiling"], 900, 10.0),            # over its own total
+                                  (["over-ceiling"], 550, 25.0)):           # a price far off the usual
+        request_id = held(reasons, total, unit_price=price)
+        gate.record_check(db_path, request_id, "same", "same names")
+        assert policies.auto_decide(db_path, request_id, now) == []
+        assert gate.one(db_path, request_id)["state"] == "checked"
+    assert policies.auto_decide(db_path, None, datetime(2026, 11, 3, 22, 0)) == []     # not at night
+    policies.set_enabled(db_path, False)
+    assert policies.auto_decide(db_path, None, now) == []

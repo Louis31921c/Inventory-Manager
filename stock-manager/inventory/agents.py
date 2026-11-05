@@ -86,11 +86,14 @@ def order_question(planner):
             + "\n\nWrite the purchase order they call for.")
 
 
-async def draft_order(planner, model=None):
-    """Plutus. Gives back {lines, note}; the person signs it, or does not."""
+async def draft_order(planner, model=None, charter=None):
+    """Plutus. Gives back {lines, note}; the person signs it, or does not. `charter` is the
+    text of its charter, freedom and limits, added to its instructions."""
     if not available():
         raise llm.ExtractionError(
             "Plutus needs the Claude command line: install it, then run "
             "claude and /login.")
-    return await ask(order_question(planner), llm.ORDER_SCHEMA,
-                     system=llm.prompt_text("order_draft.md"), model=model)
+    system = llm.prompt_text("order_draft.md")
+    if charter:
+        system += "\n\n" + charter
+    return await ask(order_question(planner), llm.ORDER_SCHEMA, system=system, model=model)
