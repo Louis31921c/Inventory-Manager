@@ -4991,7 +4991,7 @@ def test_the_bot_rules_can_be_read_from_a_folder_and_a_half_edited_file_cannot_s
     assert charters.source("plutus") == str(rules / "plutus.md")
     now = charters.limits(db_path, "plutus")
     assert now["max_lines"] == 7 and now["max_qty_multiple"] == 3.0 and isinstance(now["max_qty_multiple"], float)
-    assert now["max_order_value"] == 5000.0                       # left out of the file: the built-in value
+    assert now["max_order_value"] == 25000.0                      # left out of the file: the built-in value
     assert "made_up_limit" not in now
     text = charters.prompt_block(db_path, "plutus")
     assert "Order only what the numbers show." in text and "Never touch the lines of another order." in text
