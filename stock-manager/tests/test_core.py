@@ -4774,7 +4774,7 @@ def test_plutus_is_cut_back_to_its_charter_whatever_the_model_wrote(db_path):
     with pytest.raises(ValueError):
         charters.set_limit(db_path, "terminus", "min_confidence", 2)
     charters.reset(db_path, "plutus", "max_lines")
-    assert charters.limits(db_path, "plutus")["max_lines"] == 20
+    assert charters.limits(db_path, "plutus")["max_lines"] == 60
     text = charters.prompt_block(db_path, "plutus")
     assert "YOUR CHARTER (PLUTUS)" in text and "Never order, sign" in text and "max_order_value = 300" in text
 
@@ -4973,7 +4973,7 @@ def test_the_bot_rules_can_be_read_from_a_folder_and_a_half_edited_file_cannot_s
     from inventory import charters
 
     monkeypatch.delenv("BOT_RULES_DIR", raising=False)
-    assert charters.source("plutus") == "built in" and charters.limits(db_path, "plutus")["max_lines"] == 20
+    assert charters.source("plutus") == "built in" and charters.limits(db_path, "plutus")["max_lines"] == 60
 
     rules = tmp_path / "rules"
     rules.mkdir()
@@ -5008,7 +5008,7 @@ def test_the_bot_rules_can_be_read_from_a_folder_and_a_half_edited_file_cannot_s
     # A file that is empty of rules leaves the built-in text in place; a change is picked up at once.
     (rules / "plutus.md").write_text("nothing useful here", encoding="utf-8")
     os.utime(rules / "plutus.md", (1_900_000_000, 1_900_000_000))
-    assert charters.limits(db_path, "plutus")["max_lines"] == 20
+    assert charters.limits(db_path, "plutus")["max_lines"] == 60
     assert "Never order, sign" in charters.prompt_block(db_path, "plutus")
     assert charters.source("terminus") == "built in"             # no terminus.md in that folder
 
