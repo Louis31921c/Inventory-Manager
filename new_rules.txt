@@ -248,3 +248,11 @@ functionnalities to developp :
         have read the names as the same; every decision logged. Charters: what each bot is free to do,
         must never do, and numeric limits a person sets, added to the prompt and enforced again in
         code on the answer. Settings, Policies and Rules for the two bots
+
+- DONE (asked in chat): Plutus orders from the DDMRP (inventory/replenish.py): every hour it writes one
+        purchase order for the articles in their red or yellow zone, the buffer's own quantity, in
+        whole packs, leaving alone what is already on its way; on/off and "order now" on its card;
+        the model path gets the DDMRP block and a narrow band around its number. Terminus approves
+        and cancels (inventory/judge.py): off, then dry run, then live after 3 days; approves when
+        every line is the same article inside its limits; cancels a repeat, a twice-refused article
+        or a stale basket; signed TERMINUS. Both charters in the bot-rules folder updated

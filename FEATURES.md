@@ -64,7 +64,7 @@ Net flow is the counted shelf minus what open orders still ask for. It is placed
 
 **Learned lead times:** per supplier and per article from the notes: count, median, 80th percentile (the delay one delivery in five exceeds), fastest, slowest. An article with 3 or more deliveries is planned with its own 80th percentile. Otherwise the lead setting applies.
 
-**Plutus** (the buyer) drafts an order from those numbers and signs nothing. A line ticked "to order" on a stored purchase order is read into a queue (hourly, or on demand) with a due day 15 days later. When due, lines become one purchase order per site and work item (same article merged), drafted by Plutus. It is a list, not a purchase.
+**Plutus** (the buyer) orders from the DDMRP buffers, by itself. Every hour it writes one purchase order, drafted by PLUTUS, for the articles whose net flow has fallen into the yellow or red zone. The quantity is the buffer's own (up to the top of the green, in whole packs where a pack size is known), red before yellow. An article that already has an order, a draft, a queued line, a recent Plutus order or a delivery still owed is left alone, so nothing is ordered twice. It is a list, not a purchase: the order mails come from it, and the policies decide whether those go without a person. It can be switched off or run on demand from its card. A line ticked "to order" on a stored purchase order still waits 15 days and is then ordered as one purchase order per site and work item. Its card has a "Bill to" section (company name, contact name, address), remembered for the next order, saved on the order and printed on the supplier mail and PDF.
 
 ## 4. Suppliers: mail out and back
 
@@ -94,7 +94,7 @@ Net flow is the counted shelf minus what open orders still ask for. It is placed
 | Dear line | a line above twice the article's usual price (median of its last 12 prices) |
 | No price | a line has no price, so the money rules cannot run |
 
-- **Terminus** (a second model call) answers only "is this an article we know under another wording": same, new or unsure. It approves nothing, and when unsure or unreachable the gate stays shut.
+- **Terminus** reads the names (same, new or unsure) and then decides the baskets the gate holds: it approves when every line is the same article and its limits allow, and cancels a repeat, an article refused twice, or a basket nobody answered for 14 days. It starts off, then in dry run, and can decide for real only after 3 days of that. A person's decision is never overridden, and a doubt keeps the gate shut.
 - **Approval never expires,** but it remembers the price it was given at: an order placed later at a price that moved more than 10% is asked for again.
 - **Sealed log:** every turn (requested, checked, approved, cancelled, ordered) is an entry in `gate_log` carrying the SHA-256 of the one before it. An edited entry breaks the chain from there and the screen names it.
 - **Blockchain screen:** the seven-step round (reading, shelf check, Terminus, decision, waiting for you, wallet, placing the order) as clickable wedges, each opening an audit of that step. Steps 6 and 7 are drawn but not built: an approved order is placed by hand.
@@ -139,10 +139,10 @@ Vans with volume and payload (default two Renault Partner at 3.3 m3 and 650 kg, 
 
 | Bot | Free to | Never | Limits (defaults) |
 |---|---|---|---|
-| Plutus (buyer) | choose quantities inside a band around the planner's suggestion, leave out what is comfortable, group by supplier, round to boxes | order, sign, send or approve; invent an article, supplier, price or quantity; pass the limits | 20 lines; 0.5 to 2 times the suggested quantity; only planner articles or named ones; skip articles whose baskets were refused twice; 5,000 EUR a draft; a reason on every line; whole packs |
-| Terminus (name reader) | say same, new or unsure with the known name and a reason | approve, cancel, price or recommend buying; call a different size or grade the same; answer outside the schema | a "same" under 0.8 confidence becomes unsure; "same" must name a known article exactly; baskets over 60 lines come back unsure |
+| Plutus (buyer) | order what the DDMRP buffers ask for (red and yellow zones, up to the top of the green), inside a narrow band around the buffer's number; group by supplier; round to boxes | sign, send or approve anything; invent an article, supplier, price or quantity; pass the limits | 20 lines; 0.8 to 1.25 times the buffer's quantity; only DDMRP or planner articles or named ones; skip articles whose baskets were refused twice; 5,000 EUR a draft; a reason on every line; whole packs |
+| Terminus (gate keeper) | read the names, then approve or cancel the baskets the gate holds | approve unless every line is the same article, past its limits, or for a reason a person decides; override a person's decision | a "same" under 0.8 confidence becomes unsure; approves at most 500 EUR a basket and 1,000 EUR a day; dear line, new supplier and no price stay with a person unless allowed; cancels a repeat of an approved basket (3 days), an article refused twice, a basket unanswered for 14 days |
 
-Lines Plutus wrote that break a limit are cut or corrected, and the draft says which and why. The charters live as plain files in the `bot-rules` folder next to the program (`plutus.md`, `terminus.md`): edit the text or the default limits there, and the next request uses them. A limit set on the screen overrides the file until it is reset.
+Terminus's decisions are signed TERMINUS in the gate's sealed log. Lines Plutus wrote that break a limit are cut or corrected, and the draft says which and why. The charters live as plain files in the `bot-rules` folder next to the program (`plutus.md`, `terminus.md`): edit the text or the default limits there, and the next request uses them. A limit set on the screen overrides the file until it is reset.
 
 ## 12. Security and traceability
 
