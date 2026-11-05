@@ -6,11 +6,11 @@ in its instructions, so it knows where it stands, and then the limits are enforc
 code on whatever it answers: a model that ignores its instructions changes nothing, because
 what it wrote is cut back to the limits before anybody sees it.
 
-  Plutus     drafts an order. It signs nothing, orders nothing, and has no idea what a
-             supplier would answer. It may choose quantities inside a band around the planner's
-             own, leave out what is comfortable, and say why.
-  Terminus   says whether an article is one already known under another name. It never
-             approves, never prices, and a doubt is an "unsure", which keeps the gate shut.
+  Plutus     orders from the DDMRP buffers: what the red and yellow zones ask for, up to the top of
+             the green. It signs nothing and has no idea what a supplier would answer.
+  Terminus   reads names, and then decides the baskets the gate holds: it approves when every line
+             is the same article and the limits allow, and cancels a repeat, a twice-refused article or
+             a stale basket. A doubt is an "unsure", which keeps the gate shut.
 """
 
 import os
@@ -26,9 +26,9 @@ from .models import normalize_name
 # (default, what it means). Stored as text; the second is the sentence the screen shows.
 PLUTUS = {
     "max_lines": (20, "the most lines on one order"),
-    "max_qty_multiple": (2.0, "a line may be at most this many times the planner's suggested quantity"),
-    "min_qty_multiple": (0.5, "and at least this many times (an article a person named is exempt)"),
-    "only_planner_articles": (1, "only articles in the planner's numbers, or named by a person (1 yes, 0 no)"),
+    "max_qty_multiple": (1.25, "a line may be at most this many times the quantity the DDMRP buffers ask for"),
+    "min_qty_multiple": (0.8, "and at least this many times (an article a person named is exempt)"),
+    "only_planner_articles": (1, "only articles the DDMRP or the planner puts forward, or named by a person (1 yes, 0 no)"),
     "block_refused_after": (2, "leave out an article whose baskets were refused this many times in 90 days, unless named"),
     "max_order_value": (5000.0, "EUR the priced lines of one draft may come to; lines past it are cut, least urgent first"),
     "require_reason": (1, "every line must say why (1 yes, 0 no)"),
@@ -38,12 +38,21 @@ TERMINUS = {
     "min_confidence": (0.8, "a 'same' answer under this confidence (0 to 1) becomes 'unsure'"),
     "same_needs_known_match": (1, "'same' must name a known article exactly, or it becomes 'unsure' (1 yes, 0 no)"),
     "max_lines": (60, "the most lines it will read in one basket; a longer basket comes back 'unsure'"),
+    "approve_max_total": (500.0, "EUR: it approves no basket worth more than this, whatever else is true"),
+    "approve_per_day": (1000.0, "EUR: it approves no more than this in a day"),
+    "allow_dear_line": (0, "approve a basket held for a dear line (1 yes, 0 no: a person decides)"),
+    "allow_new_supplier": (0, "approve a basket held for a new supplier (1 yes, 0 no: a person decides)"),
+    "allow_no_price": (0, "approve a basket held for a line with no price (1 yes, 0 no: a person decides)"),
+    "cancel_refused_after": (2, "cancel a basket with an article whose baskets were refused this many times in 90 days"),
+    "cancel_duplicate_days": (3, "cancel a basket that repeats one approved or ordered in this many days"),
+    "cancel_after_days": (14, "cancel a basket nobody has answered in this many days"),
 }
 BUILTIN = {"plutus": PLUTUS, "terminus": TERMINUS}
 
 BUILTIN_FREEDOM = {
     "plutus": [
-        "Choose each quantity inside the band around the planner's suggestion.",
+        "Order what the DDMRP buffers ask for: an article in its red or yellow zone, up to the top of its green.",
+        "Choose each quantity inside the narrow band around the DDMRP's own number.",
         "Leave out any article that is comfortable, and say which and why in the note.",
         "Group lines by supplier and name the supplier the data gives for each article.",
         "Round to how the trade buys: boxes, hundreds, cartridges.",
@@ -51,6 +60,10 @@ BUILTIN_FREEDOM = {
     "terminus": [
         "Say 'same', 'new' or 'unsure' for each line, with the known name and your reason.",
         "Say 'unsure' whenever the line is too vague or two known names fit equally well.",
+        "Approve a held basket when every line is the same article and what held it is settled by the "
+        "names or allowed by the limits below.",
+        "Cancel a held basket that repeats one already approved, that holds an article refused before, "
+        "or that nobody has answered for too long.",
     ],
 }
 BUILTIN_NEVER = {
@@ -61,7 +74,9 @@ BUILTIN_NEVER = {
         "Never write anything but the JSON the schema asks for.",
     ],
     "terminus": [
-        "Never approve, cancel, price or recommend buying: you only settle names.",
+        "Never approve a basket unless every line is the same article, whatever else looks fine.",
+        "Never approve past the limits below, or a basket held for a reason the limits do not allow.",
+        "Never undo or override what a person decided: a basket a person approved or cancelled is theirs.",
         "Never call a different size, grade or finish the same article.",
         "Never answer outside the schema. When you cannot answer, the answer is 'unsure'.",
     ],
@@ -70,7 +85,7 @@ BUILTIN_NEVER = {
 
 # ---- the rules folder -------------------------------------------------------
 
-TITLES = {"plutus": "Plutus, the buyer", "terminus": "Terminus, the name reader"}
+TITLES = {"plutus": "Plutus, the buyer", "terminus": "Terminus, the gate keeper"}
 _LIMIT = re.compile(r"^-\s*([a-z_]+)\s*=\s*([-0-9.]+)\s*(?::\s*(.*))?$")
 _cache = {}
 
@@ -231,6 +246,9 @@ def enforce_plutus(db_path, lines, planner_rows, named=(), refused=None):
 
         quantity = float(line["quantity"])
         suggested = float((row or {}).get("suggested") or 0)
+        buffer = (row or {}).get("ddmrp") or {}
+        if buffer.get("to_order"):               # the DDMRP's number is the one to be near
+            suggested = float(buffer["to_order"])
         if not asked and suggested > 0:
             low, high = suggested * now["min_qty_multiple"], suggested * now["max_qty_multiple"]
             if quantity > high or quantity < low:

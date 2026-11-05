@@ -43,6 +43,8 @@ def _facts(config):
         "payments": _built("payments"),
         "projects": _built("projects"),
         "feedback": _built("feedback"),
+        "replenish": _built("replenish"),
+        "judge": _built("judge"),
         "order_step_walked": 7 not in getattr(gate, "UNBUILT", (7,)),
     }
 
@@ -74,11 +76,12 @@ def _capabilities(f):
         ("Planning", "Lead times", 4, 3,
          "Learns each supplier's real lead time and plans with it",
          "Score suppliers on promised against delivered and shift orders to the reliable ones"),
-        ("Planning", "Replenishment", 8, 4 if f["policies"] and f["plutus"] else 3 if f["plutus"] else 2,
-         "Plutus drafts orders from the numbers and orders the 'to order' lines after 15 days"
-         if f["plutus"] else "Buffers say what to order, but Plutus needs the Claude command line",
-         "Let policies release routine orders without a person" if not f["policies"]
-         else "Close the loop: judge each order afterwards and adjust"),
+        ("Planning", "Replenishment", 8,
+         4 if f["replenish"] and f["policies"] else 3 if f["replenish"] else 2,
+         "Plutus writes the order the DDMRP buffers ask for, by itself, every hour" if f["replenish"]
+         else "Buffers say what to order, a person writes the order",
+         "Judge each order afterwards against what arrived and adjust" if f["replenish"] and f["policies"]
+         else "Let policies release routine orders without a person"),
         ("Planning", "Stock accuracy", 5, 3 if f["scanning"] else 2,
          "Says which articles to count next, a person counts",
          "Scanning, and finding the cause of a gap by itself"),
@@ -101,9 +104,9 @@ def _capabilities(f):
         ("Execution", "Quotes and awards", 4, 3 if hasattr(pricing, "from_reply") else 2,
          "Compares answers and awards one; the prices are typed in",
          "Send requests to several suppliers and read the prices out of the replies"),
-        ("Control", "Spend control", 8, 4 if f["policies"] else 3,
-         "Routine baskets pass, unusual ones are held for a person" if not f["policies"]
-         else "Policies decide what passes, the rest is held",
+        ("Control", "Spend control", 8, 4 if (f["policies"] or f["judge"]) else 3,
+         "Routine baskets pass, unusual ones are held for a person" if not (f["policies"] or f["judge"])
+         else "Policies and Terminus decide what passes and what is cancelled, the rest is held for a person",
          "Rules a person sets (supplier, ceiling, price band) that release routine buys on their own"
          if not f["policies"] else "Check each automatic pass afterwards against the delivered price"),
         ("Control", "Invoice matching", 4, 3,

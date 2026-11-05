@@ -769,6 +769,17 @@
                placeholder="leave empty and Plutus picks what is thin; or name them, comma apart">
       </label>
     </div>
+    <p class="eyebrow">Orders from the DDMRP</p>
+    <p class="muted">Plutus orders what the buffers ask for: an article in its red or yellow zone, up to the
+      top of its green, in whole packs. Every hour it writes that as one purchase order, leaving alone
+      what already has an order, a draft, a queued line or a delivery owed. Your charter's limits still
+      apply to the order.</p>
+    <div class="row">
+      <button class="action" id="rp-auto" type="button">...</button>
+      <button class="action ghost" id="rp-run" type="button">order what the buffers ask for now</button>
+    </div>
+    <div id="rp-note"></div>
+    <div class="scroll-x short-box"><table id="table-replenish"></table></div>
     <p class="eyebrow">Bill to</p>
     <div class="row">
       <label class="field grow"><span>company name</span><input id="bill-company" autocomplete="organization"></label>
@@ -842,6 +853,15 @@
     <p class="muted">What Plutus (the buyer) and Terminus (the name reader) are free to do and what they
       must never do. Both go to the model with its instructions, and the limits are applied again in code
       to whatever it answers.</p>
+    <div class="row">
+      <label class="field narrow"><span>Terminus decides baskets</span>
+        <select id="jd-mode"><option value="off">off</option><option value="dry_run">dry run</option>
+        <option value="live">live</option></select></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="jd-save" type="button">set</button></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action ghost" id="jd-run" type="button">look at the held baskets now</button></label>
+    </div>
+    <p class="muted" id="jd-state"></p>
+    <div id="jd-note"></div>
     <div id="charters-body"></div>
     <div id="charters-note"></div>
   </div>
@@ -4676,7 +4696,7 @@ function drawCharters(data) {
   for (const bot of ["plutus", "terminus"]) {
     const c = data[bot];
     const box = el("div", { className: "sheet" }, [
-      el("div", { className: "sheet-title" }, [el("strong", { textContent: bot === "plutus" ? "Plutus, the buyer" : "Terminus, the name reader" })]),
+      el("div", { className: "sheet-title" }, [el("strong", { textContent: (bot === "plutus" ? "Plutus, the buyer" : "Terminus, the gate keeper") + ` (${c.source})` })]),
       el("p", { className: "eyebrow", textContent: "Free to" }),
       el("ul", {}, c.freedom.map((t) => el("li", { textContent: t }))),
       el("p", { className: "eyebrow", textContent: "Never" }),
@@ -4714,6 +4734,67 @@ function drawCharters(data) {
 }
 
 async function loadCharters() { try { drawCharters(await api("/api/charters")); } catch {} }
+
+// ---- Plutus orders from the DDMRP; Terminus approves and cancels ------------------------
+
+function drawReplenish(data) {
+  $("rp-auto").textContent = data.auto ? "Plutus orders by itself: ON, turn off" : "Plutus orders by itself: OFF, turn on";
+  $("rp-auto").dataset.on = data.auto ? "1" : "0";
+  const left = (data.left_alone ?? []).map((r) => ({ article: r.article, zone: r.zone, quantity: null,
+    supplier: null, reason: `left alone: ${r.why}` }));
+  renderTable($("table-replenish"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Zone", cell: (row) => td(row.zone) },
+    { label: "Order", numeric: true, cell: (row) => td(row.quantity == null ? "" : (row.packs
+        ? `${row.packs} ${row.pack_label} (${showNum(row.quantity)})` : showNum(row.quantity))) },
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "Why", cell: (row) => td(row.reason) },
+  ], [...(data.to_order ?? []), ...left], "The buffers ask for nothing now.");
+}
+
+async function loadReplenish() { try { drawReplenish(await api("/api/replenish")); } catch {} }
+
+$("rp-auto").addEventListener("click", async () => {
+  try { drawReplenish(await api("/api/replenish/auto", postJson({ on: $("rp-auto").dataset.on !== "1" }))); }
+  catch (e) { notice($("rp-note"), "bad", e.message); }
+});
+$("rp-run").addEventListener("click", async () => {
+  $("rp-run").disabled = true;
+  try {
+    const done = await api("/api/replenish/run", { method: "POST" });
+    drawReplenish(done);
+    notice($("rp-note"), done.list_id ? "ok" : "warn", done.list_id
+      ? `Order #${done.list_id} written: ${done.lines} line(s). It is in Purchase orders.`
+      : "Nothing to order: the buffers ask for nothing that is not already on its way."
+        + (done.cuts.length ? ` Cut by the charter: ${done.cuts.map((c) => `${c.article} (${c.why})`).join("; ")}.` : ""));
+    loadDdmrp();
+  } catch (e) { notice($("rp-note"), "bad", e.message); }
+  finally { $("rp-run").disabled = false; }
+});
+
+function drawJudge(data) {
+  $("jd-mode").value = data.mode;
+  $("jd-state").textContent = data.mode === "off"
+    ? "Terminus only reads names. Nothing is approved or cancelled by it."
+    : data.mode === "dry_run"
+      ? `Dry run, ${data.dry_days} of ${data.min_dry_days} days: it logs what it would approve or cancel and does nothing.`
+      : "Live: it approves and cancels baskets inside its limits, signed TERMINUS in the gate's log.";
+}
+
+async function loadJudge() { try { drawJudge(await api("/api/judge")); } catch {} }
+
+$("jd-save").addEventListener("click", async () => {
+  try { drawJudge(await api("/api/judge/mode", postJson({ mode: $("jd-mode").value }))); notice($("jd-note"), "ok", "Set."); }
+  catch (e) { notice($("jd-note"), "bad", e.message); loadJudge(); }
+});
+$("jd-run").addEventListener("click", async () => {
+  try {
+    const done = await api("/api/judge/run", { method: "POST" });
+    notice($("jd-note"), "ok", done.decided.length
+      ? done.decided.map((d) => `#${d.request_id} ${d.does}`).join(", ") : "Nothing to decide.");
+    loadPolicies(); loadGate();
+  } catch (e) { notice($("jd-note"), "bad", e.message); }
+});
 
 // ---- calendar, supplier terms, exchange rates, the photo archive ---------
 
@@ -5638,7 +5719,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(), loadPolicies(), loadCharters(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(), loadPolicies(), loadCharters(), loadReplenish(), loadJudge(),
       loadPacks(), loadCompare(), loadDisputes(), loadDispatches(), loadComing(),
     ]);
     notice($("global-notice"), "", "");

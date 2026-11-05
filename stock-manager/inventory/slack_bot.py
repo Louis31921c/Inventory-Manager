@@ -238,7 +238,8 @@ def build_app(config, channels):
             await asyncio.to_thread(gate.record_check, config.db_path, request_id,
                                     answer["verdict"], answer["note"], answer["lines"])
             try:
-                from . import policies
+                from . import judge, policies
+                await asyncio.to_thread(judge.decide, config.db_path, request_id)
                 await asyncio.to_thread(policies.auto_decide, config.db_path, request_id)
             except Exception:
                 pass

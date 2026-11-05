@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, archive, audit, autonomy, charters, feedback, policies, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
+from . import (account, agents, alerts, archive, audit, autonomy, charters, feedback, judge, policies, replenish, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
@@ -186,6 +186,11 @@ async def _watch_loop():
     while True:
         try:
             await asyncio.to_thread(feedback.learn, config.db_path)
+            ordered = await asyncio.to_thread(replenish.run, config.db_path)
+            if ordered.get("lines"):
+                log.info("Plutus ordered %d line(s) from the DDMRP (order #%s)", ordered["lines"],
+                         ordered["list_id"])
+            await asyncio.to_thread(judge.decide, config.db_path)
             did = await asyncio.to_thread(policies.run, config.db_path, config)
             if did.get("acted"):
                 log.info("policies acted %d time(s)", did["acted"])
@@ -857,6 +862,7 @@ async def check_gate(request: Request, request_id: int):
     gate.record_check(config.db_path, request_id, answer["verdict"], answer["note"],
                       answer["lines"])
     event(request, "gate.check", f"request #{request_id}", answer["verdict"])
+    await asyncio.to_thread(judge.decide, config.db_path, request_id)
     await asyncio.to_thread(policies.auto_decide, config.db_path, request_id)
     return {"request": gate.one(config.db_path, request_id), "agent": answer}
 
@@ -1701,6 +1707,50 @@ def reset_limit(request: Request, bot: str, key: str):
     return charters.overview(config.db_path)
 
 
+# ---- Plutus orders from the DDMRP, Terminus decides baskets ------------------------
+
+class Mode(BaseModel):
+    mode: str
+
+
+@app.get("/api/replenish")
+def read_replenish():
+    """What the DDMRP buffers ask for now, and what is left alone because it is already on its way."""
+    return replenish.overview(config.db_path)
+
+
+@app.post("/api/replenish/run")
+def run_replenish(request: Request):
+    done = replenish.place(config.db_path, who(request)[0] or "PLUTUS")
+    event(request, "replenish.run", f"order #{done['list_id']}" if done["list_id"] else "nothing to order",
+          f"{done['lines']} line(s)")
+    return {**done, **replenish.overview(config.db_path)}
+
+
+@app.post("/api/replenish/auto")
+def switch_replenish(request: Request, body: Switch):
+    replenish.set_auto(config.db_path, body.on, who(request)[0])
+    return replenish.overview(config.db_path)
+
+
+@app.get("/api/judge")
+def read_judge():
+    return judge.status(config.db_path)
+
+
+@app.post("/api/judge/mode")
+def set_judge_mode(request: Request, body: Mode):
+    _do(request, "terminus.mode", body.mode, lambda: judge.set_mode(config.db_path, body.mode, who(request)[0]))
+    return judge.status(config.db_path)
+
+
+@app.post("/api/judge/run")
+def run_judge(request: Request):
+    done = judge.decide(config.db_path)
+    event(request, "terminus.run", f"{len(done)} basket(s)")
+    return {"decided": [{"request_id": i, "does": what} for i, what in done], **judge.status(config.db_path)}
+
+
 @app.get("/api/tuning")
 def read_tuning():
     """What the app has learned from corrections, refusals, stock-outs and short counts."""
@@ -2522,7 +2572,16 @@ async def draft_order(request: Request, body: OrderDraft):
                                 "Nothing worth ordering: no article is under its reorder point.")
 
     refused = feedback.refusals(config.db_path)
-    keep = ("article", "designation", "reference", "supplier", "per_week", "on_hand", "on_order",
+    # The DDMRP is the rule for what to order: its zone and its number go beside the forecast's.
+    buffers, _chain, _span = ddmrp.buffers(config.db_path)
+    zones = {b["article"]: b for b in buffers}
+    for row in rows:
+        b = zones.get(row["article"])
+        if b is not None:
+            row["ddmrp"] = {"zone": b["zone"], "net_flow": b["net_flow"], "top_of_red": b["top_of_red"],
+                            "top_of_yellow": b["top_of_yellow"], "top_of_green": b["top_of_green"],
+                            "to_order": b["to_order"] if b["zone"] in ("red", "yellow") else 0}
+    keep = ("article", "ddmrp", "designation", "reference", "supplier", "per_week", "on_hand", "on_order",
             "lead_days", "lead_source", "qty_factor", "safety_factor", "lead_demand", "safety_stock", "reorder_point", "cover_days", "suggested", "state",
             "risk", "backorders")
     planner = {

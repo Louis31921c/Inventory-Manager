@@ -4744,8 +4744,8 @@ def test_plutus_is_cut_back_to_its_charter_whatever_the_model_wrote(db_path):
     kept, cuts, changed = charters.enforce_plutus(db_path, wrote, planner, named=(),
                                                   refused={"BAD": 2})
     by = {line["article"]: line["quantity"] for line in kept}
-    assert by["BOLT"] == 200                                          # at most twice the suggestion
-    assert by["WASHER"] == 300                                        # whole boxes of 100
+    assert by["BOLT"] == 125                                          # at most 1.25 times the buffer's number
+    assert by["WASHER"] == 300                                        # 250 in whole boxes of 100
     why = {c["article"]: c["why"] for c in cuts}
     assert "planner suggests nothing" in why["NUT"] and "not in the planner" in why["GHOST"]
     assert "refused 2 times" in why["BAD"]
@@ -5020,3 +5020,122 @@ def test_the_bot_rules_can_be_read_from_a_folder_and_a_half_edited_file_cannot_s
             free, never, numbers = charters.rules(bot)
             assert free == charters.BUILTIN_FREEDOM[bot] and never == charters.BUILTIN_NEVER[bot]
             assert {k: v[0] for k, v in numbers.items()} == {k: v[0] for k, v in charters.BUILTIN[bot].items()}
+
+
+def _ddmrp_shelf(db_path):
+    """Four weeks of use for three articles. BOLT is counted at almost nothing (red), NUT is counted
+    comfortably (green), WASHER sits between (yellow)."""
+    for number in range(1, 5):
+        day = date(2026, 10, 1) + timedelta(days=number * 5)
+        for article, quantity in (("BOLT", 100), ("NUT", 100), ("WASHER", 100)):
+            db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                            order_date=(day - timedelta(days=5)).isoformat(),
+                                            lines=[Line(article=article, quantity=quantity)]),
+                         f"dd-{article}-{number}", "", "T")
+    return {"BOLT": 5, "NUT": 5000}
+
+
+def test_plutus_orders_what_the_ddmrp_buffers_ask_for_and_leaves_alone_what_is_on_its_way(db_path):
+    from inventory import charters, ddmrp, replenish
+
+    today = date(2026, 11, 3)
+    counts = _ddmrp_shelf(db_path)
+    for article, quantity in counts.items():
+        db.save_stock_count(db_path, article, quantity, "T")
+    zones = {r["article"]: r for r in ddmrp.buffers(db_path)[0]}
+    assert zones["BOLT"]["zone"] in ("red", "yellow") and zones["NUT"]["zone"] in ("green", "over")
+
+    asked, left = replenish.proposals(db_path, today)
+    names = {r["article"]: r for r in asked}
+    assert "BOLT" in names and "NUT" not in names                      # only red or yellow
+    assert names["BOLT"]["quantity"] == names["BOLT"]["buffer_asks"] == float(zones["BOLT"]["to_order"])
+    assert "zone" in names["BOLT"]["reason"] and "top of yellow" in names["BOLT"]["reason"]
+
+    placed = replenish.place(db_path, today=today)
+    assert placed["list_id"] and placed["lines"] == len(asked)
+    order = db.read(db_path, "SELECT drafter FROM purchase_orders WHERE list_id = ?", [placed["list_id"]])
+    assert order[0][0].upper() == "PLUTUS"
+    lines = db.read(db_path, "SELECT article, quantity, in_stock FROM purchase_order_lines WHERE list_id = ?",
+                    [placed["list_id"]])
+    assert {a for a, _q, _s in lines} >= {"BOLT"} and all(s is False for _a, _q, s in lines)
+
+    # The same hour again: what was ordered is on its way, so nothing is ordered twice.
+    again = replenish.place(db_path, today=today)
+    assert again["list_id"] is None and any("Plutus ordered it" in x["why"] for x in again["left"])
+
+    # Switched off, the hourly run does nothing; the charter's limits still cut the order.
+    replenish.set_auto(db_path, False, "T")
+    assert replenish.run(db_path, today)["skipped"]
+    replenish.set_auto(db_path, True, "T")
+    db.write(db_path, "DELETE FROM purchase_order_lines RETURNING 1")
+    db.write(db_path, "DELETE FROM purchase_orders RETURNING 1")
+    charters.set_limit(db_path, "plutus", "max_lines", 1)
+    cut = replenish.place(db_path, today=today)
+    assert cut["lines"] == 1 and (len(asked) == 1 or any("1-line limit" in c["why"] for c in cut["cuts"]))
+
+
+def test_terminus_approves_and_cancels_inside_its_limits_and_starts_in_dry_run(db_path):
+    from inventory import charters, gate, judge
+
+    now = datetime(2026, 11, 3, 10, 0)
+    assert judge.mode(db_path) == "off" and judge.decide(db_path, None, now) == []
+
+    counter = iter(range(1, 100))
+    bolt = [{"article": "BOLT", "quantity": 5, "unit_price": 10.0, "usual": 10.0, "found": []}]
+
+    def held(reasons, total=100.0, lines=None, check="same"):
+        reading = {"reasons": reasons, "total": total, "lines": lines or [
+            {"article": f"ART{next(counter)}", "quantity": 5, "unit_price": 10.0, "usual": 10.0, "found": []}]}
+        request_id = gate.ask(db_path, reading, channel="c", shop="s", asked_by="T")
+        if check:
+            gate.record_check(db_path, request_id, check, "names")
+        return request_id
+
+    first = held(["first-article"], lines=bolt)
+    judge.set_mode(db_path, "dry_run", "T", today=date(2026, 11, 3))
+    assert judge.decide(db_path, first, now) == [(first, "approve")]
+    assert gate.one(db_path, first)["state"] == "checked"              # dry run: nothing done
+    with pytest.raises(ValueError):
+        judge.set_mode(db_path, "live", "T", today=date(2026, 11, 4))  # one day is not three
+    log = db.read(db_path, "SELECT decision, acted, mode FROM policy_log WHERE policy_name = 'TERMINUS'")
+    assert log == [("allowed", False, "dry_run")]
+    judge.set_mode(db_path, "live", "T", today=date(2026, 11, 7))
+    assert judge.decide(db_path, first, now) == [(first, "approve")]
+    assert gate.one(db_path, first)["state"] == "approved" and gate.one(db_path, first)["decided_by"] == "TERMINUS"
+
+    # What it will not approve: a doubt about the names, a reason a person decides, the money limits.
+    unsure = held(["first-article"], check="unsure")
+    dear = held(["dear-line"])
+    supplier = held(["new-supplier"])
+    big = held(["over-ceiling"], total=900.0)
+    unchecked = held(["first-article"], check=None)
+    assert judge.decide(db_path, None, now) == []
+    for request_id in (unsure, dear, supplier, big, unchecked):
+        assert gate.one(db_path, request_id)["state"] in ("waiting", "checked")
+    # ...until its limits say so: dear lines allowed, and a higher total for the over-ceiling one.
+    charters.set_limit(db_path, "terminus", "allow_dear_line", 1)
+    charters.set_limit(db_path, "terminus", "approve_max_total", 1000)
+    assert {i for i, _w in judge.decide(db_path, None, now)} == {dear, big}
+    charters.set_limit(db_path, "terminus", "approve_per_day", 150)   # 100 + 900 already passed it
+    again = held(["first-article"], total=60.0)
+    assert judge.decide(db_path, again, now) == []
+
+    # Cancelling: a repeat of an approved basket, an article refused before, and a stale one.
+    repeat = held(["first-article"], lines=bolt)
+    assert judge.decide(db_path, repeat, now) == [(repeat, "cancel")]
+    assert gate.one(db_path, repeat)["state"] == "cancelled"
+    feedback_refusals = [held(["dear-line"], lines=[{"article": "GHOST", "quantity": 1, "unit_price": 1.0,
+                                                    "usual": 1.0, "found": []}]) for _ in range(2)]
+    for request_id in feedback_refusals:
+        gate.cancel(db_path, request_id, "PERSON", "no")
+    third = held(["dear-line"], lines=[{"article": "GHOST", "quantity": 1, "unit_price": 1.0, "usual": 1.0,
+                                       "found": []}])
+    assert judge.decide(db_path, third, now) == [(third, "cancel")]
+    stale = held(["new-supplier"], lines=[{"article": "OLDIE", "quantity": 1, "unit_price": 1.0, "usual": 1.0,
+                                           "found": []}])
+    assert judge.decide(db_path, stale, now + timedelta(days=20)) == [(stale, "cancel")]
+    assert gate.one(db_path, stale)["decided_by"] == "TERMINUS"
+    # A basket a person decided is theirs.
+    assert gate.one(db_path, feedback_refusals[0])["decided_by"] == "PERSON"
+    judge.set_mode(db_path, "off", "T")
+    assert judge.decide(db_path, None, now) == []
