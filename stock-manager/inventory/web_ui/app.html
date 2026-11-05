@@ -770,13 +770,16 @@
       </label>
     </div>
     <p class="eyebrow">Orders from the DDMRP</p>
-    <p class="muted">Plutus orders what the buffers ask for: an article in its red or yellow zone, up to the
-      top of its green, in whole packs. Every hour it writes that as one purchase order, leaving alone
-      what already has an order, a draft, a queued line or a delivery owed. Your charter's limits still
-      apply to the order.</p>
+    <p class="muted">Plutus orders the way a logistics manager does: one big order every cycle (every
+      <span id="rp-cycle">14</span> days, on the same weekday) for everything that will not last until the
+      next one, up to the top of its green plus the use of the cycle. Between cycles it writes only a small
+      urgent order, once a day at most, for an article already in red with nothing on the way. It leaves
+      alone what is on its way, and asks for a count of what the books show below zero.</p>
+    <p id="rp-next"></p>
     <div class="row">
       <button class="action" id="rp-auto" type="button">...</button>
-      <button class="action ghost" id="rp-run" type="button">order what the buffers ask for now</button>
+      <button class="action ghost" id="rp-run" type="button">write the big order now</button>
+      <button class="action ghost" id="rp-urgent" type="button">write an urgent order now</button>
     </div>
     <div id="rp-note"></div>
     <div class="scroll-x short-box"><table id="table-replenish"></table></div>
@@ -4740,16 +4743,26 @@ async function loadCharters() { try { drawCharters(await api("/api/charters")); 
 function drawReplenish(data) {
   $("rp-auto").textContent = data.auto ? "Plutus orders by itself: ON, turn off" : "Plutus orders by itself: OFF, turn on";
   $("rp-auto").dataset.on = data.auto ? "1" : "0";
-  const left = (data.left_alone ?? []).map((r) => ({ article: r.article, zone: r.zone, quantity: null,
-    supplier: null, reason: `left alone: ${r.why}` }));
+  $("rp-cycle").textContent = data.cycle_days;
+  $("rp-next").textContent = `Next big order: ${data.next_cycle}`
+    + (data.last_cycle ? ` (the last was ${data.last_cycle})` : " (none yet)")
+    + `. Urgent now: ${(data.urgent ?? []).length} article(s).`;
+  const mark = (rows, label) => rows.map((r) => ({ ...r, kind: label }));
+  const left = (data.left_alone ?? []).map((r) => ({ article: r.article, zone: r.zone, kind: "left alone",
+    quantity: null, reason: r.why }));
+  const count = (data.to_count ?? []).map((r) => ({ article: r.article, zone: "", kind: "count first",
+    quantity: null, reason: r.why }));
   renderTable($("table-replenish"), [
+    { label: "For", cell: (row) => td(row.kind) },
     { label: "Article", cell: (row) => td(row.article) },
     { label: "Zone", cell: (row) => td(row.zone) },
     { label: "Order", numeric: true, cell: (row) => td(row.quantity == null ? "" : (row.packs
         ? `${row.packs} ${row.pack_label} (${showNum(row.quantity)})` : showNum(row.quantity))) },
     { label: "Supplier", cell: (row) => td(row.supplier) },
     { label: "Why", cell: (row) => td(row.reason) },
-  ], [...(data.to_order ?? []), ...left], "The buffers ask for nothing now.");
+  ], [...mark(data.to_order ?? [], "next big order"), ...mark((data.urgent ?? []).filter(
+      (u) => !(data.to_order ?? []).some((o) => o.article === u.article)), "urgent"), ...count, ...left],
+  "The buffers ask for nothing now.");
 }
 
 async function loadReplenish() { try { drawReplenish(await api("/api/replenish")); } catch {} }
@@ -4758,10 +4771,10 @@ $("rp-auto").addEventListener("click", async () => {
   try { drawReplenish(await api("/api/replenish/auto", postJson({ on: $("rp-auto").dataset.on !== "1" }))); }
   catch (e) { notice($("rp-note"), "bad", e.message); }
 });
-$("rp-run").addEventListener("click", async () => {
-  $("rp-run").disabled = true;
+async function writeOrder(button, kind) {
+  button.disabled = true;
   try {
-    const done = await api("/api/replenish/run", { method: "POST" });
+    const done = await api(`/api/replenish/run?kind=${kind}`, { method: "POST" });
     drawReplenish(done);
     notice($("rp-note"), done.list_id ? "ok" : "warn", done.list_id
       ? `Order #${done.list_id} written: ${done.lines} line(s). It is in Purchase orders.`
@@ -4769,8 +4782,10 @@ $("rp-run").addEventListener("click", async () => {
         + (done.cuts.length ? ` Cut by the charter: ${done.cuts.map((c) => `${c.article} (${c.why})`).join("; ")}.` : ""));
     loadDdmrp();
   } catch (e) { notice($("rp-note"), "bad", e.message); }
-  finally { $("rp-run").disabled = false; }
-});
+  finally { button.disabled = false; }
+}
+$("rp-run").addEventListener("click", () => writeOrder($("rp-run"), "cycle"));
+$("rp-urgent").addEventListener("click", () => writeOrder($("rp-urgent"), "urgent"));
 
 function drawJudge(data) {
   $("jd-mode").value = data.mode;

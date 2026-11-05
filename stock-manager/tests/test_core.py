@@ -5035,43 +5035,88 @@ def _ddmrp_shelf(db_path):
     return {"BOLT": 5, "NUT": 5000}
 
 
-def test_plutus_orders_what_the_ddmrp_buffers_ask_for_and_leaves_alone_what_is_on_its_way(db_path):
-    from inventory import charters, ddmrp, replenish
+def test_plutus_orders_once_a_cycle_for_what_will_not_last_and_only_urgently_between(db_path):
+    from inventory import charters, ddmrp, prices, replenish, stockctl
 
-    today = date(2026, 11, 3)
     counts = _ddmrp_shelf(db_path)
     for article, quantity in counts.items():
         db.save_stock_count(db_path, article, quantity, "T")
+    prices.remember(db_path, "BOLT", 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
+    prices.remember(db_path, "NUT", 1.0, supplier="ACME", seen_on=date(2026, 9, 1))
     zones = {r["article"]: r for r in ddmrp.buffers(db_path)[0]}
     assert zones["BOLT"]["zone"] in ("red", "yellow") and zones["NUT"]["zone"] in ("green", "over")
 
-    asked, left = replenish.proposals(db_path, today)
+    monday = date(2026, 11, 9)
+    # The rhythm: nothing until the sitting; the first one is the next Monday, at working hours.
+    assert replenish.next_cycle(db_path, date(2026, 11, 4)) == monday
+    assert replenish.cycle_due(db_path, datetime(2026, 11, 9, 7, 0)) is False          # before 8h
+    assert replenish.cycle_due(db_path, datetime(2026, 11, 7, 10, 0)) is False         # not yet
+    assert replenish.cycle_due(db_path, datetime(2026, 11, 9, 8, 0)) is True
+    replenish._put(db_path, "plutus_last_cycle", "2026-10-26")                          # a sitting two weeks ago
+    assert replenish.next_cycle(db_path, date(2026, 11, 5)) == monday
+    assert replenish.cycle_due(db_path, datetime(2026, 11, 10, 10, 0)) is True          # missed on the day: caught up
+    replenish._put(db_path, "plutus_last_cycle", "")
+
+    asked, left = replenish.proposals(db_path, monday, "cycle")
     names = {r["article"]: r for r in asked}
-    assert "BOLT" in names and "NUT" not in names                      # only red or yellow
-    assert names["BOLT"]["quantity"] == names["BOLT"]["buffer_asks"] == float(zones["BOLT"]["to_order"])
-    assert "zone" in names["BOLT"]["reason"] and "top of yellow" in names["BOLT"]["reason"]
+    assert "BOLT" in names and "NUT" not in names                                      # NUT lasts the cycle
+    bolt = names["BOLT"]
+    assert bolt["quantity"] >= float(zones["BOLT"]["to_order"])                         # refill plus the cycle's use
+    assert "next sitting in 14 days" in bolt["reason"] and "top of green" in bolt["reason"]
+    assert bolt["quantity"] <= zones["BOLT"]["adu"] * 90                                # the cover limit
 
-    placed = replenish.place(db_path, today=today)
-    assert placed["list_id"] and placed["lines"] == len(asked)
-    order = db.read(db_path, "SELECT drafter FROM purchase_orders WHERE list_id = ?", [placed["list_id"]])
-    assert order[0][0].upper() == "PLUTUS"
-    lines = db.read(db_path, "SELECT article, quantity, in_stock FROM purchase_order_lines WHERE list_id = ?",
-                    [placed["list_id"]])
-    assert {a for a, _q, _s in lines} >= {"BOLT"} and all(s is False for _a, _q, s in lines)
+    # Stock held back for a work item is not free: it brings an article into the order.
+    db.save_stock_count(db_path, "NUT", 400, "T")
+    near = {r["article"] for r in replenish.proposals(db_path, monday, "cycle")[0]}
+    stockctl.reserve(db_path, "NUT", "NORD", "W1", 390, user="T", force=True)
+    held = {r["article"] for r in replenish.proposals(db_path, monday, "cycle")[0]}
+    assert "NUT" in held and held >= near
 
-    # The same hour again: what was ordered is on its way, so nothing is ordered twice.
-    again = replenish.place(db_path, today=today)
-    assert again["list_id"] is None and any("Plutus ordered it" in x["why"] for x in again["left"])
+    # The sitting writes ONE order, and the urgent ones are in it.
+    placed = replenish.run(db_path, now=datetime(2026, 11, 9, 9, 0))
+    assert [kind for kind, _i, _n in placed["orders"]] == ["cycle"]
+    list_id = placed["orders"][0][1]
+    lines = db.read(db_path, "SELECT article, in_stock FROM purchase_order_lines WHERE list_id = ?", [list_id])
+    assert "BOLT" in {a for a, _s in lines} and all(s is False for _a, s in lines)
+    assert db.read(db_path, "SELECT upper(drafter) FROM purchase_orders WHERE list_id = ?", [list_id]) == [("PLUTUS",)]
+    assert replenish.last_cycle(db_path) == monday
+    assert replenish.next_cycle(db_path, date(2026, 11, 10)) == date(2026, 11, 23)     # a fortnight on, a Monday
 
-    # Switched off, the hourly run does nothing; the charter's limits still cut the order.
-    replenish.set_auto(db_path, False, "T")
-    assert replenish.run(db_path, today)["skipped"]
-    replenish.set_auto(db_path, True, "T")
+    # Hour after hour nothing more is written: what is ordered is on its way.
+    for hour in (10, 11, 15):
+        assert replenish.run(db_path, now=datetime(2026, 11, 9, hour, 0))["orders"] == []
+
+    # Between sittings only an article in red with nothing on the way, once a day, and small.
     db.write(db_path, "DELETE FROM purchase_order_lines RETURNING 1")
     db.write(db_path, "DELETE FROM purchase_orders RETURNING 1")
-    charters.set_limit(db_path, "plutus", "max_lines", 1)
-    cut = replenish.place(db_path, today=today)
-    assert cut["lines"] == 1 and (len(asked) == 1 or any("1-line limit" in c["why"] for c in cut["cuts"]))
+    out = replenish.run(db_path, now=datetime(2026, 11, 12, 9, 0))
+    assert [kind for kind, _i, _n in out["orders"]] in ([], ["urgent"])
+    again = replenish.run(db_path, now=datetime(2026, 11, 12, 14, 0))
+    assert again["orders"] == []                                                       # never twice a day
+
+    # Switched off, it does nothing; a too-small supplier order waits.
+    replenish.set_auto(db_path, False, "T")
+    assert replenish.run(db_path, now=datetime(2026, 11, 23, 9, 0))["skipped"]
+    replenish.set_auto(db_path, True, "T")
+    charters.set_limit(db_path, "plutus", "min_supplier_order", 1_000_000)
+    db.write(db_path, "DELETE FROM purchase_order_lines RETURNING 1")
+    db.write(db_path, "DELETE FROM purchase_orders RETURNING 1")
+    small = replenish.place(db_path, today=monday, kind="cycle")
+    assert all("waits for the next sitting" in c["why"] or c["why"] for c in small["cuts"])
+
+
+def test_an_article_with_untrustworthy_books_is_ordered_from_zero_and_a_count_is_asked_for(db_path):
+    from inventory import replenish
+
+    _ddmrp_shelf(db_path)
+    # Orders shipped for more BOLT than were ever delivered: the books go below zero.
+    db.save_purchase_order(db_path, {"list_date": date(2026, 10, 1), "site": "NORD", "drafter": "X",
+                                     "lines": [{"article": "BOLT", "quantity": 900.0}]}, None, None, "T")
+    asked, _left, to_count = replenish._build(db_path, date(2026, 11, 9), "cycle")
+    assert any(c["article"] == "BOLT" and "below zero" in c["why"] for c in to_count)
+    bolt = next((r for r in asked if r["article"] == "BOLT"), None)
+    if bolt is not None:
+        assert bolt["quantity"] <= bolt["top_of_green"] and "count it" in bolt["reason"]
 
 
 def test_terminus_approves_and_cancels_inside_its_limits_and_starts_in_dry_run(db_path):

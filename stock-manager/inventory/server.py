@@ -187,9 +187,8 @@ async def _watch_loop():
         try:
             await asyncio.to_thread(feedback.learn, config.db_path)
             ordered = await asyncio.to_thread(replenish.run, config.db_path)
-            if ordered.get("lines"):
-                log.info("Plutus ordered %d line(s) from the DDMRP (order #%s)", ordered["lines"],
-                         ordered["list_id"])
+            for kind, list_id, lines in ordered.get("orders", []):
+                log.info("Plutus wrote the %s order #%s: %d line(s) from the DDMRP", kind, list_id, lines)
             await asyncio.to_thread(judge.decide, config.db_path)
             did = await asyncio.to_thread(policies.run, config.db_path, config)
             if did.get("acted"):
@@ -1720,10 +1719,12 @@ def read_replenish():
 
 
 @app.post("/api/replenish/run")
-def run_replenish(request: Request):
-    done = replenish.place(config.db_path, who(request)[0] or "PLUTUS")
+def run_replenish(request: Request, kind: str = "cycle"):
+    if kind not in ("cycle", "urgent"):
+        raise HTTPException(422, "The order is a cycle order or an urgent one.")
+    done = replenish.place(config.db_path, who(request)[0] or "PLUTUS", kind=kind)
     event(request, "replenish.run", f"order #{done['list_id']}" if done["list_id"] else "nothing to order",
-          f"{done['lines']} line(s)")
+          f"{kind}, {done['lines']} line(s)")
     return {**done, **replenish.overview(config.db_path)}
 
 

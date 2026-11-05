@@ -256,3 +256,11 @@ functionnalities to developp :
         and cancels (inventory/judge.py): off, then dry run, then live after 3 days; approves when
         every line is the same article inside its limits; cancels a repeat, a twice-refused article
         or a stale basket; signed TERMINUS. Both charters in the bot-rules folder updated
+
+- DONE (asked in chat): Plutus orders on a rhythm, not every hour: one big consolidated order every 14
+        days (Monday, working hours) for every counted, in-use article that would fall under the top of
+        yellow before the next sitting, up to the top of green plus the cycle's use; between sittings
+        only a small urgent order, once a day, for an article already in red. Common sense built in:
+        leave alone what is on its way, held-back stock is not free, 90-day cover limit, no use in 8
+        weeks means no order, a supplier under 30 EUR waits, books below zero are ordered from zero
+        (one buffer at most) and a count is asked for. Written in bot-rules/plutus.md

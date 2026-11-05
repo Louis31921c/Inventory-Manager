@@ -554,7 +554,9 @@ database of its own to run a simulation on; the year itself is written in
 - `bot-rules/` (next to this file): `plutus.md` and `terminus.md`, the charters as plain text, read when
   `BOT_RULES_DIR` points at the folder (the built-in text is used otherwise, and for anything a file
   leaves out). Edited files apply on the next request.
-- `replenish.py`: Plutus's DDMRP ordering (hourly, `POST /api/replenish/run`, switch at `/api/replenish/auto`).
+- `replenish.py`: Plutus's DDMRP ordering on a rhythm: one cycle order every `cycle_days` (14) on `order_weekday`,
+  an urgent order between (once a day), checked hourly by the server; `POST /api/replenish/run?kind=cycle|urgent`,
+  switch at `/api/replenish/auto`.
   `judge.py`: Terminus approves and cancels held baskets (off, dry run, live after 3 days; `/api/judge`).
 - `charters.py`: freedom, prohibitions and numeric limits for Plutus and Terminus (`bot_limits`).
   Added to the model's prompt and enforced again on its answer: `enforce_plutus` cuts or corrects
