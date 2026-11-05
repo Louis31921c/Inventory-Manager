@@ -4,7 +4,7 @@ The two bots and what each may do on its own.
 
 | File | Bot | What it does |
 |---|---|---|
-| `plutus.md` | Plutus, the buyer | orders what the DDMRP buffers ask for: articles in the red or yellow zone, up to the top of the green |
+| `plutus.md` | Plutus, the buyer | runs the purchasing: orders from the DDMRP on a rhythm, sends the orders, approves and places baskets, pays matched bills, from a wallet a person funds |
 | `terminus.md` | Terminus, the gate keeper | reads names, then approves or cancels the baskets the gate holds, inside its limits |
 
 Each file has three parts:

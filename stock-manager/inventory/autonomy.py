@@ -123,8 +123,10 @@ def _capabilities(f):
          "Every change recorded; every purchase decision sealed in a hash chain",
          "Nothing more to add"),
         ("Control", "Payments", 2, 3 if f["payments"] else 0,
-         "Nothing schedules or makes a payment",
-         "A payment run from due dates, as a file for the bank"),
+         "Plutus instructs matched bills from its wallet into a bank file; a person uploads it, or a "
+         "connector would send it" if f["payments"] else "Nothing schedules or makes a payment",
+         "A bank connector, so the file is sent and the bills confirmed without a person"
+         if f["payments"] else "A payment run from due dates, as a file for the bank"),
     ]
 
 

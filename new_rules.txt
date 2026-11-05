@@ -264,3 +264,10 @@ functionnalities to developp :
         leave alone what is on its way, held-back stock is not free, 90-day cover limit, no use in 8
         weeks means no order, a supplier under 30 EUR waits, books below zero are ordered from zero
         (one buffer at most) and a count is asked for. Written in bot-rules/plutus.md
+
+- DONE (asked in chat): Plutus is autonomous, from a wallet a person funds (inventory/wallet.py,
+        purchasing.py, payments.py): it sends its orders to the suppliers, approves and places baskets
+        (steps 6 and 7 of the round are built), and pays matched bills. Hard ceiling is the wallet
+        (balance less commitments); beyond it Plutus's own limits in bot-rules/plutus.md; mode off, then
+        dry run, live only after 3 days of that. A payment is instructed into a SEPA bank file and a bill
+        turns paid when the bank taking the batch is confirmed: the program does not move money at a bank

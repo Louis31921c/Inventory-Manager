@@ -557,6 +557,8 @@ database of its own to run a simulation on; the year itself is written in
 - `bot-rules/` (next to this file): `plutus.md` and `terminus.md`, the charters as plain text, read when
   `BOT_RULES_DIR` points at the folder (the built-in text is used otherwise, and for anything a file
   leaves out). Edited files apply on the next request.
+- `wallet.py`, `purchasing.py`, `payments.py`: the wallet ledger Plutus spends from, Plutus sending orders, approving and
+  placing baskets and paying matched bills (hourly, `POST /api/plutus/run`), and the SEPA batch a payment goes into.
 - `replenish.py`: Plutus's DDMRP ordering on a rhythm: one cycle order every `cycle_days` (14) on `order_weekday`,
   an urgent order between (once a day), checked hourly by the server; `POST /api/replenish/run?kind=cycle|urgent`,
   switch at `/api/replenish/auto`.

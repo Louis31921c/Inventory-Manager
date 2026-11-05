@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, archive, audit, autonomy, charters, feedback, judge, policies, replenish, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
+from . import (account, agents, alerts, archive, audit, autonomy, charters, feedback, judge, payments, policies, purchasing, replenish, wallet, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
@@ -190,6 +190,9 @@ async def _watch_loop():
             for kind, list_id, lines in ordered.get("orders", []):
                 log.info("Plutus wrote the %s order #%s: %d line(s) from the DDMRP", kind, list_id, lines)
             await asyncio.to_thread(judge.decide, config.db_path)
+            bought = await asyncio.to_thread(purchasing.run, config.db_path, config)
+            if bought.get("done"):
+                log.info("Plutus: %s", ", ".join(f"{k} {v}" for k, v in bought.items() if k != "done" and v))
             did = await asyncio.to_thread(policies.run, config.db_path, config)
             if did.get("acted"):
                 log.info("policies acted %d time(s)", did["acted"])
@@ -1750,6 +1753,117 @@ def run_judge(request: Request):
     done = judge.decide(config.db_path)
     event(request, "terminus.run", f"{len(done)} basket(s)")
     return {"decided": [{"request_id": i, "does": what} for i, what in done], **judge.status(config.db_path)}
+
+
+# ---- the wallet, Plutus's purchasing, and the payments --------------------------------
+
+class Money(BaseModel):
+    amount: float
+    note: str | None = None
+
+
+class Bank(BaseModel):
+    supplier: str
+    iban: str
+    bic: str | None = None
+    holder: str | None = None
+
+
+class Payer(BaseModel):
+    name: str = ""
+    iban: str = ""
+    bic: str = ""
+
+
+def _payer():
+    rows = dict(db.read(config.db_path, "SELECT key, value FROM policy_settings WHERE key LIKE 'payer_%'"))
+    return {"name": rows.get("payer_name", ""), "iban": rows.get("payer_iban", ""),
+            "bic": rows.get("payer_bic", "")}
+
+
+def _wallet_overview():
+    rules = charters.limits(config.db_path, "plutus")
+    return {**wallet.overview(config.db_path, rules["wallet_reserve"]),
+            "plutus": purchasing.status(config.db_path), "payer": _payer(),
+            "payments": payments.listing(config.db_path),
+            "log": [r for r in policies.log_recent(config.db_path, 80) if r["policy"] == "PLUTUS"][:40]}
+
+
+@app.get("/api/wallet")
+def read_wallet():
+    return _wallet_overview()
+
+
+@app.post("/api/wallet/deposit")
+def wallet_deposit(request: Request, body: Money):
+    _do(request, "wallet.deposit", f"{body.amount} EUR", lambda: wallet.deposit(
+        config.db_path, body.amount, body.note, who(request)[0]))
+    return _wallet_overview()
+
+
+@app.post("/api/wallet/withdraw")
+def wallet_withdraw(request: Request, body: Money):
+    _do(request, "wallet.withdraw", f"{body.amount} EUR", lambda: wallet.withdraw(
+        config.db_path, body.amount, body.note, who(request)[0]))
+    return _wallet_overview()
+
+
+@app.post("/api/plutus/mode")
+def set_plutus_mode(request: Request, body: Mode):
+    _do(request, "plutus.mode", body.mode, lambda: purchasing.set_mode(config.db_path, body.mode, who(request)[0]))
+    return _wallet_overview()
+
+
+@app.post("/api/plutus/run")
+def run_plutus(request: Request):
+    done = purchasing.run(config.db_path, config)
+    event(request, "plutus.run", str(done.get("done", 0)), done.get("skipped"))
+    return {**done, **_wallet_overview()}
+
+
+@app.put("/api/bank")
+def put_bank(request: Request, body: Bank):
+    _do(request, "bank.set", body.supplier, lambda: payments.set_bank(
+        config.db_path, body.supplier, body.iban, body.bic, body.holder))
+    return _wallet_overview()
+
+
+@app.put("/api/payer")
+def put_payer(request: Request, body: Payer):
+    if body.iban.strip() and payments.valid_iban(body.iban) is None:
+        raise HTTPException(422, "That is not a valid IBAN.")
+    for key, value in (("payer_name", body.name.strip()), ("payer_iban", body.iban.replace(" ", "").upper()),
+                       ("payer_bic", body.bic.strip())):
+        db.write(config.db_path, "INSERT INTO policy_settings (key, value) VALUES (?, ?) "
+                                 "ON CONFLICT (key) DO UPDATE SET value = excluded.value RETURNING key", [key, value])
+    event(request, "payer.set", body.name.strip() or "empty")
+    return _wallet_overview()
+
+
+@app.get("/api/payments/batch/{batch_id}.xml")
+def payment_file(request: Request, batch_id: int):
+    payer = _payer()
+    try:
+        xml = payments.batch_file(config.db_path, batch_id, payer["name"], payer["iban"], payer["bic"])
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "payment.export", f"batch #{batch_id}")
+    return Response(xml, media_type="application/xml",
+                    headers={"Content-Disposition": f'attachment; filename="sepa-batch-{batch_id}.xml"'})
+
+
+@app.post("/api/payments/batch/{batch_id}/executed")
+def payments_executed(request: Request, batch_id: int):
+    _do(request, "payment.confirm", f"batch #{batch_id}", lambda: payments.confirm(
+        config.db_path, batch_id, who(request)[0]))
+    return _wallet_overview()
+
+
+@app.post("/api/payments/{payment_id}/cancel")
+def cancel_payment(request: Request, payment_id: int):
+    _do(request, "payment.cancel", f"payment #{payment_id}", lambda: payments.cancel(
+        config.db_path, payment_id, who(request)[0]))
+    return _wallet_overview()
 
 
 @app.get("/api/tuning")

@@ -3273,11 +3273,8 @@ def test_the_round_has_seven_steps_and_says_which_are_not_built():
     # sit outside a wedge.
     for _, name, _ in gate.STEPS:
         assert name.strip() and len(name) <= 40
-    # Nothing here places an order with a supplier, and nothing holds money.
-    assert gate.UNBUILT == (6, 7)
-    for number, _, detail in gate.STEPS:
-        if number in gate.UNBUILT:
-            assert detail.startswith("not built")
+    # The wallet and the placing of orders are built: every step of the round is walked.
+    assert gate.UNBUILT == ()
 
 
 def test_the_round_says_where_a_request_has_got_to(db_path):
@@ -3294,9 +3291,9 @@ def test_the_round_says_where_a_request_has_got_to(db_path):
     assert asked["step"] == 5 and "yours" in asked["why"]
 
     gate.approve(db_path, request_id, "ALEX")
-    # Approved and nothing places it, so the round stops at the step that is not built.
+    # Approved and not yet placed: the round waits at placing the order, which is Plutus's.
     placing = gate.where_we_are(db_path)
-    assert placing["step"] == 7 and "by hand" in placing["why"]
+    assert placing["step"] == 7 and "Plutus places it" in placing["why"]
 
     gate.mark_ordered(db_path, request_id, "ALEX")
     assert gate.where_we_are(db_path)["step"] == 0
@@ -3568,14 +3565,13 @@ def test_each_step_of_the_round_remembers_what_happened_in_it(db_path):
     assert cancelled["request_id"] == second
 
 
-def test_the_steps_that_are_not_built_say_so_instead_of_inventing_a_past(db_path):
-    from inventory import gate
+def test_the_wallet_and_placing_steps_show_what_was_really_written_down(db_path):
+    from inventory import gate, wallet
 
-    wallet = gate.step_history(db_path, 6)
-    assert wallet["built"] is False and wallet["rows"] == []
-    assert "not built" in wallet["note"].lower()
-    # Nothing here orders from a supplier: step 7 only ever shows the chat's own purchase
-    # orders, and a shelf with none has no orders to list.
+    assert gate.step_history(db_path, 6)["built"] is True and gate.step_history(db_path, 6)["rows"] == []
+    wallet.deposit(db_path, 250.0, "float", "ALEX")
+    rows = gate.step_history(db_path, 6)["rows"]
+    assert rows[0]["title"] == "deposit +250.00 EUR" and rows[0]["who"] == "ALEX"
     assert gate.step_history(db_path, 7)["rows"] == []
 
 
@@ -4607,7 +4603,7 @@ def test_autonomy_rates_the_architecture_and_moves_with_what_is_switched_on(tmp_
     assert 0 < bare["score"] < 100 and all(0 <= p["level"] <= 4 for p in bare["parts"])
     assert bare["next_steps"][0]["to_win"] >= bare["next_steps"][-1]["to_win"]   # ranked by value
     by_name = {p["capability"]: p for p in bare["parts"]}
-    assert by_name["Payments"]["level"] == 0 and by_name["Audit trail"]["level"] == 4
+    assert by_name["Payments"]["level"] == 3 and by_name["Audit trail"]["level"] == 4   # payments are instructed
     assert by_name["Placing orders"]["level"] == 1                            # no outgoing mail
     assert by_name["Spend control"]["level"] == 4                             # policies are built
     assert by_name["Alerts"]["level"] == 2                                    # nothing is pushed
@@ -4620,7 +4616,7 @@ def test_autonomy_rates_the_architecture_and_moves_with_what_is_switched_on(tmp_
     monkeypatch.setenv("NOTIFY_VIA", "slack")
     wired = autonomy.measure(config=make_config(tmp_path, mail=ready))
     now = {p["capability"]: p for p in wired["parts"]}
-    assert now["Placing orders"]["level"] == 3 and now["Alerts"]["level"] == 3   # policies exist, mail sends
+    assert now["Placing orders"]["level"] == 4 and now["Alerts"]["level"] == 3   # step 7 is walked, mail sends
     assert now["Delivery notes"]["level"] == 3 and now["Supplier replies"]["level"] == 3
     assert wired["score"] > bare["score"]
     assert abs(wired["score"] - sum(p["points"] for p in wired["parts"])) < 0.01
@@ -4776,7 +4772,7 @@ def test_plutus_is_cut_back_to_its_charter_whatever_the_model_wrote(db_path):
     charters.reset(db_path, "plutus", "max_lines")
     assert charters.limits(db_path, "plutus")["max_lines"] == 60
     text = charters.prompt_block(db_path, "plutus")
-    assert "YOUR CHARTER (PLUTUS)" in text and "Never send an order to a supplier" in text and "max_order_value = 300" in text
+    assert "YOUR CHARTER (PLUTUS)" in text and "Never spend more than the wallet" in text and "max_order_value = 300" in text
 
 
 def test_terminus_cannot_say_same_on_a_doubt(db_path, monkeypatch):
@@ -5009,7 +5005,7 @@ def test_the_bot_rules_can_be_read_from_a_folder_and_a_half_edited_file_cannot_s
     (rules / "plutus.md").write_text("nothing useful here", encoding="utf-8")
     os.utime(rules / "plutus.md", (1_900_000_000, 1_900_000_000))
     assert charters.limits(db_path, "plutus")["max_lines"] == 60
-    assert "Never send an order to a supplier" in charters.prompt_block(db_path, "plutus")
+    assert "Never spend more than the wallet" in charters.prompt_block(db_path, "plutus")
     assert charters.source("terminus") == "built in"             # no terminus.md in that folder
 
     # The files that ship are the built-in charters, word for word.
@@ -5184,3 +5180,206 @@ def test_terminus_approves_and_cancels_inside_its_limits_and_starts_in_dry_run(d
     assert gate.one(db_path, feedback_refusals[0])["decided_by"] == "PERSON"
     judge.set_mode(db_path, "off", "T")
     assert judge.decide(db_path, None, now) == []
+
+
+def test_the_wallet_only_spends_what_a_person_put_in_and_never_goes_below_zero(db_path):
+    from inventory import wallet
+
+    assert wallet.balance(db_path) == 0 and wallet.available(db_path) == 0
+    with pytest.raises(ValueError):
+        wallet.commit(db_path, "ACME", 10, "po", 1)                     # nothing in it
+    wallet.deposit(db_path, 1000, "float", "ALEX")
+    assert wallet.available(db_path) == 1000
+    wallet.commit(db_path, "ACME", 300, "po", 1)
+    wallet.commit(db_path, "ACME", 200, "po", 2)
+    assert (wallet.balance(db_path), wallet.committed(db_path), wallet.available(db_path)) == (1000, 500, 500)
+    assert wallet.available(db_path, reserve=100) == 400
+    with pytest.raises(ValueError):
+        wallet.commit(db_path, "ACME", 600, "po", 3)                    # the same money cannot be promised twice
+    with pytest.raises(ValueError):
+        wallet.withdraw(db_path, 600, "x", "ALEX")                      # what is committed is not free
+    with pytest.raises(ValueError):
+        wallet.pay(db_path, "ACME", 2000, 1)                            # more than it holds
+    wallet.pay(db_path, "ACME", 350, 7)                                 # frees 300 then 50 of the second
+    assert (wallet.balance(db_path), wallet.committed(db_path)) == (650, 150)
+    wallet.withdraw(db_path, 500, "taken back", "ALEX")
+    assert wallet.balance(db_path) == 150
+    kinds = [e["kind"] for e in reversed(wallet.ledger(db_path))]
+    assert kinds == ["deposit", "order", "order", "payment", "withdraw"]
+    with pytest.raises(ValueError):
+        wallet.deposit(db_path, -5)
+
+
+def test_a_bill_is_instructed_into_a_sepa_batch_and_only_paid_when_the_bank_has_taken_it(db_path):
+    from inventory import bills as bills_module
+    from inventory import payments, wallet
+
+    assert payments.valid_iban("FR14 2004 1010 0505 0001 3M02 606") == "FR1420041010050500013M02606"
+    assert payments.valid_iban("FR14 2004 1010 0505 0001 3M02 607") is None
+    wallet.deposit(db_path, 500, "float", "ALEX")
+    bill = bills_module.save(db_path, bills_module.shape(
+        {"supplier": "ACME", "number": "F-1", "bill_date": "2026-10-01", "due_date": "2026-11-01",
+         "net": 120.0, "total": 120.0}, source="t"))
+    with pytest.raises(ValueError):
+        payments.instruct(db_path, bill, 120.0)                          # no bank details
+    with pytest.raises(ValueError):
+        payments.set_bank(db_path, "ACME", "not an iban")
+    payments.set_bank(db_path, "acme", "GB82 WEST 1234 5698 7654 32", holder="ACME LTD")
+    made = payments.instruct(db_path, bill, 120.0, "PLUTUS")
+    assert wallet.balance(db_path) == 380
+    assert bills_module.one(db_path, bill)["state"] == "to pay"          # not paid until the bank says so
+    with pytest.raises(ValueError):
+        payments.instruct(db_path, bill, 120.0)                          # no second payment
+    with pytest.raises(ValueError):
+        payments.batch_file(db_path, made["batch_id"], "", "")           # the paying account is needed
+    xml = payments.batch_file(db_path, made["batch_id"], "Chantiers du Sud & Fils", "FR14 2004 1010 0505 0001 3M02 606")
+    assert "<NbOfTxs>1</NbOfTxs>" in xml and "<CtrlSum>120.00</CtrlSum>" in xml
+    assert "GB82WEST12345698765432" in xml and "Chantiers du Sud &amp; Fils" in xml and 'Ccy="EUR">120.00' in xml
+    with pytest.raises(ValueError):
+        payments.cancel(db_path, made["payment_id"])                     # already exported
+    payments.confirm(db_path, made["batch_id"], "ALEX", today=date(2026, 11, 2))
+    done = bills_module.one(db_path, bill)
+    assert done["state"] == "paid" and done["paid_on"] == "2026-11-02"
+
+    second = bills_module.save(db_path, bills_module.shape(
+        {"supplier": "ACME", "number": "F-2", "bill_date": "2026-10-05", "net": 30.0, "total": 30.0}, source="t"))
+    cancelled = payments.instruct(db_path, second, 30.0)
+    assert wallet.balance(db_path) == 350
+    assert payments.cancel(db_path, cancelled["payment_id"]) is True     # still in the open batch: money back
+    assert wallet.balance(db_path) == 380
+
+
+def _purchasing_world(db_path, funded=2000.0):
+    """ACME has delivered four times and has prices and an address; Plutus has written an order for it."""
+    from inventory import wallet
+
+    list_id, mail = _policy_world(db_path)
+    db.write(db_path, "UPDATE purchase_orders SET drafter = 'PLUTUS', created_at = now() WHERE list_id = ? RETURNING 1",
+             [list_id])
+    if funded:
+        wallet.deposit(db_path, funded, "float", "ALEX")
+    return list_id, mail
+
+
+def test_plutus_sends_its_orders_from_the_wallet_only_when_live_and_inside_its_limits(db_path):
+    from inventory import charters, outbox, purchasing, wallet
+
+    _Link.sent = []
+    config = make_config(db_path.parent, mail=_ready_mail())
+    list_id, mail = _purchasing_world(db_path)                          # 10 BOLT x 2.00 + 4 NUT x 1.00 = 24 EUR
+    tuesday = datetime(2026, 11, 3, 10, 0)
+    link = lambda m, f: _Link()
+
+    assert purchasing.run(db_path, config, tuesday, link)["skipped"] == "Plutus is off"
+    purchasing.set_mode(db_path, "dry_run", "ALEX", today=date(2026, 11, 3))
+    purchasing.run(db_path, config, tuesday, link)
+    assert _Link.sent == [] and outbox.one(db_path, mail["mail_id"])["state"] == "draft"
+    log = db.read(db_path, "SELECT action, decision, acted, mode, amount FROM policy_log "
+                           "WHERE policy_name = 'PLUTUS' AND supplier = 'ACME'")
+    assert log == [("send_order", "allowed", False, "dry_run", 24.0)]
+    tubes = db.read(db_path, "SELECT decision, reasons FROM policy_log WHERE policy_name = 'PLUTUS' "
+                             "AND supplier = 'TUBES SA'")
+    assert tubes[0][0] == "denied" and "no address" in tubes[0][1]      # the pipe lines have nobody to be sent to
+    with pytest.raises(ValueError):
+        purchasing.set_mode(db_path, "live", "ALEX", today=date(2026, 11, 4))
+    purchasing.set_mode(db_path, "live", "ALEX", today=date(2026, 11, 7))
+
+    # Refused: outside hours, over the wallet, over its own limit; the draft stays for a person.
+    purchasing.run(db_path, config, datetime(2026, 11, 3, 21, 0), link)
+    wallet.withdraw(db_path, 1990, "emptied", "ALEX")
+    purchasing.run(db_path, config, datetime(2026, 11, 3, 11, 0), link)
+    reasons = " | ".join(r["reasons"] or "" for r in policies_log(db_path) if r["supplier"] == "ACME")
+    assert "outside 8h to 17h" in reasons and "the wallet has 10.00 EUR free" in reasons
+    assert _Link.sent == [] and outbox.one(db_path, mail["mail_id"])["state"] == "draft"
+    wallet.deposit(db_path, 1990, "refilled", "ALEX")
+    charters.set_limit(db_path, "plutus", "send_max_total", 10)
+    purchasing.run(db_path, config, datetime(2026, 11, 3, 12, 0), link)
+    assert any("over the 10 a person must send" in (r["reasons"] or "") for r in policies_log(db_path))
+    charters.reset(db_path, "plutus", "send_max_total")
+
+    # Inside everything: it sends, commits the money, and does not do it twice.
+    done = purchasing.run(db_path, config, datetime(2026, 11, 3, 13, 0), link)
+    assert done["sent"] == 1 and len(_Link.sent) == 1
+    assert outbox.one(db_path, mail["mail_id"])["state"] == "sent"
+    assert wallet.committed(db_path) == 24.0 and wallet.available(db_path) == 1976.0
+    assert purchasing.run(db_path, config, datetime(2026, 11, 3, 14, 0), link)["sent"] == 0
+    assert len(_Link.sent) == 1
+
+    # A person's order is a person's to send.
+    other = db.save_purchase_order(db_path, {"list_date": date(2026, 11, 3), "site": "N", "drafter": "ALEX",
+                                             "lines": [{"article": "BOLT", "quantity": 1.0, "in_stock": False}]},
+                                   None, None, "ALEX")
+    outbox.draft_order(db_path, other)
+    purchasing.run(db_path, config, datetime(2026, 11, 3, 15, 0), link)
+    assert len(_Link.sent) == 1
+    # And with the mode off nothing else happens.
+    purchasing.set_mode(db_path, "off", "ALEX")
+    assert purchasing.run(db_path, config, datetime(2026, 11, 3, 16, 0), link)["skipped"]
+
+
+def policies_log(db_path):
+    from inventory import policies
+
+    return [r for r in policies.log_recent(db_path, 40) if r["policy"] == "PLUTUS"]
+
+
+def test_plutus_approves_places_and_pays_inside_its_limits(db_path):
+    from inventory import bills as bills_module
+    from inventory import charters, gate, outbox, payments, prices, purchasing, wallet
+
+    _Link.sent = []
+    config = make_config(db_path.parent, mail=_ready_mail())
+    _outbox_world(db_path)                                              # prices, contact for ACME
+    for number in range(4):
+        day = date(2026, 9, 5) + timedelta(days=7 * number)
+        db.save_note(db_path, make_note(supplier="ACME", delivery_date=day.isoformat(),
+                                        order_date=(day - timedelta(days=5)).isoformat(),
+                                        lines=[Line(article="BOLT", quantity=10)]), f"pa{number}", "", "T")
+    wallet.deposit(db_path, 1000, "float", "ALEX")
+    purchasing.set_mode(db_path, "dry_run", "ALEX", today=date(2026, 10, 1))
+    purchasing.set_mode(db_path, "live", "ALEX", today=date(2026, 10, 9))
+    link = lambda m, f: _Link()
+    now = datetime(2026, 11, 3, 10, 0)
+
+    # A held basket Terminus read as the same: Plutus approves it, places it, and the round is complete.
+    reading = {"reasons": ["first-article"], "total": 40.0, "lines": [
+        {"article": "BOLT", "quantity": 20, "unit_price": 2.0, "usual": 2.0, "supplier": "ACME", "found": []}]}
+    request_id = gate.ask(db_path, reading, channel="c", shop="acme.example", asked_by="T", site="NORD")
+    assert purchasing.run(db_path, config, now, link)["approved"] == 0   # not read by Terminus yet
+    gate.record_check(db_path, request_id, "same", "names")
+    done = purchasing.run(db_path, config, now, link)
+    assert done["approved"] == 1 and done["placed"] == 1
+    assert gate.one(db_path, request_id)["state"] == "ordered"
+    assert gate.one(db_path, request_id)["decided_by"] == "PLUTUS"
+    assert len(_Link.sent) == 1 and wallet.committed(db_path) == 40.0
+
+    # One it must not approve: read as unsure, or past its money limit.
+    unsure = gate.ask(db_path, {"reasons": ["first-article"], "total": 40.0, "lines": [
+        {"article": "NUT", "quantity": 5, "unit_price": 1.0, "usual": 1.0, "supplier": "ACME", "found": []}]})
+    gate.record_check(db_path, unsure, "unsure", "not sure")
+    big = gate.ask(db_path, {"reasons": ["over-ceiling"], "total": 900.0, "lines": [
+        {"article": "PIPE", "quantity": 100, "unit_price": 9.0, "usual": 9.0, "supplier": "ACME", "found": []}]})
+    gate.record_check(db_path, big, "same", "names")
+    purchasing.run(db_path, config, now, link)
+    assert gate.one(db_path, unsure)["state"] == "checked" and gate.one(db_path, big)["state"] == "checked"
+
+    # Paying: only a matched bill, near its due date, to a supplier with bank details, from funds.
+    bill = bills_module.save(db_path, bills_module.shape(
+        {"supplier": "ACME", "number": "F-9", "bill_date": "2026-10-31", "due_date": "2026-11-04",
+         "net": 80.0, "total": 80.0}, source="t"))
+    purchasing.run(db_path, config, now, link)
+    assert "no bank details" in " ".join(r["reasons"] or "" for r in policies_log(db_path))
+    payments.set_bank(db_path, "ACME", "GB82 WEST 1234 5698 7654 32")
+    purchasing.run(db_path, config, datetime(2026, 11, 3, 11, 0), link)
+    # 4 deliveries of 10 BOLT at 2.00 since the start come to 80.00: the bill is matched and due tomorrow.
+    assert wallet.balance(db_path) == 920 and bills_module.one(db_path, bill)["state"] == "to pay"
+    assert wallet.committed(db_path) == 0.0                              # the payment freed what ACME was promised
+    assert db.read(db_path, "SELECT state FROM payments WHERE bill_id = ?", [bill]) == [("instructed",)]
+    # A bill that does not match is left alone, and so is one that is not yet near its due date.
+    off = bills_module.save(db_path, bills_module.shape(
+        {"supplier": "ACME", "number": "F-10", "bill_date": "2026-11-01", "due_date": "2026-12-20",
+         "net": 500.0, "total": 500.0}, source="t"))
+    purchasing.run(db_path, config, datetime(2026, 11, 3, 12, 0), link)
+    assert db.read(db_path, "SELECT count(*) FROM payments WHERE bill_id = ?", [off]) == [(0,)]
+    reasons = " | ".join(r["reasons"] or "" for r in policies_log(db_path))
+    assert "not yet near its due date" in reasons or "not matched" in reasons

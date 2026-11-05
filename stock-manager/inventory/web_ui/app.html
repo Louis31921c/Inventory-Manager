@@ -810,6 +810,53 @@
 </section>
 
 <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+  <div class="card" id="wallet-card">
+    <h2>Wallet and Plutus</h2>
+    <p class="muted">Plutus checks the inventory and the DDMRP buffers, orders, sends the orders to the
+      suppliers, approves and places baskets, and pays matched bills. It spends only from this wallet, which
+      only a person funds, and inside the limits in Rules for the two bots. It starts off, then in dry run
+      (it writes down what it would do and does nothing), and can go live after <span id="wl-days">3</span> days.
+      The wallet is this program's own record: a payment is instructed into a bank file, and a bill turns paid
+      when you confirm the bank took it.</p>
+    <div class="row" id="wl-tiles"></div>
+    <div class="row">
+      <label class="field narrow"><span>EUR</span><input id="wl-amount" inputmode="decimal"></label>
+      <label class="field grow"><span>note</span><input id="wl-note" autocomplete="off" placeholder="what this is"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="wl-in" type="button">put in</button></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action ghost" id="wl-out" type="button">take out</button></label>
+    </div>
+    <div class="row">
+      <label class="field narrow"><span>Plutus spends</span><select id="pl-mode"><option value="off">off</option>
+        <option value="dry_run">dry run</option><option value="live">live</option></select></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="pl-set" type="button">set</button></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action ghost" id="pl-run" type="button">run it now</button></label>
+    </div>
+    <p class="muted" id="pl-state"></p>
+    <div id="wl-note-out"></div>
+    <p class="eyebrow">What Plutus did and would do</p>
+    <div class="scroll-x short-box"><table id="table-plutus-log"></table></div>
+    <p class="eyebrow">Ledger</p>
+    <div class="scroll-x short-box"><table id="table-wallet"></table></div>
+    <p class="eyebrow">Payments</p>
+    <div class="scroll-x short-box"><table id="table-pay-batches"></table></div>
+    <div class="scroll-x short-box"><table id="table-payments"></table></div>
+    <p class="eyebrow">Paying account (goes on the bank file)</p>
+    <div class="row">
+      <label class="field grow"><span>name</span><input id="py-name" autocomplete="organization"></label>
+      <label class="field grow"><span>IBAN</span><input id="py-iban" autocomplete="off"></label>
+      <label class="field narrow"><span>BIC</span><input id="py-bic" autocomplete="off"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="py-save" type="button">save</button></label>
+    </div>
+    <p class="eyebrow">Suppliers' bank details</p>
+    <div class="row">
+      <label class="field grow"><span>supplier</span><input id="bk-supplier" autocomplete="off"></label>
+      <label class="field grow"><span>IBAN</span><input id="bk-iban" autocomplete="off"></label>
+      <label class="field narrow"><span>BIC</span><input id="bk-bic" autocomplete="off"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="bk-save" type="button">save</button></label>
+    </div>
+    <div class="scroll-x short-box"><table id="table-banks"></table></div>
+  </div>
+
   <div class="card" id="policies-card">
     <h2>Policies</h2>
     <p class="muted">A policy lets routine work go through without a person: send an order, send a
@@ -4811,6 +4858,101 @@ $("jd-run").addEventListener("click", async () => {
   } catch (e) { notice($("jd-note"), "bad", e.message); }
 });
 
+// ---- the wallet, Plutus's purchasing, the payments --------------------------------
+
+function drawWallet(data) {
+  $("wl-days").textContent = data.plutus.min_dry_days;
+  $("wl-tiles").replaceChildren(statTile("balance", money(data.balance)), statTile("committed to orders", money(data.committed)),
+                                statTile("free to spend", money(data.available)));
+  $("pl-mode").value = data.plutus.mode;
+  $("pl-state").textContent = data.plutus.mode === "off" ? "Plutus does not send, approve, place or pay."
+    : data.plutus.mode === "dry_run" ? `Dry run, ${data.plutus.dry_days} of ${data.plutus.min_dry_days} days: it logs what it would do and does nothing.`
+      : "Live: it sends orders, approves and places baskets and pays matched bills, from the wallet.";
+  $("py-name").value = data.payer.name; $("py-iban").value = data.payer.iban; $("py-bic").value = data.payer.bic;
+  renderTable($("table-plutus-log"), [
+    { label: "When", cell: (row) => td(row.at.replace("T", " ")) },
+    { label: "What", cell: (row) => td(`${row.action} ${row.subject}${row.supplier ? ` (${row.supplier})` : ""}`) },
+    { label: "EUR", numeric: true, cell: (row) => td(row.amount == null ? "" : row.amount.toFixed(2)) },
+    { label: "Decision", cell: (row) => el("span", { className: row.decision === "allowed" ? "ok" : "muted",
+        textContent: row.decision + (row.decision === "allowed" ? (row.acted ? ", done" : ", dry run") : "") }) },
+    { label: "Why not", cell: (row) => td(row.reasons) },
+  ], data.log ?? [], "Nothing yet.");
+  renderTable($("table-wallet"), [
+    { label: "When", cell: (row) => td(row.at.replace("T", " ")) },
+    { label: "What", cell: (row) => td(row.kind) },
+    { label: "EUR", numeric: true, cell: (row) => td(row.amount.toFixed(2)) },
+    { label: "Balance", numeric: true, cell: (row) => td(row.balance.toFixed(2)) },
+    { label: "For", cell: (row) => td([row.supplier, row.ref, row.note].filter(Boolean).join(" · ")) },
+    { label: "By", cell: (row) => td(row.by) },
+  ], data.ledger ?? [], "The wallet is empty.");
+  const pay = data.payments ?? {};
+  const call = (path, options) => async () => {
+    try { drawWallet(await api(path, options)); } catch (e) { notice($("wl-note-out"), "bad", e.message); }
+  };
+  renderTable($("table-pay-batches"), [
+    { label: "Batch", numeric: true, cell: (row) => td(`#${row.batch_id}`) },
+    { label: "State", cell: (row) => td(row.state) },
+    { label: "", cell: (row) => {
+      const box = el("span");
+      if (row.state !== "executed") {
+        box.append(el("a", { className: "mini", href: `/api/payments/batch/${row.batch_id}.xml`, textContent: "bank file (SEPA)" }), " ");
+      }
+      if (row.state === "exported") {
+        const done = el("button", { className: "mini", textContent: "the bank took it" });
+        done.addEventListener("click", call(`/api/payments/batch/${row.batch_id}/executed`, { method: "POST" }));
+        box.append(done);
+      }
+      return box;
+    } },
+  ], pay.batches ?? [], "No payment instructed yet.");
+  renderTable($("table-payments"), [
+    { label: "Bill", numeric: true, cell: (row) => td(`#${row.bill_id}`) },
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "EUR", numeric: true, cell: (row) => td(row.amount.toFixed(2)) },
+    { label: "Batch", numeric: true, cell: (row) => td(`#${row.batch_id}`) },
+    { label: "State", cell: (row) => td(row.state) },
+    { label: "", cell: (row) => {
+      if (row.state !== "instructed") return td("");
+      const stop = el("button", { className: "mini", textContent: "cancel" });
+      stop.addEventListener("click", call(`/api/payments/${row.payment_id}/cancel`, { method: "POST" }));
+      return stop;
+    } },
+  ], pay.payments ?? [], "");
+  renderTable($("table-banks"), [
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "IBAN", cell: (row) => td(row.iban) },
+    { label: "BIC", cell: (row) => td(row.bic) },
+  ], pay.banks ?? [], "No bank details yet: Plutus pays no bill without them.");
+}
+
+async function loadWallet() { try { drawWallet(await api("/api/wallet")); } catch {} }
+
+async function walletAsk(path, body, said) {
+  try {
+    drawWallet(await api(path, postJson(body)));
+    notice($("wl-note-out"), "ok", said);
+  } catch (e) { notice($("wl-note-out"), "bad", e.message); loadWallet(); }
+}
+$("wl-in").addEventListener("click", () => walletAsk("/api/wallet/deposit", { amount: Number($("wl-amount").value), note: $("wl-note").value }, "Put in."));
+$("wl-out").addEventListener("click", () => walletAsk("/api/wallet/withdraw", { amount: Number($("wl-amount").value), note: $("wl-note").value }, "Taken out."));
+$("pl-set").addEventListener("click", () => walletAsk("/api/plutus/mode", { mode: $("pl-mode").value }, "Set."));
+$("pl-run").addEventListener("click", async () => {
+  try {
+    const done = await api("/api/plutus/run", { method: "POST" });
+    drawWallet(done);
+    notice($("wl-note-out"), "ok", done.skipped ? `Nothing run: ${done.skipped}.`
+      : `sent ${done.sent}, approved ${done.approved}, placed ${done.placed}, paid ${done.paid}.`);
+  } catch (e) { notice($("wl-note-out"), "bad", e.message); }
+});
+$("py-save").addEventListener("click", async () => {
+  try { drawWallet(await api("/api/payer", putJson({ name: $("py-name").value, iban: $("py-iban").value, bic: $("py-bic").value })));
+        notice($("wl-note-out"), "ok", "Saved."); } catch (e) { notice($("wl-note-out"), "bad", e.message); }
+});
+$("bk-save").addEventListener("click", async () => {
+  try { drawWallet(await api("/api/bank", putJson({ supplier: $("bk-supplier").value, iban: $("bk-iban").value, bic: $("bk-bic").value })));
+        notice($("wl-note-out"), "ok", "Saved."); } catch (e) { notice($("wl-note-out"), "bad", e.message); }
+});
+
 // ---- calendar, supplier terms, exchange rates, the photo archive ---------
 
 function drawCalendar(data) {
@@ -5734,7 +5876,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(), loadPolicies(), loadCharters(), loadReplenish(), loadJudge(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(), loadPolicies(), loadCharters(), loadReplenish(), loadJudge(), loadWallet(),
       loadPacks(), loadCompare(), loadDisputes(), loadDispatches(), loadComing(),
     ]);
     notice($("global-notice"), "", "");

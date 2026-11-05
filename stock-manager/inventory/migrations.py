@@ -736,6 +736,66 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        28,
+        "a wallet Plutus spends from, what is committed to orders, and the payments it instructs",
+        """
+        CREATE SEQUENCE IF NOT EXISTS wallet_seq START 1;
+        CREATE TABLE IF NOT EXISTS wallet_entries (
+            entry_id        INTEGER PRIMARY KEY DEFAULT nextval('wallet_seq'),
+            happened_at     TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            kind            VARCHAR NOT NULL,
+            amount          DOUBLE NOT NULL,
+            balance_after   DOUBLE NOT NULL,
+            committed_after DOUBLE NOT NULL,
+            ref_kind        VARCHAR,
+            ref_id          INTEGER,
+            supplier        VARCHAR,
+            note            VARCHAR,
+            done_by         VARCHAR
+        );
+        CREATE SEQUENCE IF NOT EXISTS commitment_seq START 1;
+        CREATE TABLE IF NOT EXISTS commitments (
+            commit_id   INTEGER PRIMARY KEY DEFAULT nextval('commitment_seq'),
+            supplier    VARCHAR,
+            amount      DOUBLE NOT NULL,
+            ref_kind    VARCHAR,
+            ref_id      INTEGER,
+            made_on     DATE NOT NULL DEFAULT current_date,
+            state       VARCHAR NOT NULL DEFAULT 'open',
+            released_on DATE
+        );
+        CREATE TABLE IF NOT EXISTS supplier_bank (
+            supplier VARCHAR PRIMARY KEY,
+            iban     VARCHAR NOT NULL,
+            bic      VARCHAR,
+            holder   VARCHAR
+        );
+        CREATE SEQUENCE IF NOT EXISTS batch_seq START 1;
+        CREATE TABLE IF NOT EXISTS payment_batches (
+            batch_id    INTEGER PRIMARY KEY DEFAULT nextval('batch_seq'),
+            created_at  TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            state       VARCHAR NOT NULL DEFAULT 'open',
+            exported_at TIMESTAMP,
+            executed_at TIMESTAMP
+        );
+        CREATE SEQUENCE IF NOT EXISTS payment_seq START 1;
+        CREATE TABLE IF NOT EXISTS payments (
+            payment_id    INTEGER PRIMARY KEY DEFAULT nextval('payment_seq'),
+            bill_id       INTEGER NOT NULL,
+            supplier      VARCHAR,
+            amount        DOUBLE NOT NULL,
+            currency      VARCHAR NOT NULL DEFAULT 'EUR',
+            iban          VARCHAR NOT NULL,
+            batch_id      INTEGER,
+            state         VARCHAR NOT NULL DEFAULT 'instructed',
+            reference     VARCHAR,
+            instructed_at TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            executed_at   TIMESTAMP,
+            done_by       VARCHAR
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

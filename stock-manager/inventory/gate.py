@@ -250,11 +250,11 @@ STEPS = [
     (3, "Control", "is this an article we already know?"),
     (4, "Decision", "whether it can go through, or has to be put to a person"),
     (5, "Manual check", "nothing is bought until a person approves it"),
-    (6, "Wallet check", "not built: nothing here holds funds or bills anything"),
-    (7, "Placing order", "not built: an approved order is placed by hand"),
+    (6, "Wallet check", "the wallet must hold the money before anything is approved or placed"),
+    (7, "Placing order", "Plutus places an approved basket with its supplier, from the wallet"),
 ]
 
-UNBUILT = (6, 7)
+UNBUILT = ()
 
 # How much of an article counts as plenty already on the shelf.
 DWELLING_WEEKS = 8
@@ -301,7 +301,7 @@ def where_we_are(db_path):
     if approved:
         return {"step": 7, "request_id": approved[0][0], "state": APPROVED,
                 "reasons": [], "verdict": None, "said": None, "total": None, "dwelling": [],
-                "why": "Approved. Nothing here places it, so it is placed by hand."}
+                "why": "Approved. Plutus places it with its supplier when the wallet covers it."}
     if baskets:
         return {"step": 1, "request_id": None, "state": None, "reasons": [], "verdict": None,
                 "said": None, "total": None, "dwelling": [],
@@ -319,10 +319,10 @@ STEP_NOTES = {
     3: "What Terminus made of the names, request by request.",
     4: "Every basket the gate stopped, and the reasons it gave.",
     5: "Every answer a person gave: approved, or cancelled.",
-    6: "Not built: nothing here holds funds or bills anything, so there is nothing to "
-       "look back on.",
-    7: "Not built as a purchase: nothing here orders from a supplier. These are the "
-       "baskets that became purchase orders, for a person to place.",
+    6: "The wallet's own ledger: deposits and withdrawals by a person, what Plutus committed to "
+       "orders, and what it paid.",
+    7: "Baskets that became orders with their supplier, placed by Plutus, and the purchase orders "
+       "the chat made.",
 }
 
 
@@ -404,6 +404,13 @@ def step_history(db_path, step, limit=60):
                 add(at, who, f"#{request_id}: cancelled",
                     " · ".join(part for part in (f"it was {body.get('was')}", body.get("why"))
                                if part), request_id)
+
+    elif step == 6:
+        from . import wallet
+
+        for entry in wallet.ledger(db_path, limit):
+            add(entry["at"], entry["by"], f"{entry['kind']} {entry['amount']:+.2f} EUR",
+                " · ".join(part for part in (entry["supplier"], entry["ref"], entry["note"]) if part))
 
     elif step == 7:
         for request_id, _, body, who, at in _log_rows(db_path, (ORDERED,), limit):
