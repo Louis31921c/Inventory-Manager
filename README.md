@@ -351,8 +351,11 @@ A held basket goes through two checks, and they are two different questions.
 
 **Terminus** — Claude, reading the names — answers *is this the article we already know
 under another wording?* The chat asks for `CHEVILLE SPIT FIX 10x100`, the shelf knows
-`343546 - CHEVILLE SPIT FIX 3 10X100`. It answers same, new or unsure, with its reason, and it
-approves nothing. When it cannot be reached, or is not sure, the gate stays shut.
+`343546 - CHEVILLE SPIT FIX 3 10X100`. It answers same, new or unsure, with its reason. When it
+cannot be reached, or is not sure, the answer is unsure and the basket waits for a person. With its
+mode on (Settings, Rules for the two bots) Terminus then also decides: it approves a basket whose
+every line is the same article inside its limits, and cancels a repeat, a twice-refused article or
+a stale basket. Anything it leaves is the person's.
 
 **You** answer the other question — *do we want this, at this price, from this supplier?* — on
 the Waiting for you card, which is on the landing page and only appears when something is

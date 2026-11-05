@@ -1,14 +1,13 @@
 """Terminus: Claude, reading what the chat wants to buy against the names we know.
 
-It answers one question and one only — *is this the article we already have under another
-name?* Dots writes "CHEVILLE SPIT FIX 10x100"; the shelf knows "343546 - CHEVILLE SPIT FIX
-3 10X100". Same thing, written twice. That is a reading job, and it is the one
-Terminus is for.
+It reads one question per line: *is this the article we already have under another name?* Dots
+writes "CHEVILLE SPIT FIX 10x100"; the shelf knows "343546 - CHEVILLE SPIT FIX 3 10X100". Same
+thing, written twice. The answer, same, new or unsure, is evidence on the basket's card.
 
-It never answers the other question — *do we want this, at this price, from this
-supplier?* That one is the person's, and Terminus' answer is evidence on their card, not a
-recommendation to accept. When it cannot be reached, or is not sure, the gate holds:
-it never falls open.
+What is done with the answer is judge.py's: Terminus approves a held basket when every line is
+the same article and its limits allow, and cancels a repeat, a twice-refused article or a stale
+basket. This file only reads names, and it never opens the gate on a doubt: when Terminus
+cannot be reached, or is not sure, the answer is "unsure" and the basket waits for a person.
 """
 
 import re

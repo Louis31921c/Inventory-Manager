@@ -456,7 +456,7 @@ def doings(db_path, limit=40):
 
 
 def record_check(db_path, request_id, verdict, agent_said, matches=()):
-    """What Terminus made of it. It settles the name, never the purchase."""
+    """What Terminus made of the names. Whether to approve is judge.py's, or a person's."""
     db.write(db_path, """
             UPDATE gate_requests
             SET agent_verdict = ?, agent_said = ?, agent_at = current_timestamp,

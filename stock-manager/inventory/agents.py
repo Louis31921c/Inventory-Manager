@@ -1,12 +1,14 @@
-"""The two agents the app runs, both of them Claude, both of them answerable.
+"""The two agents the app runs, both of them answerable, each with a charter (see charters.py).
 
-  Plutus    reads the planner's own numbers and drafts a purchase order
-  Terminus  reads a basket against the names we already know
+  Plutus    the buyer: writes the purchase orders, on a rhythm, from the DDMRP buffers
+  Terminus  the gate keeper: reads a basket against the names we know, then approves or cancels it
 
-They are deliberately two, and deliberately narrow. Plutus proposes what to order and
-signs nothing; Terminus settles what an article is and approves nothing. Neither can
-spend anything: a draft is a draft until a person saves it, and a held basket waits for
-the gate however sure an agent sounds.
+They are deliberately two, and deliberately narrow. Plutus decides what to buy and writes it down
+as a purchase order, one big order each cycle and a small urgent one between; it stops there,
+because sending an order to a supplier is a person's, or a policy's inside its limits. Terminus
+decides the baskets the gate holds, inside limits, and never touches an order or a price. Each
+has numbers a person sets, and the limits are enforced in code on whatever the model answers,
+so an agent that ignores its instructions changes nothing.
 
 Both go out through `ask`, so there is one place where this app talks to Claude, one
 timeout, and one way for it to fail. There is no API key here: the agents run the Claude
@@ -62,8 +64,8 @@ def status():
         "detail": (f"the Claude command line is at {found}" if found
                    else "install the Claude Code CLI, then run claude and /login"),
         "agents": [
-            {"name": PLUTUS, "does": "drafts a purchase order from the planner's numbers"},
-            {"name": TERMINUS, "does": "says whether an article is one we already know"},
+            {"name": PLUTUS, "does": "writes the purchase orders from the DDMRP buffers, once a cycle"},
+            {"name": TERMINUS, "does": "reads the names, then approves or cancels held baskets inside its limits"},
         ],
     }
 
