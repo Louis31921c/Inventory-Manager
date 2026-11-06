@@ -72,8 +72,14 @@ Net flow is the counted shelf minus what open orders still ask for. It is placed
 - **Sending** happens only when a person presses send, through the mailbox's own SMTP server: Gmail (465, SSL), Yahoo (465, SSL), iCloud (587, STARTTLS), Proton Bridge (127.0.0.1:1025). Any other server through `SMTP_HOST`. Microsoft sign-in is read-only, so Outlook cannot send here. A refused send keeps the draft, marked failed, with the reason.
 - **Replies:** the mailbox check files a reply that comes from the same domain the order went to and names its number (n°, no, #, commande, devis, PO) as the confirmation. The first date in the text from yesterday onward becomes the day to expect the goods. A reply to a quote marks it answered.
 - **Chasing:** an order unanswered after 3 days, or confirmed but past its promised day by more than a day, can be chased. At most one reminder every 3 days. Delivery-note lines owed for 7 days with no date, or past their date, get one reminder per supplier. The expected day of an order with no promise is the day sent plus that supplier's usual lead time.
+- **Replies, read:** with the Claude command line present, a reply from a supplier we hold on file is read for what it says (`replies.py`): a new date for an order, the prices of a quote (filed as offers, never awarded), a credit note (recorded against that supplier's one open dispute), or a question (kept as an alert for a person). The mail is data: the reader only fills a form, a sender that is not a known supplier is ignored, a date must be within a year.
+- **Order webhooks:** a supplier can be set up (System, Connections) to receive its orders as signed JSON instead of mail (`channels.py`): `Idempotency-Key`, `X-Timestamp`, `X-Signature` (HMAC-SHA256 with a token that is never shown back). The same draft goes through the same gate, wallet and limits; a 2xx answer is acceptance and a promised date in it sets the day to expect the goods. https only, except localhost.
 - **Quote requests** carry units: piece, linear metre, m2, m3, kg, tonne, litre, hour. States: open, sent, answered, closed.
 - **Contacts:** a contact book loaded from `supplier-contacts.csv` (search by name and company), with Incoterms.
+
+## 4b. Site requests
+
+A request for a site and work item (Site requests screen, `/request` in Discord and Slack) is checked against stock first (`requisitions.py`): what the site has free is held back for the work item, the rest goes through the purchase round as a basket. Each line shows where it is (held back, waiting, approved, ordered, delivered) from the real reservation, gate request and delivery notes; a request closes by itself when every line is in, a late one is an alert, and a finished one is pushed to the alert channels.
 
 ## 5. Money: bills
 
@@ -168,6 +174,8 @@ Exports: inventory, purchase orders, bills and quotes as CSV, XLSX or Parquet (`
 
 | To | When |
 |---|---|
+| A supplier's order webhook | An order for that supplier, once it has cleared the gate, the wallet and the limits |
+| The bank's SFTP folder | A batch of payments, once Plutus is live and `bank_upload` is on; the bank's report is read back |
 | Model provider (Claude, Gemini or OpenAI) | Reading a document, drafting an order, checking names. The photo or text is sent to that provider |
 | Mail servers | Fetching mail, and sending a draft someone approved |
 | Slack, Discord | Only if their tokens are set |
@@ -179,4 +187,4 @@ Exports: inventory, purchase orders, bills and quotes as CSV, XLSX or Parquet (`
 
 ## 16. Not built
 
-Carrier booking and tracking, export to accounting software, a bank connector (payments are a bank file for now), and site requisitions. Microsoft mailboxes cannot send. Proton mail needs a paid plan for Bridge.
+Carrier booking and tracking, export to accounting software, a bank API (the bank file goes by SFTP, nothing else), a driven shop checkout (orders go by mail or webhook), and answering supplier questions without a person. Microsoft mailboxes cannot send. Proton mail needs a paid plan for Bridge.

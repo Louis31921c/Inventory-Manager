@@ -56,6 +56,10 @@ features:
       description: Ask a supplier to price something by the metre, kilo or m3
       usage_hint: "120 ml skirting board; 3 m3 gravel — or nothing, for the form"
       should_escape: false
+    - command: /request
+      description: Ask for what a work item needs; the shelf first, then an order
+      usage_hint: "SITE | WORK ITEM | 12 vis th 6x25, rondelle m8 x100 | 2026-11-20 — or status"
+      should_escape: false
     - command: /stock
       description: What the shelf holds for an article
       usage_hint: "rondelle m8"

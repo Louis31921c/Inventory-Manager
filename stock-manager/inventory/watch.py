@@ -20,7 +20,7 @@ What it looks at:
 import os
 from datetime import date, datetime, timedelta
 
-from . import db, disputes, forecast, gate, matching, outbox, stockctl
+from . import db, disputes, forecast, gate, matching, outbox, replies, requisitions, stockctl
 
 SEVERITIES = ("critical", "high", "normal", "low")
 PRICE_JUMP = 0.25          # a new price this much above the usual one is a notice
@@ -61,6 +61,14 @@ def conditions(db_path, today=None):
                 "critical" if thread["days_waiting"] >= 10 else "normal",
                 f"{thread['supplier']}: {thread['why']} ({thread['kind']} #{thread['ref_id']})",
                 f"waiting {thread['days_waiting']} working day(s), expected {thread['expected_on']}")
+    for late in requisitions.late(db_path, today):
+        add(f"request-late:{late['req_id']}", "request", "high",
+            f"Request #{late['req_id']} for {late['site']} / {late['work_item']} is late",
+            late["summary"])
+    for asked in replies.open_questions(db_path):
+        add(f"question:{asked['mail_id']}", "supplier", "normal",
+            f"{asked['supplier']} asked a question: {asked['subject'] or ''}".strip(),
+            "answer it from the mailbox, then close it")
     for owed in outbox.owing(db_path, today):
         add(f"owing:{owed['supplier']}", "supplier", "normal",
             f"{owed['supplier']} still owes {len(owed['lines'])} line(s) from delivery notes",

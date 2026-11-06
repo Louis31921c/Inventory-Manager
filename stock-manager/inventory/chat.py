@@ -103,6 +103,27 @@ def quote_text(quote):
             f"Send it out and type the prices in when they answer.")
 
 
+def request_reply(db_path, who, site, work_item, items, needed_by=None):
+    """A site request from the chat: stock held back, the rest ordered, and the state told straight away."""
+    from . import baskets, requisitions
+
+    try:
+        made = requisitions.submit(db_path, who, site, work_item, needed_by, baskets.parse_items(items))
+    except ValueError as e:
+        return str(e)
+    return requisitions.text(made)
+
+
+def requests_text(db_path):
+    from . import requisitions
+
+    open_ones = requisitions.listing(db_path)
+    if not open_ones:
+        return "No open request."
+    return "\n\n".join(requisitions.text(one) for one in open_ones[:5]) + (
+        f"\n\n... and {len(open_ones) - 5} more" if len(open_ones) > 5 else "")
+
+
 def stock_text(article, rows):
     if not rows:
         return f"Nothing on the shelf matches **{article}**."

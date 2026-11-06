@@ -311,3 +311,13 @@ functionnalities to developp :
 - DONE: Plutus orders card is the three fields, Bill to and the draft button, nothing else. No Refresh
         button on the DDMRP screens: it rereads every 30 seconds while open and keeps a draft on screen
 - within "plutus order", just leave the fieldtexts, and the fieldtexts for "bill to" + draft the order. Remove the refresh button, it should be automatic
+
+- DONE: Plutus closes the loop with suppliers (replies.py, purchasing.py): supplier replies are read for a new
+        date, quote prices, credit notes and questions; it chases silent orders (twice at most), reminds a
+        supplier of owed lines weekly, and disputes bills that disagree with their deliveries and mails them,
+        each inside limits (send_chases, max_chases, send_disputes, dispute_max_claim) and the dry-run gate
+- DONE: placing for real (channels.py, bankdrop.py): a supplier can take its orders as a signed JSON webhook
+        instead of mail, and the payment file goes to the bank by SFTP with the report read back; System,
+        Connections holds both. A shop checkout and a bank API are not built
+- DONE: site requests (requisitions.py): Site requests screen and /request in Discord and Slack; stock held
+        back first, the rest ordered through the gate, a state per line, closed by itself, late ones alerted

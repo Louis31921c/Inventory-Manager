@@ -190,7 +190,13 @@ def fetch(config, settings):
             try:
                 from . import outbox
 
-                outbox.take_reply(config.db_path, sender, subject, _body(message))
+                body = _body(message)
+                outbox.take_reply(config.db_path, sender, subject, body)
+                # What the reply says (a new date, prices, a credit note, a question) is read and
+                # filed too, when the Claude command line is there to read it.
+                from . import replies
+
+                replies.handle(config.db_path, sender, subject, body)
             except Exception:
                 pass
             for name, media_type, raw in _attachments(message):

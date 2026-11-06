@@ -98,6 +98,21 @@ def cancel(db_path, payment_id, user=None):
     return True
 
 
+def reject(db_path, batch_id, why="rejected by the bank", user=None):
+    """The bank refused a batch it was given: every payment in it is cancelled and its money returns."""
+    for payment_id, bill_id, supplier, amount in db.read(db_path, """
+            SELECT payment_id, bill_id, supplier, amount FROM payments
+            WHERE batch_id = ? AND state = 'instructed'""", [batch_id]):
+        db.write(db_path, "UPDATE payments SET state = 'cancelled' WHERE payment_id = ? RETURNING payment_id",
+                 [payment_id])
+        wallet.refund(db_path, supplier, amount, bill_id, why, user)
+        bills.update(db_path, bill_id, {"note": why})
+    db.write(db_path, "UPDATE payment_batches SET state = 'rejected' WHERE batch_id = ? RETURNING batch_id",
+             [batch_id])
+    audit.record(db_path, user or "PAYMENTS", "payment.reject", f"batch #{batch_id}", why)
+    return True
+
+
 def batch_file(db_path, batch_id, payer_name, payer_iban, payer_bic=None, now=None):
     """The batch as a SEPA credit transfer initiation (pain.001.001.03), and mark it exported."""
     pays = db.read(db_path, """

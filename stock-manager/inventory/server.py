@@ -6,6 +6,7 @@ import html
 import io
 import json
 import logging
+import subprocess
 import time
 import mimetypes
 import os
@@ -26,7 +27,7 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, archive, audit, autonomy, charters, feedback, judge, payments, policies, purchasing, replenish, wallet, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
+from . import (account, agents, alerts, bankdrop, channels, replies, requisitions, archive, audit, autonomy, charters, feedback, judge, payments, policies, purchasing, replenish, wallet, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
@@ -190,6 +191,9 @@ async def _watch_loop():
             for kind, list_id, lines in ordered.get("orders", []):
                 log.info("Plutus wrote the %s order #%s: %d line(s) from the DDMRP", kind, list_id, lines)
             await asyncio.to_thread(judge.decide, config.db_path)
+            for finished in await asyncio.to_thread(requisitions.refresh, config.db_path):
+                await asyncio.to_thread(watch.deliver, config, requisitions.text(finished),
+                                        f"Request #{finished['req_id']} is complete")
             bought = await asyncio.to_thread(purchasing.run, config.db_path, config)
             if bought.get("done"):
                 log.info("Plutus: %s", ", ".join(f"{k} {v}" for k, v in bought.items() if k != "done" and v))
@@ -1865,6 +1869,121 @@ def cancel_payment(request: Request, payment_id: int):
     _do(request, "payment.cancel", f"payment #{payment_id}", lambda: payments.cancel(
         config.db_path, payment_id, who(request)[0]))
     return _wallet_overview()
+
+
+# ---- site requests ----------------------------------------------------------------
+
+class RequestBody(BaseModel):
+    site: str
+    work_item: str
+    needed_by: str | None = None
+    text: str = ""
+    note: str | None = None
+
+
+@app.get("/api/requisitions")
+def read_requisitions(all: bool = False):
+    return {"requests": requisitions.listing(config.db_path, include_done=all)}
+
+
+@app.post("/api/requisitions")
+def open_requisition(request: Request, body: RequestBody):
+    items = baskets.parse_items(body.text)
+    user = who(request)[0] or "?"
+    try:
+        made = requisitions.submit(config.db_path, user, body.site, body.work_item, body.needed_by, items, body.note)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "request.open", f"request #{made['req_id']}", f"{made['site']} / {made['work_item']}")
+    return {"request": made, "requests": requisitions.listing(config.db_path)}
+
+
+@app.post("/api/requisitions/{req_id}/cancel")
+def cancel_requisition(request: Request, req_id: int):
+    _do(request, "request.cancel", f"request #{req_id}", lambda: requisitions.cancel(
+        config.db_path, req_id, who(request)[0]))
+    return {"requests": requisitions.listing(config.db_path)}
+
+
+# ---- how orders reach a supplier, and the bank drop ------------------------------------
+
+class ChannelBody(BaseModel):
+    supplier: str
+    url: str
+    token: str = ""
+
+
+class BankDropBody(BaseModel):
+    host: str = ""
+    port: str = "22"
+    user: str = ""
+    key: str = ""
+    dir: str = ""
+    status_dir: str = ""
+
+
+def _connections():
+    return {"channels": channels.listing(config.db_path), "bank": bankdrop.settings(config.db_path),
+            "bank_ready": bankdrop.ready(config.db_path)[0]}
+
+
+@app.get("/api/connections")
+def read_connections():
+    return _connections()
+
+
+@app.put("/api/channels")
+def put_channel(request: Request, body: ChannelBody):
+    _do(request, "channel.set", body.supplier, lambda: channels.save(
+        config.db_path, body.supplier, body.url, body.token))
+    return _connections()
+
+
+@app.delete("/api/channels/{supplier}")
+def delete_channel(request: Request, supplier: str):
+    _do(request, "channel.remove", supplier, lambda: channels.remove(config.db_path, supplier))
+    return _connections()
+
+
+@app.post("/api/channels/{supplier}/test")
+def test_channel(request: Request, supplier: str):
+    try:
+        done = channels.test(config.db_path, supplier)
+    except (ValueError, outbox.SendError) as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "channel.test", supplier)
+    return {"status": done["status"]}
+
+
+@app.put("/api/bank-drop")
+def put_bank_drop(request: Request, body: BankDropBody):
+    _do(request, "bankdrop.set", body.host or "empty", lambda: bankdrop.save(
+        config.db_path, body.host, body.port, body.user, body.key, body.dir, body.status_dir))
+    return _connections()
+
+
+@app.post("/api/bank-drop/test")
+def test_bank_drop(request: Request):
+    try:
+        bankdrop.check(config.db_path)
+    except (ValueError, OSError, subprocess.SubprocessError) as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "bankdrop.test", None)
+    return {"ok": True}
+
+
+# ---- what suppliers asked ------------------------------------------------------------
+
+@app.get("/api/supplier-questions")
+def supplier_questions():
+    return {"questions": replies.open_questions(config.db_path)}
+
+
+@app.post("/api/supplier-questions/{mail_id}/answered")
+def supplier_question_answered(request: Request, mail_id: int):
+    replies.answered(config.db_path, mail_id)
+    event(request, "reply.answered", f"mail #{mail_id}")
+    return {"questions": replies.open_questions(config.db_path)}
 
 
 @app.get("/api/tuning")

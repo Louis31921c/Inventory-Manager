@@ -282,6 +282,24 @@ def build_app(config, channels):
             channel=channel_id,
             text=say_it(chat.no_article() if stored is None else chat.quote_text(stored)))
 
+    @app.command("/request")
+    async def site_request(ack, body, respond):
+        await ack()
+        if refused(body):
+            return
+        text = (body.get("text") or "").strip()
+        parts = [piece.strip() for piece in text.split("|")]
+        if text.lower() in ("", "status", "list"):
+            await respond(say_it(await asyncio.to_thread(chat.requests_text, config.db_path)))
+            return
+        if len(parts) < 3:
+            await respond("`/request SITE | WORK ITEM | 12 vis th 6x25, rondelle m8 x100 | 2026-11-20` "
+                          "(the day is optional); `/request status` for where they stand")
+            return
+        answer = await asyncio.to_thread(chat.request_reply, config.db_path, body.get("user_name"), parts[0],
+                                         parts[1], parts[2], parts[3] if len(parts) > 3 else None)
+        await respond(say_it(answer))
+
     @app.command("/stock")
     async def stock(ack, body, respond):
         await ack()

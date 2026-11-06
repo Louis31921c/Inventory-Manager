@@ -46,6 +46,22 @@ def set_offer(db_path, quote_id, line_no, unit_price, lead_days=None, valid_unti
     return offers(db_path, quote_id)
 
 
+def from_reply(db_path, quote_id, answers, user=None):
+    """File the prices a supplier's reply gave, line by line, as offers on the quote request.
+    A line with no usable price is skipped. Nothing is awarded: that stays a person's, or a policy's.
+    Gives back how many were filed."""
+    filed = 0
+    for answer in answers:
+        try:
+            set_offer(db_path, quote_id, answer["line_no"], answer.get("unit_price"),
+                      answer.get("lead_days"), answer.get("valid_until"),
+                      "from the supplier's reply", user)
+            filed += 1
+        except (ValueError, KeyError):
+            continue
+    return filed
+
+
 def offers(db_path, quote_id):
     quote = quotes.one(db_path, quote_id)
     if quote is None:

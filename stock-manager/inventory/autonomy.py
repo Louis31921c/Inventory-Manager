@@ -19,7 +19,7 @@ what would raise it. The lines are ranked by the points still to win.
 
 import importlib.util
 
-from . import agents, gate, outbox, pricing, watch
+from . import agents, channels, gate, outbox, pricing, watch
 
 LEVELS = ("not built", "records only", "assisted", "supervised", "autonomous")
 
@@ -45,6 +45,9 @@ def _facts(config):
         "feedback": _built("feedback"),
         "replenish": _built("replenish"),
         "judge": _built("judge"),
+        "replies": _built("replies") and agents.available(),
+        "webhooks": False,                      # set in measure(): it depends on a supplier being set up
+        "bank_drop": _built("bankdrop"),
         "order_step_walked": 7 not in getattr(gate, "UNBUILT", (7,)),
     }
 
@@ -62,12 +65,20 @@ def _capabilities(f):
          "Reads a bill, a person confirms it",
          "Store bills from the mailbox alone when they match a delivery"),
         ("Intake", "Site requests", 4, 3 if f["requisitions"] else 1,
-         "Chat baskets and stored lists carry the need, but there is no request with a status",
-         "Requisitions: a request for a work item, checked against stock first, with a status back"),
-        ("Intake", "Supplier replies", 5, 3 if f["mailbox"] else 1,
-         "Files a reply that names the order and takes the promised date" if f["mailbox"]
+         "A request for a work item holds back what the site has, orders the rest through the purchase round "
+         "and reports each line's state" if f["requisitions"]
+         else "Chat baskets and stored lists carry the need, but there is no request with a status",
+         "Tell the requester in the chat as it moves, and learn the requests that come back every week"
+         if f["requisitions"]
+         else "Requisitions: a request for a work item, checked against stock first, with a status back"),
+        ("Intake", "Supplier replies", 5,
+         4 if f["mailbox"] and f["replies"] else 3 if f["mailbox"] else 1,
+         "Reads a reply for its new date, its prices and its credit note and files them; a question waits for "
+         "a person" if f["mailbox"] and f["replies"]
+         else "Files a reply that names the order and takes the promised date" if f["mailbox"]
          else "Needs a mailbox to read replies",
-         "Read prices and delivery notices out of replies; answer simple questions itself"),
+         "Answer the simple questions itself" if f["mailbox"] and f["replies"]
+         else "Read prices and delivery notices out of replies (needs the Claude command line)"),
         ("Planning", "Demand and buffers", 7, 4 if f["feedback"] else 3,
          "Sizes buffers from history and tunes them from stock-outs, short counts and the quantities "
          "people correct" if f["feedback"] else "Sizes buffers per article from history, with a demand outlook",
@@ -86,15 +97,19 @@ def _capabilities(f):
          "Says which articles to count next, a person counts",
          "Scanning, and finding the cause of a gap by itself"),
         ("Execution", "Placing orders", 14,
-         4 if f["policies"] and f["smtp"] and f["order_step_walked"]
-         else 3 if f["policies"] and f["smtp"] else 2 if f["smtp"] else 1,
+         4 if f["policies"] and (f["smtp"] or f["webhooks"]) and f["order_step_walked"]
+         else 3 if f["policies"] and (f["smtp"] or f["webhooks"]) else 2 if f["smtp"] else 1,
          "Drafts the order and mails it when a person presses send" if f["smtp"]
          else "Drafts the order mail, but no outgoing mail is set up",
          "Policies: routine orders sent without a person, within limits and with a kill switch"
-         if not f["policies"] else "Walk step 7 of the purchase round so a placed order is confirmed back"),
-        ("Execution", "Chasing suppliers", 6, 3 if f["policies"] and f["smtp"] else 2,
-         "Spots silent and late orders and drafts the reminder, a person sends it",
-         "Send routine reminders by itself under a policy"),
+         if not f["policies"] else "Order by mail or by a supplier's webhook; a shop checkout is not driven"),
+        ("Execution", "Chasing suppliers", 6, 4 if f["policies"] and f["smtp"] and f["replies"]
+         else 3 if f["policies"] and f["smtp"] else 2,
+         "Chases a silent or late order and reminds a supplier of what it owes, twice at most, then a person"
+         if f["policies"] and f["smtp"]
+         else "Spots silent and late orders and drafts the reminder, a person sends it",
+         "Escalate by phone or to a second contact when a supplier stays silent"
+         if f["policies"] and f["smtp"] else "Send routine reminders by itself under a policy"),
         ("Execution", "Receiving and put-away", 4, 3 if f["scanning"] else 1,
          "Records what arrived; nothing scans, locates or puts away",
          "Scan-in against the order, with a location for each pile"),
@@ -112,9 +127,12 @@ def _capabilities(f):
         ("Control", "Invoice matching", 4, 3,
          "Matches every bill to its deliveries and flags the gaps alone",
          "Pay or hold from the match, and tie credit notes back automatically"),
-        ("Control", "Disputes", 2, 2,
-         "Opens the dispute and drafts the mail, a person sends it and records the credit",
-         "Send the dispute and read the credit note out of the reply"),
+        ("Control", "Disputes", 2, 4 if f["policies"] and f["smtp"] and f["replies"] else 3 if f["policies"] and f["smtp"] else 2,
+         "Opens the dispute, mails it and records the credit note from the reply, inside its limits"
+         if f["policies"] and f["smtp"] and f["replies"]
+         else "Opens the dispute and drafts the mail, a person sends it and records the credit",
+         "Escalate a dispute that stays unanswered" if f["policies"] and f["smtp"]
+         else "Send the dispute and read the credit note out of the reply"),
         ("Control", "Alerts", 6, 3 if f["push"] else 2,
          "Finds what needs a person and pushes it out" if f["push"]
          else "Finds what needs a person and lists it, nothing is pushed (NOTIFY_VIA is empty)",
@@ -122,10 +140,14 @@ def _capabilities(f):
         ("Control", "Audit trail", 3, 4,
          "Every change recorded; every purchase decision sealed in a hash chain",
          "Nothing more to add"),
-        ("Control", "Payments", 2, 3 if f["payments"] else 0,
-         "Plutus instructs matched bills from its wallet into a bank file; a person uploads it, or a "
+        ("Control", "Payments", 2, 4 if f["payments"] and f["bank_drop"] else 3 if f["payments"] else 0,
+         "Plutus instructs matched bills from its wallet into a bank file, hands it to the bank by SFTP and "
+         "settles the bills from the bank's report" if f["payments"] and f["bank_drop"]
+         else "Plutus instructs matched bills from its wallet into a bank file; a person uploads it, or a "
          "connector would send it" if f["payments"] else "Nothing schedules or makes a payment",
-         "A bank connector, so the file is sent and the bills confirmed without a person"
+         "Reconcile against the bank statement, not only the batch report"
+         if f["payments"] and f["bank_drop"]
+         else "A bank connector, so the file is sent and the bills confirmed without a person"
          if f["payments"] else "A payment run from due dates, as a file for the bank"),
     ]
 
@@ -134,6 +156,11 @@ def measure(db_path=None, today=None, config=None):
     """The score and the table behind it. `db_path` and `today` are kept for the callers that
     pass them: nothing here depends on what was recorded."""
     facts = _facts(config)
+    if db_path is not None:
+        try:
+            facts["webhooks"] = bool(channels.listing(db_path))
+        except Exception:
+            pass
     rows, score = [], 0.0
     for area, name, weight, level, why, nxt in _capabilities(facts):
         points = weight * level / 4

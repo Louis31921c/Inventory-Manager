@@ -136,6 +136,24 @@ def build_client(config, channels):
         stored = await asyncio.to_thread(quotes.one, config.db_path, quote_id)
         await interaction.response.send_message(quote_text(stored))
 
+    @tree.command(name="request", description="Ask for what a work item needs: the shelf first, then an order")
+    @app_commands.describe(site="Job site the goods are for", work_item="The part of the job",
+                           items="12 vis th 6x25, rondelle m8 x100",
+                           needed_by="Day it is needed, 2026-11-20")
+    async def request(interaction, site: str, work_item: str, items: str, needed_by: str = ""):
+        if await refuse(interaction):
+            return
+        await interaction.response.defer()
+        text = await asyncio.to_thread(chat.request_reply, config.db_path, who(interaction), site,
+                                       work_item, items, needed_by or None)
+        await interaction.followup.send(text)
+
+    @tree.command(name="requests", description="Where the open requests stand")
+    async def requests(interaction):
+        if await refuse(interaction):
+            return
+        await interaction.response.send_message(await asyncio.to_thread(chat.requests_text, config.db_path))
+
     @tree.command(name="stock", description="What the shelf holds for an article")
     @app_commands.describe(article="Part of the name, e.g. rondelle m8")
     async def stock(interaction, article: str):

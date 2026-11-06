@@ -64,6 +64,7 @@
   <button type="button" data-goes="query">SQL</button>
   <button type="button" data-goes="orders">Purchase orders <span class="count" id="tree-orders"></span></button>
   <button type="button" data-goes="quotes">Quotes <span class="count" id="tree-quotes"></span></button>
+  <button type="button" data-goes="requests">Site requests <span class="count" id="tree-requests"></span></button>
   <button type="button" data-goes="bills">Bills <span class="count" id="tree-bills"></span></button>
   <button type="button" data-goes="route">Route wrangler <span class="count" id="tree-route"></span></button>
   <button type="button" data-goes="settings">Settings</button>
@@ -419,6 +420,31 @@
   </div>
 </section>
 
+<section class="panel" id="panel-requests" role="tabpanel" hidden>
+  <div class="card">
+    <h2>New site request</h2>
+    <p class="muted">What the site has free is held back for the work item; the rest is ordered through the
+      purchase round. The state of every line comes back here.</p>
+    <div class="row">
+      <label class="field grow"><span>site</span><input id="rq-site" autocomplete="off"></label>
+      <label class="field grow"><span>work item</span><input id="rq-work" autocomplete="off"></label>
+      <label class="field narrow"><span>needed by</span><input id="rq-needed" type="date"></label>
+    </div>
+    <label class="field"><span>what is needed, e.g. 12 vis th 6x25, rondelle m8 x100</span>
+      <textarea id="rq-items"></textarea></label>
+    <div class="row">
+      <button class="action" type="button" id="rq-send">send the request</button>
+    </div>
+    <div id="rq-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Open requests</h2>
+    <p class="muted" id="rq-summary"></p>
+    <div id="rq-list"></div>
+  </div>
+</section>
+
 <section class="panel" id="panel-route" role="tabpanel" hidden>
   <div class="card">
     <h2>Departure Hub</h2>
@@ -645,6 +671,40 @@
 </section>
 
 <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+  <div class="card" id="connections-card">
+    <h2>Connections</h2>
+    <p class="eyebrow">Order webhooks</p>
+    <p class="muted">A supplier listed here gets its orders posted as JSON, signed with the token, instead of
+      mailed. The supplier answers 2xx to accept; a promised date in the answer becomes the day to expect the goods.</p>
+    <div class="row">
+      <label class="field grow"><span>supplier</span><input id="ch-supplier" autocomplete="off"></label>
+      <label class="field grow"><span>address, https://</span><input id="ch-url" autocomplete="off" style="text-transform: none"></label>
+      <label class="field grow"><span>token that signs the orders</span><input id="ch-token" type="password" autocomplete="off" placeholder="kept; leave empty to keep the old one"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" type="button" id="ch-save">save</button></label>
+    </div>
+    <div id="ch-note"></div>
+    <div class="scroll-x short-box"><table id="table-channels"></table></div>
+
+    <p class="eyebrow">Bank drop, SFTP</p>
+    <p class="muted">The payment file is put in the bank's folder by SFTP and the bank's report is read back. It uses
+      a key file (no password) and the host must already be known to this machine: connect to it once by hand.</p>
+    <div class="row">
+      <label class="field grow"><span>host</span><input id="bk-host" autocomplete="off" style="text-transform: none"></label>
+      <label class="field narrow"><span>port</span><input id="bk-port" inputmode="numeric" autocomplete="off"></label>
+      <label class="field grow"><span>user</span><input id="bk-user" autocomplete="off" style="text-transform: none"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>key file (chmod 600)</span><input id="bk-key" autocomplete="off" style="text-transform: none"></label>
+      <label class="field grow"><span>folder for payment files</span><input id="bk-dir" autocomplete="off" style="text-transform: none"></label>
+      <label class="field grow"><span>folder for bank reports</span><input id="bk-status" autocomplete="off" style="text-transform: none" placeholder="same as the files folder"></label>
+    </div>
+    <div class="row">
+      <button class="action" type="button" id="bk-save">save</button>
+      <button class="action ghost" type="button" id="bk-test">test the connection</button>
+    </div>
+    <div id="bk-note"></div>
+  </div>
+
   <div class="card" id="pack-card">
     <h2>Pack sizes</h2>
     <p class="muted">What a supplier sells an article in. An order for 130 washers goes out as the
@@ -1154,7 +1214,7 @@ function flatten() {
     })));
 }
 
-const TABS = ["home", "capture", "inventory", "query", "orders", "quotes", "bills",
+const TABS = ["home", "capture", "inventory", "query", "orders", "quotes", "requests", "bills",
               "route", "settings", "ddmrp", "chain"];
 
 // One card of the Purchase orders screen at a time; the menu says which.
@@ -5261,6 +5321,134 @@ async function findRoute() {
 
 $("route-go").addEventListener("click", findRoute);
 
+// ---- site requests -----------------------------------------------------------
+
+function drawRequests(data) {
+  const open = data.requests ?? [];
+  $("tree-requests").textContent = open.length ? `(${open.length})` : "";
+  $("rq-summary").textContent = open.length
+    ? `${open.length} open request(s), ${open.filter((one) => one.late).length} late.`
+    : "No open request.";
+  $("rq-list").replaceChildren(...open.map((one) => {
+    const title = el("div", { className: "sheet-title" }, [
+      el("strong", { textContent: `#${one.req_id} · ${one.site} / ${one.work_item}` }),
+      el("span", { className: one.late ? "bad" : "muted",
+                   textContent: [one.needed_by ? `needed ${one.needed_by}` : "", one.late ? "LATE" : "",
+                                 one.requester ? `by ${one.requester}` : ""].filter(Boolean).join(" · ") }),
+    ]);
+    const cancel = confirmButton("Cancel", () => api(`/api/requisitions/${one.req_id}/cancel`, { method: "POST" }));
+    title.append(el("span", { className: "row tight", style: "margin-left:auto" }, [cancel]));
+    const table = el("table");
+    renderTable(table, [
+      { label: "Article", cell: (line) => td(line.article) },
+      { label: "Asked", numeric: true, cell: (line) => td(showNum(line.quantity)) },
+      { label: "From the shelf", numeric: true, cell: (line) => td(showNum(line.reserved)) },
+      { label: "To order", numeric: true, cell: (line) => td(showNum(line.to_order)) },
+      { label: "State", cell: (line) => td(line.says) },
+    ], one.lines, "");
+    return el("div", { className: "sheet" }, [title, el("div", { className: "scroll-x short-box" }, [table])]);
+  }));
+}
+
+async function loadRequests() {
+  try {
+    drawRequests(await api("/api/requisitions"));
+  } catch {
+  }
+}
+
+$("rq-send").addEventListener("click", async () => {
+  $("rq-send").disabled = true;
+  try {
+    const done = await api("/api/requisitions", postJson({
+      site: $("rq-site").value, work_item: $("rq-work").value,
+      needed_by: $("rq-needed").value || null, text: $("rq-items").value }));
+    $("rq-items").value = "";
+    notice($("rq-note"), "ok", `Request #${done.request.req_id}: ${done.request.summary}.`);
+    drawRequests(done);
+  } catch (e) {
+    notice($("rq-note"), "bad", e.message);
+  } finally {
+    $("rq-send").disabled = false;
+  }
+});
+setInterval(() => { if (!document.hidden && !$("panel-requests").hidden) loadRequests(); }, 60000);
+
+// ---- connections: order webhooks and the bank drop ---------------------------------
+
+function drawConnections(data) {
+  renderTable($("table-channels"), [
+    { label: "Supplier", cell: (row) => td(row.supplier) },
+    { label: "Address", cell: (row) => td(row.url) },
+    { label: "Token", cell: (row) => td(row.has_token ? "set" : "missing") },
+    { label: "Last order posted", cell: (row) => td(row.last) },
+    { label: "", cell: (row) => {
+      const test = el("button", { className: "mini", type: "button", textContent: "test" });
+      test.addEventListener("click", async () => {
+        try {
+          const done = await api(`/api/channels/${encodeURIComponent(row.supplier)}/test`, { method: "POST" });
+          notice($("ch-note"), "ok", `${row.supplier} answered ${done.status} to a test (nothing was ordered).`);
+        } catch (e) { notice($("ch-note"), "bad", e.message); }
+      });
+      const gone = el("button", { className: "mini", type: "button", textContent: "remove" });
+      gone.addEventListener("click", async () => {
+        try {
+          drawConnections(await api(`/api/channels/${encodeURIComponent(row.supplier)}`, { method: "DELETE" }));
+          notice($("ch-note"), "ok", `${row.supplier} is mailed again.`);
+        } catch (e) { notice($("ch-note"), "bad", e.message); }
+      });
+      return el("span", { className: "row tight" }, [test, gone]);
+    } },
+  ], data.channels ?? [], "Every supplier is mailed.");
+  const bank = data.bank ?? {};
+  for (const [id, key] of [["bk-host", "host"], ["bk-port", "port"], ["bk-user", "user"], ["bk-key", "key"],
+                           ["bk-dir", "dir"], ["bk-status", "status_dir"]]) {
+    if (document.activeElement !== $(id)) $(id).value = bank[key] ?? "";
+  }
+}
+
+async function loadConnections() {
+  try {
+    drawConnections(await api("/api/connections"));
+  } catch {
+  }
+}
+
+$("ch-save").addEventListener("click", async () => {
+  try {
+    drawConnections(await api("/api/channels", putJson({
+      supplier: $("ch-supplier").value, url: $("ch-url").value, token: $("ch-token").value })));
+    $("ch-token").value = "";
+    notice($("ch-note"), "ok", `Saved. ${$("ch-supplier").value.toUpperCase()} now gets its orders posted.`);
+  } catch (e) {
+    notice($("ch-note"), "bad", e.message);
+  }
+});
+
+$("bk-save").addEventListener("click", async () => {
+  try {
+    drawConnections(await api("/api/bank-drop", putJson({
+      host: $("bk-host").value, port: $("bk-port").value, user: $("bk-user").value, key: $("bk-key").value,
+      dir: $("bk-dir").value, status_dir: $("bk-status").value })));
+    notice($("bk-note"), "ok", "Saved.");
+  } catch (e) {
+    notice($("bk-note"), "bad", e.message);
+  }
+});
+
+$("bk-test").addEventListener("click", async () => {
+  $("bk-test").disabled = true;
+  notice($("bk-note"), "", "Logging in...");
+  try {
+    await api("/api/bank-drop/test", { method: "POST" });
+    notice($("bk-note"), "ok", "The bank folder answered.");
+  } catch (e) {
+    notice($("bk-note"), "bad", e.message);
+  } finally {
+    $("bk-test").disabled = false;
+  }
+});
+
 async function refresh() {
   try {
     const data = await api("/api/data");
@@ -5287,7 +5475,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadMatch(), loadStockControl(), loadLeadTimes(), loadDashboard(), loadCalendar(), loadBillTo(), loadPolicies(), loadCharters(), loadJudge(), loadWallet(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadMatch(), loadStockControl(), loadLeadTimes(), loadDashboard(), loadCalendar(), loadBillTo(), loadRequests(), loadConnections(), loadPolicies(), loadCharters(), loadJudge(), loadWallet(),
       loadPacks(), loadComing(),
     ]);
     notice($("global-notice"), "", "");
@@ -5331,7 +5519,7 @@ const SCREEN_MENUS = [
 // A menu that walks to another screen instead of picking a card on this one.
 const LINK_MENUS = [
   { menu: "orders-menu", drop: "orders-drop", button: "menu-orders", title: "Purchase orders",
-    links: [["Purchase orders", "orders"], ["Quotes", "quotes"], ["Bills", "bills"]],
+    links: [["Purchase orders", "orders"], ["Quotes", "quotes"], ["Site requests", "requests"], ["Bills", "bills"]],
     // Each of these gets a line of its own and opens that card by itself.
     // No Stored PO line: it holds the same orders the Purchase orders line walks to.
     cards: [["Scan a purchase order", "order-scan"], ["Contacts", "contacts-card"]],

@@ -22,8 +22,8 @@ longer approved, a bill that has a payment is no longer to pay.
 import asyncio
 from datetime import date, datetime, timedelta
 
-from . import (audit, charters, db, gate, judge, matching, outbox, payments, policies, prices,
-               verify, wallet, workdays)
+from . import (audit, bankdrop, channels, charters, db, disputes, gate, judge, matching, outbox, payments,
+               policies, prices, verify, wallet, workdays)
 from .policies import MIN_DRY_DAYS
 
 MODES = ("off", "dry_run", "live")
@@ -122,7 +122,7 @@ def check_send(db_path, mail, now, rules):
     reasons = policies._window(_WINDOW, now, workdays.Calendar(db_path, mail["supplier"]))
     if not rules["send_orders"]:
         reasons.append("sending orders is switched off in its limits")
-    if not (mail.get("to_addr") or "").strip():
+    if not (mail.get("to_addr") or "").strip() and not channels.has(db_path, mail["supplier"]):
         reasons.append("the draft has no address")
     value, unchecked, drift = policies.order_value(db_path, mail, now.date())
     reasons += unchecked
@@ -196,7 +196,7 @@ def _send_orders(db_path, config, now, current, rules, connect):
             if row["state"] != "draft":
                 continue
             reasons, value = check_send(db_path, row, now, rules)
-            if not ready:
+            if not ready and not channels.has(db_path, row["supplier"]):
                 reasons.append("outgoing mail is not set up")
 
             def go(r=row, v=value):
@@ -269,12 +269,14 @@ def place_basket(db_path, request, config, rules, connect=None):
     made = outbox.draft_order(db_path, list_id, WHO)
     if made["unassigned"] or not made["drafts"]:
         raise ValueError(f"no supplier is known for {', '.join(made['unassigned']) or 'the basket'}")
+    ready = outbox.readiness(config.mail)
     for draft in made["drafts"]:
+        if channels.has(db_path, draft["supplier"]):
+            continue                                     # posted to its webhook: no address, no mailbox
         if not (draft.get("to_addr") or "").strip():
             raise ValueError(f"no address for {draft['supplier']}")
-    ready = outbox.readiness(config.mail)
-    if not ready["ready"]:
-        raise ValueError(ready["detail"])
+        if not ready["ready"]:
+            raise ValueError(ready["detail"])
     for draft in made["drafts"]:
         value = sum(float(l.get("unit_price") or 0) * float(l["quantity"]) for l in lines
                     if (l.get("supplier") or "").upper() == draft["supplier"].upper()) or float(request["total"] or 0)
@@ -298,6 +300,81 @@ def _place_baskets(db_path, config, now, current, rules, connect):
         placed += _offer(db_path, "place_basket", subject, None, total, reasons, now, current,
                          lambda r=request: place_basket(db_path, r, config, rules, connect))
     return placed
+
+
+# ---- chase, remind, dispute ----------------------------------------------------
+
+def _mail_reasons(db_path, config, supplier, to_addr, now, rules, switch, hold=None):
+    reasons = policies._window(_WINDOW, now, workdays.Calendar(db_path, supplier))
+    if not rules[switch]:
+        reasons.append(f"{switch.replace('_', ' ')} is switched off in its limits")
+    if not (to_addr or "").strip():
+        reasons.append("no address for the supplier")
+    if not outbox.readiness(config.mail)["ready"]:
+        reasons.append("outgoing mail is not set up")
+    return reasons + (hold or [])
+
+
+def _acted_within(db_path, action, subject, days, now):
+    return bool(db.read(db_path, """
+            SELECT 1 FROM policy_log WHERE policy_name = ? AND action = ? AND subject = ? AND acted
+              AND happened_at >= ?""", [WHO, action, subject, now - timedelta(days=days)]))
+
+
+def _send_chases(db_path, config, now, current, rules, connect):
+    """An order nobody has confirmed, or whose day has gone: ask once more, up to a limit, then a person."""
+    sent = 0
+    for thread in outbox.threads(db_path, now.date()):
+        if not thread["needs_chase"]:
+            continue
+        hold = ([f"already chased {thread['chase_count']} times: a person takes it now"]
+                if thread["chase_count"] >= rules["max_chases"] else [])
+        reasons = _mail_reasons(db_path, config, thread["supplier"], thread["to_addr"], now, rules,
+                                "send_chases", hold)
+
+        def go(t=thread):
+            draft = outbox.draft_chase(db_path, t["mail_id"], WHO)["drafts"][0]
+            outbox.send(db_path, draft["mail_id"], config.mail, WHO, **({"connect": connect} if connect else {}))
+        sent += _offer(db_path, "send_chase", f"chase:{thread['mail_id']}:{thread['chase_count']}",
+                       thread["supplier"], None, reasons, now, current, go)
+    return sent
+
+
+def _send_backorders(db_path, config, now, current, rules, connect):
+    """Lines a delivery note left owing: one reminder a week to the supplier."""
+    sent = 0
+    for owed in outbox.owing(db_path, now.date()):
+        subject = f"backorder:{owed['supplier']}"
+        if _acted_within(db_path, "send_backorder", subject, 7, now):
+            continue
+        reasons = _mail_reasons(db_path, config, owed["supplier"], outbox.contact_email(db_path, owed["supplier"]),
+                                now, rules, "send_chases")
+
+        def go(s=owed["supplier"]):
+            draft = outbox.draft_backorder(db_path, s, WHO, now.date())["drafts"][0]
+            outbox.send(db_path, draft["mail_id"], config.mail, WHO, **({"connect": connect} if connect else {}))
+        sent += _offer(db_path, "send_backorder", subject, owed["supplier"], None, reasons, now, current, go)
+    return sent
+
+
+def _dispute_bills(db_path, config, now, current, rules, connect):
+    """A bill that asks for more than was delivered: dispute it and mail the supplier, inside limits."""
+    opened = 0
+    for row in matching.bills(db_path, now.date())["bills"]:
+        if row["verdict"] not in ("over", "nothing delivered") or row["state"] in ("disputed", "paid"):
+            continue
+        claimed = (max(row["gap"] or 0.0, 0.0) if row["verdict"] == "over" else float(row["billed"] or 0))
+        hold = ([f"{claimed:.2f} EUR is over the {rules['dispute_max_claim']:g} a person disputes"]
+                if claimed > rules["dispute_max_claim"] else [])
+        reasons = _mail_reasons(db_path, config, row["supplier"], outbox.contact_email(db_path, row["supplier"]),
+                                now, rules, "send_disputes", hold)
+
+        def go(b=row["bill_id"]):
+            made = disputes.open_for_bill(db_path, b, WHO, now.date())
+            outbox.send(db_path, made["mail_id"], config.mail, WHO, **({"connect": connect} if connect else {}))
+        opened += _offer(db_path, "dispute_bill", f"dispute:{row['bill_id']}", row["supplier"], claimed, reasons,
+                         now, current, go)
+    return opened
 
 
 # ---- pay --------------------------------------------------------------------
@@ -336,6 +413,75 @@ def _pay_bills(db_path, now, current, rules):
     return paid
 
 
+# ---- the bank ---------------------------------------------------------------
+
+def _payer(db_path):
+    rows = dict(db.read(db_path, "SELECT key, value FROM policy_settings WHERE key LIKE 'payer_%'"))
+    return rows.get("payer_name", ""), rows.get("payer_iban", ""), rows.get("payer_bic", "")
+
+
+def _bank(db_path, now, current, rules, run=None):
+    """Hand each open batch of payments to the bank by SFTP, then read the bank's report on it."""
+    if not bankdrop.ready(db_path)[0]:
+        return 0
+    runner = {"run": run} if run else {}
+    done = 0
+    name, iban, bic = _payer(db_path)
+    for batch_id, total in db.read(db_path, """
+            SELECT b.batch_id, sum(p.amount) FROM payment_batches b JOIN payments p USING (batch_id)
+            WHERE b.state = 'open' AND p.state = 'instructed' GROUP BY b.batch_id ORDER BY b.batch_id"""):
+        reasons = []
+        if not rules["bank_upload"]:
+            reasons.append("handing batches to the bank is switched off in its limits")
+        if not name or not iban:
+            reasons.append("the paying account has no name or IBAN (Settings, Wallet)")
+        reasons += policies._window(_WINDOW, now, workdays.Calendar(db_path))
+
+        def go(b=batch_id):
+            import re
+            import tempfile
+            from pathlib import Path
+
+            xml = payments.batch_file(db_path, b, name, iban, bic or None, now)
+            msg_id = re.search(r"<MsgId>([^<]+)</MsgId>", xml).group(1)
+            with tempfile.TemporaryDirectory() as folder:
+                local = Path(folder) / f"{msg_id}.xml"
+                local.write_text(xml, encoding="utf-8")
+                try:
+                    bankdrop.upload(db_path, str(local), f"{msg_id}.xml", **runner)
+                except Exception:
+                    db.write(db_path, "UPDATE payment_batches SET state = 'open', exported_at = NULL "
+                                      "WHERE batch_id = ? RETURNING batch_id", [b])
+                    raise
+            db.write(db_path, "UPDATE payment_batches SET msg_id = ?, uploaded_at = now() WHERE batch_id = ? "
+                              "RETURNING batch_id", [msg_id, b])
+        done += _offer(db_path, "upload_batch", f"batch:{batch_id}", None, float(total or 0), reasons, now,
+                       current, go)
+
+    if current != "live":
+        return done
+    for batch_id, msg_id, total in db.read(db_path, """
+            SELECT b.batch_id, b.msg_id, coalesce(sum(p.amount), 0) FROM payment_batches b
+            LEFT JOIN payments p USING (batch_id)
+            WHERE b.state = 'exported' AND b.msg_id IS NOT NULL AND b.uploaded_at IS NOT NULL
+            GROUP BY b.batch_id, b.msg_id ORDER BY b.batch_id"""):
+        try:
+            status = bankdrop.fetch_status(db_path, msg_id, **runner)
+        except Exception:
+            continue                                     # the bank did not answer: ask again next hour
+        if status == "pending":
+            continue
+        if status == "accepted":
+            payments.confirm(db_path, batch_id, WHO)
+        else:
+            payments.reject(db_path, batch_id, "rejected by the bank", WHO)
+        db.write(db_path, "UPDATE payment_batches SET bank_status = ? WHERE batch_id = ? RETURNING batch_id",
+                 [status, batch_id])
+        _log(db_path, "bank_status", f"batch:{batch_id}", None, float(total), [], True, now, current)
+        done += 1
+    return done
+
+
 # ---- the run ----------------------------------------------------------------
 
 def run(db_path, config, now=None, connect=None):
@@ -353,7 +499,11 @@ def run(db_path, config, now=None, connect=None):
     done["approved"] = _approve_baskets(db_path, now, current, rules)
     done["sent"] = _send_orders(db_path, config, now, current, rules, connect)
     done["placed"] = _place_baskets(db_path, config, now, current, rules, connect)
+    done["chased"] = _send_chases(db_path, config, now, current, rules, connect)
+    done["reminded"] = _send_backorders(db_path, config, now, current, rules, connect)
+    done["disputed"] = _dispute_bills(db_path, config, now, current, rules, connect)
     done["paid"] = _pay_bills(db_path, now, current, rules)
+    done["banked"] = _bank(db_path, now, current, rules)
     done["done"] = sum(done.values())
     return done
 
@@ -373,6 +523,17 @@ def _pending(db_path, subject):
         return bool(db.read(db_path, "SELECT 1 FROM bills b WHERE bill_id = ? AND state = 'to pay' AND NOT EXISTS "
                                      "(SELECT 1 FROM payments p WHERE p.bill_id = b.bill_id "
                                      "AND p.state IN ('instructed', 'executed'))", [int(ident)]))
+    if kind == "chase":
+        return bool(db.read(db_path, "SELECT 1 FROM supplier_mail WHERE mail_id = ? "
+                                     "AND state IN ('sent', 'confirmed')", [int(ident.split(":")[0])]))
+    if kind == "dispute" and ident.isdigit():
+        return bool(db.read(db_path, """
+                SELECT 1 FROM bills b WHERE bill_id = ? AND (state NOT IN ('paid', 'disputed') OR EXISTS (
+                    SELECT 1 FROM supplier_mail m WHERE m.ref_kind = 'bill' AND m.ref_id = b.bill_id
+                      AND m.kind = 'dispute' AND m.state IN ('draft', 'failed')))""", [int(ident)]))
+    if kind == "batch" and ident.isdigit():
+        return bool(db.read(db_path, "SELECT 1 FROM payment_batches WHERE batch_id = ? AND state = 'open'",
+                            [int(ident)]))
     if kind == "po":
         return bool(db.read(db_path, "SELECT 1 FROM gate_requests WHERE channel = ? AND state IN "
                                      "('waiting', 'checked', 'approved')", [subject]))

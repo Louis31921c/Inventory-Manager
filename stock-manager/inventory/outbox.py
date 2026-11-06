@@ -327,6 +327,12 @@ def send(db_path, mail_id, mail, user=None, connect=_connect):
     row = one(db_path, mail_id)
     if row is None or row["state"] not in ("draft", "failed"):
         raise SendError("That mail is not a draft any more.")
+    from . import channels
+
+    # A supplier that takes its orders over a webhook gets the same draft posted, not mailed.
+    if row["kind"] == "order" and channels.has(db_path, row["supplier"]):
+        return _post_order(db_path, row)
+
     if not (row["to_addr"] or "").strip():
         raise SendError("No address to send it to: add the supplier's e-mail to the draft.")
     ready = readiness(mail)
@@ -368,6 +374,24 @@ def send(db_path, mail_id, mail, user=None, connect=_connect):
     if row["kind"] == "quote" and row["ref_id"]:
         quotes.update(db_path, row["ref_id"], {"state": "sent"})
     return one(db_path, mail_id)
+
+
+def _post_order(db_path, row):
+    from . import channels
+
+    try:
+        answer = channels.deliver(db_path, row)
+    except Exception as e:
+        db.write(db_path, "UPDATE supplier_mail SET state = 'failed', error = ? "
+                          "WHERE mail_id = ? RETURNING mail_id", [str(e)[:300], row["mail_id"]])
+        raise SendError(f"Not sent: {e}") from e
+    db.write(db_path, """
+            UPDATE supplier_mail SET state = 'sent', error = NULL, sent_at = now(),
+                   from_addr = 'webhook', message_id = ?
+            WHERE mail_id = ? RETURNING mail_id""", [f"stock-manager-order-{row['mail_id']}", row["mail_id"]])
+    if answer["confirmed"] or answer["promised_date"]:
+        set_eta(db_path, row["mail_id"], answer["promised_date"])
+    return one(db_path, row["mail_id"])
 
 
 # ---- waiting on suppliers -------------------------------------------------
@@ -528,6 +552,17 @@ def take_reply(db_path, sender, subject, body, today=None):
             quotes.update(db_path, thread["ref_id"], {"state": "answered"})
         return thread["mail_id"]
     return None
+
+
+def set_eta(db_path, mail_id, day):
+    """A supplier confirmed an order, with a day or without: the thread is confirmed and the
+    day to expect the goods is the one given (kept as it was when none is given)."""
+    done = db.write(db_path, """
+            UPDATE supplier_mail SET state = 'confirmed', confirmed_at = coalesce(confirmed_at, now()),
+                   eta = coalesce(?, eta)
+            WHERE mail_id = ? AND direction = 'out' AND state IN ('sent', 'confirmed')
+            RETURNING mail_id""", [day, mail_id])
+    return done is not None
 
 
 def overview(db_path, mail, today=None):

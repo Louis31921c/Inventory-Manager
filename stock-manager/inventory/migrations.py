@@ -796,6 +796,57 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        29,
+        "supplier replies read, order webhooks, the bank drop, and site requisitions",
+        """
+        ALTER TABLE supplier_mail ADD COLUMN IF NOT EXISTS read_json VARCHAR;
+        CREATE TABLE IF NOT EXISTS supplier_channels (
+            supplier    VARCHAR PRIMARY KEY,
+            kind        VARCHAR NOT NULL DEFAULT 'webhook',
+            url         VARCHAR,
+            token       VARCHAR,
+            updated_at  TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+        CREATE SEQUENCE IF NOT EXISTS order_delivery_seq START 1;
+        CREATE TABLE IF NOT EXISTS order_deliveries (
+            delivery_id  INTEGER PRIMARY KEY DEFAULT nextval('order_delivery_seq'),
+            mail_id      INTEGER,
+            supplier     VARCHAR,
+            url          VARCHAR,
+            status       INTEGER,
+            ok           BOOLEAN,
+            answer       VARCHAR,
+            sent_at      TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+        ALTER TABLE payment_batches ADD COLUMN IF NOT EXISTS msg_id VARCHAR;
+        ALTER TABLE payment_batches ADD COLUMN IF NOT EXISTS uploaded_at TIMESTAMP;
+        ALTER TABLE payment_batches ADD COLUMN IF NOT EXISTS bank_status VARCHAR;
+        CREATE SEQUENCE IF NOT EXISTS requisition_seq START 1;
+        CREATE TABLE IF NOT EXISTS requisitions (
+            req_id          INTEGER PRIMARY KEY DEFAULT nextval('requisition_seq'),
+            requester       VARCHAR,
+            site            VARCHAR,
+            work_item       VARCHAR,
+            needed_by       DATE,
+            state           VARCHAR NOT NULL DEFAULT 'open',
+            note            VARCHAR,
+            gate_request_id INTEGER,
+            created_at      TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            closed_at       TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS requisition_lines (
+            req_id          INTEGER NOT NULL,
+            line_no         INTEGER NOT NULL,
+            article         VARCHAR NOT NULL,
+            quantity        DOUBLE NOT NULL,
+            reserved        DOUBLE NOT NULL DEFAULT 0,
+            reservation_id  INTEGER,
+            to_order        DOUBLE NOT NULL DEFAULT 0,
+            PRIMARY KEY (req_id, line_no)
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """
