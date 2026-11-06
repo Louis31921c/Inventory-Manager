@@ -290,13 +290,20 @@ functionnalities to developp :
 
 - DONE: the buffers show only on the DDMRP name (bar or left tree); each entry under it shows its own
         card alone
-- within the ddmrp, I only wanna see buffers when I click on the "ddmrp" button, I don't wanna see it on every rolling menu entries
+
 
 - DONE: the first 9 System entries are off the menu (Pack sizes to Photo archive). Their cards stay in
         the page, hidden, so wallet, policies and rules still load but cannot be reached
-- remove the first 9 entries of the "system" rolling menu - it's useless
+
 
 - DONE: the Bugs dashboard button is on every screen; from another screen it walks home and opens it
-- the bugs dashboard button doesn't appear when I'm already on a page. It should.
+
 
 - Overall you've got to be more efficient in the UX/UI, sometimes it's messy and can lead to misunderstandings
+
+- DONE: All purchase orders has a run button: it lists every order whatever is filled in
+        (a pick from a menu still lists by itself)
+- within purchase orders>all purchase order , add a "run" button to execute the query, even if every field are not filled
+
+- DONE: the two Bills buttons are the heading's size and colour, no count, no tick; the open one is underlined
+- within purchase order>bills , for the bills deliveries buttons, make them the same size and color as "BILLS AGAINST DELIVERIES" , remove the number count and the "to tick" case

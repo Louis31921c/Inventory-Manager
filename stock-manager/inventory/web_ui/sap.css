@@ -309,6 +309,22 @@ h2 {
   padding-bottom: 3px;
   text-transform: uppercase;
 }
+/* Two or more headings that open something: the look of an h2, a line under the open one. */
+.heading-tabs { display: flex; flex-wrap: wrap; gap: 4px 24px; }
+button.heading-tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-label);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 0 3px;
+  text-transform: uppercase;
+}
+button.heading-tab:hover { border-bottom-color: var(--accent-soft); }
+button.heading-tab[aria-expanded="true"] { border-bottom-color: var(--accent); }
 p { margin: 0; }
 .muted, .legend, .desig { color: var(--ink-soft); }
 /* What the verification agent made of a held basket, and a seal that does not hold. */
