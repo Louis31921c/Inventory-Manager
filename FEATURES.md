@@ -39,7 +39,7 @@ One desk for a logistics manager's week: what arrived, what is on the shelf, wha
 - **By site:** the same sum per article and site, plus transfers and corrections.
 - **Transfers** write two movements (out of one site, into the other) and are refused when the first site has less free than asked.
 - **Corrections** are signed quantities and need a written reason.
-- **Reservations** hold stock for a work item at a site. An order for the same article, site and work item written since uses the reservation up. Free stock is on hand minus what is still held.
+- **Reservations** hold stock for a work item at a site (Settings, Stock control cards). An order for the same article, site and work item written since uses the reservation up. Free stock is on hand minus what is still held.
 - **Cycle counts:** articles ranked by quantity shipped over 90 days. Class A is the articles making up the first 80%, B the next 15%, C the rest. Counted every 30, 60 and 90 days. The list puts the furthest overdue first, and for never-counted articles the busiest first. The count gap against the paperwork is kept as a movement.
 
 ## 3. Planning: what to order and when

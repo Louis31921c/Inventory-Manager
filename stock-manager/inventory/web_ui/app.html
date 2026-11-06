@@ -245,75 +245,6 @@
     <div class="scroll-x short-box"><table id="table-stock"></table></div>
   </div>
 
-  <div class="card" id="pack-card">
-    <h2>Pack sizes</h2>
-    <p class="muted">What a supplier sells an article in. An order for 130 washers goes out as the
-      whole boxes it takes, at least the minimum.</p>
-    <div class="row">
-      <label class="field grow"><span>article</span><input id="pk-article" list="stock-articles" autocomplete="off"></label>
-      <label class="field grow"><span>supplier (empty: anyone)</span><input id="pk-supplier" autocomplete="off"></label>
-      <label class="field narrow"><span>holds</span><input id="pk-qty" inputmode="decimal"></label>
-      <label class="field narrow"><span>unit</span><input id="pk-unit" value="piece"></label>
-      <label class="field narrow"><span>pack is called</span><input id="pk-label" placeholder="box"></label>
-      <label class="field narrow"><span>min packs</span><input id="pk-moq" inputmode="numeric" value="1"></label>
-      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="pk-go">save</button></label>
-    </div>
-    <div id="pack-note"></div>
-    <div class="scroll-x short-box"><table id="table-packs"></table></div>
-  </div>
-
-  <div class="card" id="site-stock-card">
-    <h2>Stock by site</h2>
-    <div class="row" id="site-stats"></div>
-    <div class="row tight">
-      <label class="field grow"><span>search</span><input id="site-search" placeholder="article or site"></label>
-    </div>
-    <div class="scroll-x short-box"><table id="table-site-stock"></table></div>
-  </div>
-
-  <div class="card" id="stock-moves-card">
-    <h2>Move, hold back, correct</h2>
-    <datalist id="stock-articles"></datalist>
-    <datalist id="stock-sites"></datalist>
-    <p class="eyebrow">Transfer between sites</p>
-    <div class="row">
-      <label class="field grow"><span>article</span><input id="mv-article" list="stock-articles" autocomplete="off"></label>
-      <label class="field grow"><span>from</span><input id="mv-from" list="stock-sites" autocomplete="off"></label>
-      <label class="field grow"><span>to</span><input id="mv-to" list="stock-sites" autocomplete="off"></label>
-      <label class="field narrow"><span>quantity</span><input id="mv-qty" inputmode="decimal"></label>
-      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="mv-go">transfer</button></label>
-    </div>
-    <p class="eyebrow">Hold back for a work item</p>
-    <div class="row">
-      <label class="field grow"><span>article</span><input id="rs-article" list="stock-articles" autocomplete="off"></label>
-      <label class="field grow"><span>site</span><input id="rs-site" list="stock-sites" autocomplete="off"></label>
-      <label class="field grow"><span>work item</span><input id="rs-work" autocomplete="off"></label>
-      <label class="field narrow"><span>quantity</span><input id="rs-qty" inputmode="decimal"></label>
-      <label class="field narrow"><span>needed by</span><input id="rs-by" type="date"></label>
-      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="rs-go">hold back</button></label>
-    </div>
-    <p class="eyebrow">Correct the stock (a reason is needed)</p>
-    <div class="row">
-      <label class="field grow"><span>article</span><input id="aj-article" list="stock-articles" autocomplete="off"></label>
-      <label class="field grow"><span>site</span><input id="aj-site" list="stock-sites" autocomplete="off"></label>
-      <label class="field narrow"><span>by (+ or -)</span><input id="aj-qty" inputmode="decimal"></label>
-      <label class="field grow"><span>reason</span><input id="aj-reason" autocomplete="off" placeholder="broken, found, miscounted..."></label>
-      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="aj-go">correct</button></label>
-    </div>
-    <div id="stockctl-note"></div>
-    <p class="eyebrow">Held back</p>
-    <div class="scroll-x short-box"><table id="table-reservations"></table></div>
-    <p class="eyebrow">Last movements</p>
-    <div class="scroll-x short-box"><table id="table-moves"></table></div>
-  </div>
-
-  <div class="card" id="cycle-card">
-    <h2>Count next</h2>
-    <p class="muted" id="cycle-summary"></p>
-    <div class="scroll-x short-box"><table id="table-cycle"></table></div>
-    <div id="cycle-note"></div>
-  </div>
-
   <div class="card">
     <h2>Partly delivered</h2>
     <div class="row" id="waiting-stats"></div>
@@ -810,6 +741,75 @@
 </section>
 
 <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+  <div class="card" id="pack-card">
+    <h2>Pack sizes</h2>
+    <p class="muted">What a supplier sells an article in. An order for 130 washers goes out as the
+      whole boxes it takes, at least the minimum.</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="pk-article" list="stock-articles" autocomplete="off"></label>
+      <label class="field grow"><span>supplier (empty: anyone)</span><input id="pk-supplier" autocomplete="off"></label>
+      <label class="field narrow"><span>holds</span><input id="pk-qty" inputmode="decimal"></label>
+      <label class="field narrow"><span>unit</span><input id="pk-unit" value="piece"></label>
+      <label class="field narrow"><span>pack is called</span><input id="pk-label" placeholder="box"></label>
+      <label class="field narrow"><span>min packs</span><input id="pk-moq" inputmode="numeric" value="1"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="pk-go">save</button></label>
+    </div>
+    <div id="pack-note"></div>
+    <div class="scroll-x short-box"><table id="table-packs"></table></div>
+  </div>
+
+  <div class="card" id="site-stock-card">
+    <h2>Stock by site</h2>
+    <div class="row" id="site-stats"></div>
+    <div class="row tight">
+      <label class="field grow"><span>search</span><input id="site-search" placeholder="article or site"></label>
+    </div>
+    <div class="scroll-x short-box"><table id="table-site-stock"></table></div>
+  </div>
+
+  <div class="card" id="stock-moves-card">
+    <h2>Move, hold back, correct</h2>
+    <datalist id="stock-articles"></datalist>
+    <datalist id="stock-sites"></datalist>
+    <p class="eyebrow">Transfer between sites</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="mv-article" list="stock-articles" autocomplete="off"></label>
+      <label class="field grow"><span>from</span><input id="mv-from" list="stock-sites" autocomplete="off"></label>
+      <label class="field grow"><span>to</span><input id="mv-to" list="stock-sites" autocomplete="off"></label>
+      <label class="field narrow"><span>quantity</span><input id="mv-qty" inputmode="decimal"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="mv-go">transfer</button></label>
+    </div>
+    <p class="eyebrow">Hold back for a work item</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="rs-article" list="stock-articles" autocomplete="off"></label>
+      <label class="field grow"><span>site</span><input id="rs-site" list="stock-sites" autocomplete="off"></label>
+      <label class="field grow"><span>work item</span><input id="rs-work" autocomplete="off"></label>
+      <label class="field narrow"><span>quantity</span><input id="rs-qty" inputmode="decimal"></label>
+      <label class="field narrow"><span>needed by</span><input id="rs-by" type="date"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="rs-go">hold back</button></label>
+    </div>
+    <p class="eyebrow">Correct the stock (a reason is needed)</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="aj-article" list="stock-articles" autocomplete="off"></label>
+      <label class="field grow"><span>site</span><input id="aj-site" list="stock-sites" autocomplete="off"></label>
+      <label class="field narrow"><span>by (+ or -)</span><input id="aj-qty" inputmode="decimal"></label>
+      <label class="field grow"><span>reason</span><input id="aj-reason" autocomplete="off" placeholder="broken, found, miscounted..."></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="aj-go">correct</button></label>
+    </div>
+    <div id="stockctl-note"></div>
+    <p class="eyebrow">Held back</p>
+    <div class="scroll-x short-box"><table id="table-reservations"></table></div>
+    <p class="eyebrow">Last movements</p>
+    <div class="scroll-x short-box"><table id="table-moves"></table></div>
+  </div>
+
+  <div class="card" id="cycle-card">
+    <h2>Count next</h2>
+    <p class="muted" id="cycle-summary"></p>
+    <div class="scroll-x short-box"><table id="table-cycle"></table></div>
+    <div id="cycle-note"></div>
+  </div>
+
   <div class="card" id="wallet-card">
     <h2>Wallet and Plutus</h2>
     <p class="muted">Plutus checks the inventory and the DDMRP buffers, orders, sends the orders to the
