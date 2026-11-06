@@ -309,22 +309,23 @@ h2 {
   padding-bottom: 3px;
   text-transform: uppercase;
 }
-/* Two or more headings that open something: the look of an h2, a line under the open one. */
-.heading-tabs { display: flex; flex-wrap: wrap; gap: 4px 24px; }
+/* Two or more buttons that open something: the look of the other buttons, in the heading's
+   size and colour, no tick; the open one stays pressed. */
+.heading-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 button.heading-tab {
-  background: none;
-  border: 0;
-  border-bottom: 2px solid transparent;
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid #8d9196;
+  border-radius: 2px;
   color: var(--ink-label);
   cursor: pointer;
-  font-family: inherit;
+  font-family: var(--font);
   font-size: 12px;
   font-weight: 700;
-  padding: 0 0 3px;
+  padding: 4px 12px;
   text-transform: uppercase;
 }
-button.heading-tab:hover { border-bottom-color: var(--accent-soft); }
-button.heading-tab[aria-expanded="true"] { border-bottom-color: var(--accent); }
+button.heading-tab:hover { background: linear-gradient(180deg, #fff, #cfe0f2); border-color: var(--accent); }
+button.heading-tab[aria-expanded="true"] { background: var(--row-pick); border-color: var(--accent); }
 p { margin: 0; }
 .muted, .legend, .desig { color: var(--ink-soft); }
 /* What the verification agent made of a held basket, and a seal that does not hold. */
