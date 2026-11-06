@@ -308,4 +308,6 @@ functionnalities to developp :
 - DONE: the two Bills buttons are the heading's size and colour, no count, no tick; the open one is underlined
 - within purchase order>bills , for the bills deliveries buttons, make them the same size and color as "BILLS AGAINST DELIVERIES" , remove the number count and the "to tick" case
 
+- DONE: Plutus orders card is the three fields, Bill to and the draft button, nothing else. No Refresh
+        button on the DDMRP screens: it rereads every 30 seconds while open and keeps a draft on screen
 - within "plutus order", just leave the fieldtexts, and the fieldtexts for "bill to" + draft the order. Remove the refresh button, it should be automatic
