@@ -43,7 +43,7 @@
 </nav>
 
 <div class="toolbar">
-  <button class="tool" id="dash-toggle" type="button" aria-expanded="false" hidden>Short watch dashboard</button>
+  <button class="tool" id="dash-toggle" type="button" aria-expanded="false">Bugs dashboard</button>
   <span class="toolbar-gap"></span>
   <form method="post" action="/lock" id="lock-form">
     <button class="tool" type="submit" title="Lock the session (F8)">Remember me</button>
@@ -376,50 +376,6 @@
     <div id="lists"></div>
   </div>
 
-  <div class="card" id="suppliers-card">
-    <h2>Suppliers</h2>
-    <p class="muted" id="outbox-smtp"></p>
-    <div class="row">
-      <label class="field grow"><span>purchase order</span><select id="ob-order"></select></label>
-      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="ob-draft-order">draft the mails</button></label>
-      <label class="field grow"><span>quote request</span><select id="ob-quote"></select></label>
-      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="ob-draft-quote">draft it</button></label>
-    </div>
-    <div id="outbox-note"></div>
-    <p class="eyebrow">Drafts, nothing leaves until you press send</p>
-    <div id="outbox-drafts"></div>
-    <p class="eyebrow">Waiting on suppliers</p>
-    <div class="scroll-x short-box"><table id="table-threads"></table></div>
-    <p class="eyebrow">Delivery-note lines still owed</p>
-    <div class="scroll-x short-box"><table id="table-owing"></table></div>
-    <p class="eyebrow">Mail log</p>
-    <div class="scroll-x short-box"><table id="table-mail-log"></table></div>
-  </div>
-
-  <div class="card" id="dispatch-card">
-    <h2>Deliveries to sites</h2>
-    <p class="muted">Turn a stored order into a delivery: a van, a day, a note to print with a box to sign,
-      labels for the pallets, and who signed for what arrived.</p>
-    <div class="row">
-      <label class="field grow"><span>order</span><select id="dp-order"></select></label>
-      <label class="field grow"><span>van</span><select id="dp-van"></select></label>
-      <label class="field narrow"><span>on</span><input id="dp-day" type="date"></label>
-      <label class="field narrow" style="justify-content: flex-end"><button class="action" id="dp-go">plan it</button></label>
-    </div>
-    <div id="dispatch-note"></div>
-    <div class="scroll-x short-box"><table id="table-dispatches"></table></div>
-  </div>
-
-  <div class="card" id="queue-card">
-    <h2>To order, waiting</h2>
-    <p class="muted" id="queue-summary"></p>
-    <div class="row">
-      <button class="action" id="queue-read">read what is to order</button>
-      <button class="action ghost" id="queue-place">order what is due</button>
-    </div>
-    <div id="queue-note"></div>
-    <div class="scroll-x short-box"><table id="table-queue"></table></div>
-  </div>
 </section>
 
 <section class="panel" id="panel-quotes" role="tabpanel" hidden>
@@ -450,23 +406,6 @@
       <span class="grow"></span>
       <button class="mini" id="quote-drop">delete</button>
     </div>
-  </div>
-
-  <div class="card" id="offers-card">
-    <h2>Answers, comparison, awards</h2>
-    <p class="muted">Type in what a supplier answered, copy the request to others to compare, then award
-      one: it becomes the agreed price and supplier for that article.</p>
-    <div class="row">
-      <label class="field grow"><span>request</span><select id="of-quote"></select></label>
-      <label class="field grow"><span>ask other suppliers (comma apart)</span><input id="of-others" placeholder="TUBES SA, WURTH"></label>
-      <label class="field narrow" style="justify-content: flex-end"><button class="action ghost" id="of-copy">copy it to them</button></label>
-    </div>
-    <div class="scroll-x short-box"><table id="table-offer-lines"></table></div>
-    <div id="offers-note"></div>
-    <p class="eyebrow">Side by side, per article</p>
-    <div class="scroll-x short-box"><table id="table-compare"></table></div>
-    <p class="eyebrow">Agreed prices</p>
-    <div class="scroll-x short-box"><table id="table-agreements"></table></div>
   </div>
 
   <div class="card">
@@ -537,17 +476,20 @@
 
   <div class="card" id="match-card">
     <h2>Bills against deliveries</h2>
-    <p class="muted">A bill is checked against every delivery of that supplier since its
-      previous bill, at the prices the app has seen. A gap is a question for the supplier,
-      not a verdict.</p>
-    <div class="row" id="match-totals"></div>
-    <div class="scroll-x short-box"><table id="table-match"></table></div>
-    <h3>Delivered, not billed</h3>
-    <div class="scroll-x short-box"><table id="table-unbilled"></table></div>
-    <h3>Disputes</h3>
-    <div class="scroll-x short-box"><table id="table-disputes"></table></div>
-    <h3>Ordered, against what came</h3>
-    <div class="scroll-x short-box"><table id="table-order-match"></table></div>
+    <div class="row tight">
+      <button class="action ghost" type="button" id="match-unbilled-btn" aria-expanded="false"
+              aria-controls="match-unbilled">delivered, not billed</button>
+      <button class="action ghost" type="button" id="match-unpaid-btn" aria-expanded="false"
+              aria-controls="match-unpaid">billed, not delivered</button>
+    </div>
+    <div id="match-unbilled" hidden>
+      <p class="muted">Deliveries of a supplier since its last bill.</p>
+      <div class="scroll-x short-box"><table id="table-unbilled"></table></div>
+    </div>
+    <div id="match-unpaid" hidden>
+      <p class="muted">Bills that ask for more than was delivered, or for a delivery that never came.</p>
+      <div class="scroll-x short-box"><table id="table-match"></table></div>
+    </div>
     <div id="match-note"></div>
   </div>
 
@@ -1330,6 +1272,10 @@ for (const node of document.querySelectorAll(".tree button[data-goes]")) {
     renderDeliveries();
     renderOrders();
     openTab(node.dataset.goes);
+    if (node.dataset.goes === "ddmrp") {
+      loadDdmrp();
+      showLanding(ALL_MENUS.find((one) => one.menu === "tools-menu"));
+    }
     say("Ready");
   });
 }
@@ -3516,49 +3462,11 @@ async function loadMatch() {
     return;
   }
   const found = data.bills ?? {};
-  const counts = found.counts ?? {};
-  const orders = data.orders ?? {};
-  $("match-totals").replaceChildren(
-    ...[["matched", counts.matched ?? 0], ["over", counts.over ?? 0],
-        ["under", counts.under ?? 0], ["unchecked", counts.unchecked ?? 0],
-        ["nothing delivered", counts["nothing delivered"] ?? 0],
-        ["orders late", orders.counts?.late ?? 0]]
-      .map(([name, value]) => statTile(name, String(value))));
-
-  const word = (row) => ({
-    matched: "matched", over: `over by ${money(row.gap)}`, under: `under by ${money(-row.gap)}`,
-    unchecked: `${row.unpriced} line(s) without a price`, "nothing delivered": "nothing delivered",
-    "no amount": "no amount",
-  })[row.verdict] ?? row.verdict;
-
-  renderTable($("table-match"), [
-    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier) },
-    { label: "Bill", cell: (row) => document.createTextNode(row.number ?? `#${row.bill_id}`) },
-    { label: "Date", cell: (row) => document.createTextNode(row.bill_date) },
-    { label: "Billed", numeric: true, cell: (row) => document.createTextNode(
-        row.billed == null ? "—" : money(row.billed)) },
-    { label: "Deliveries come to", numeric: true, cell: (row) => document.createTextNode(
-        row.deliveries ? money(row.expected) : "—") },
-    { label: "Result", cell: (row) => el("span", {
-        className: row.verdict === "matched" ? "ok" : (row.verdict === "unchecked" ? "muted" : "bad"),
-        textContent: word(row) + (row.order_unknown ? " · order ref not found" : "") }) },
-    { label: "", cell: (row) => {
-      if (!["over", "under", "nothing delivered"].includes(row.verdict) || row.state === "disputed") {
-        return document.createTextNode(row.state === "disputed" ? "disputed" : "");
-      }
-      const dispute = el("button", { className: "mini", textContent: "dispute" });
-      dispute.addEventListener("click", async () => {
-        try {
-          await api("/api/disputes", postJson({ bill_id: row.bill_id }));
-          notice($("match-note"), "ok", "Dispute opened. The mail to the supplier is a draft in Purchase orders, Suppliers.");
-          await Promise.all([loadBills(), loadMatch(), loadOutbox()]);
-        } catch (e) {
-          notice($("match-note"), "bad", e.message);
-        }
-      });
-      return dispute;
-    } },
-  ], found.bills ?? [], "No bill to check yet.");
+  const unbilled = found.unbilled ?? [];
+  // Billed for more than came: a bill with nothing delivered behind it, or over the deliveries.
+  const unpaid = (found.bills ?? []).filter((row) => ["nothing delivered", "over"].includes(row.verdict));
+  $("match-unbilled-btn").textContent = `delivered, not billed (${unbilled.length})`;
+  $("match-unpaid-btn").textContent = `billed, not delivered (${unpaid.length})`;
 
   renderTable($("table-unbilled"), [
     { label: "Supplier", cell: (row) => document.createTextNode(row.supplier) },
@@ -3566,20 +3474,37 @@ async function loadMatch() {
     { label: "Since", cell: (row) => document.createTextNode(row.since) },
     { label: "Days", numeric: true, cell: (row) => document.createTextNode(String(row.days)) },
     { label: "Worth", numeric: true, cell: (row) => document.createTextNode(money(row.worth)) },
-  ], found.unbilled ?? [], "Every delivery has been billed, or is recent.");
+  ], unbilled, "Every delivery has been billed, or is recent.");
 
-  renderTable($("table-order-match"), [
-    { label: "Order", numeric: true, cell: (row) => document.createTextNode(`#${row.list_id}`) },
-    { label: "Date", cell: (row) => document.createTextNode(row.list_date) },
-    { label: "Site", cell: (row) => document.createTextNode(row.site || "—") },
-    { label: "Work item", cell: (row) => document.createTextNode(row.work_item || "—") },
-    { label: "Lines", cell: (row) => document.createTextNode(row.lines.map((line) =>
-        `${line.article} ${showNum(line.delivered)}/${showNum(line.ordered)}`).join(", ")) },
-    { label: "State", cell: (row) => el("span", {
-        className: row.state === "complete" ? "ok" : (row.state === "late" ? "bad" : "muted"),
-        textContent: row.state }) },
-  ], orders.orders ?? [], "No order to a supplier in the last 120 days.");
+  renderTable($("table-match"), [
+    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier) },
+    { label: "Bill", cell: (row) => document.createTextNode(row.number ?? `#${row.bill_id}`) },
+    { label: "Date", cell: (row) => document.createTextNode(row.bill_date) },
+    { label: "Billed", numeric: true, cell: (row) => document.createTextNode(
+        row.billed == null ? "—" : money(row.billed)) },
+    { label: "Delivered", numeric: true, cell: (row) => document.createTextNode(
+        row.deliveries ? money(row.expected) : "—") },
+    { label: "Gap", cell: (row) => el("span", { className: "bad", textContent:
+        row.verdict === "nothing delivered" ? "nothing delivered" : `over by ${money(row.gap)}` }) },
+  ], unpaid, "Every bill is covered by a delivery.");
 }
+
+// One list open at a time: the two buttons on the Bills card develop their own table.
+function wireMatchButtons() {
+  const pairs = [["match-unbilled-btn", "match-unbilled"], ["match-unpaid-btn", "match-unpaid"]];
+  for (const [button, box] of pairs) {
+    $(button).addEventListener("click", () => {
+      const open = $(box).hidden;
+      for (const [otherButton, otherBox] of pairs) {
+        const on = open && otherBox === box;
+        $(otherBox).hidden = !on;
+        $(otherButton).setAttribute("aria-expanded", String(on));
+        $(otherButton).classList.toggle("ghost", !on);
+      }
+    });
+  }
+}
+wireMatchButtons();
 
 pickPhoto($("bill-photo"), $("bill-name"), "thumb-bill", $("bill-read"),
           (file) => { billFile = file; });
@@ -4310,227 +4235,6 @@ for (const id of ["contact-person", "contact-company"]) {
   });
 }
 
-// ---- mail to the suppliers and what comes back ---------------------------
-
-function fillOutboxPickers() {
-  const pick = (id, rows, label) => {
-    const box = $(id);
-    const keep = box.value;
-    box.replaceChildren(el("option", { value: "", textContent: "choose..." }),
-                        ...rows.map((row) => el("option", { value: String(row.value),
-                                                            textContent: label(row) })));
-    box.value = keep;
-  };
-  pick("ob-order", lists.map((sheet) => ({ value: sheet.id, sheet })), (row) =>
-    `#${row.value} · ${[row.sheet.list_date, row.sheet.site, row.sheet.work_item]
-      .filter(Boolean).join(" · ")}`);
-  pick("ob-quote", quoteRows.map((quote) => ({ value: quote.quote_id, quote })), (row) =>
-    `#${row.value} · ${row.quote.supplier ?? "?"} · ${row.quote.state}`);
-}
-
-function draftBox(mail) {
-  const to = el("input", { value: mail.to_addr ?? "", placeholder: "supplier's e-mail" });
-  const subject = el("input", { value: mail.subject ?? "" });
-  const body = el("textarea", { rows: 9, value: mail.body ?? "" });
-  const say = el("div");
-  const act = (path, options) => async () => {
-    try {
-      const done = await api(path, options);
-      drawOutbox(done.outbox);
-      return done;
-    } catch (e) {
-      notice(say, "bad", e.message);
-    }
-  };
-  const save = async () => {
-    try {
-      await api(`/api/outbox/${mail.mail_id}`, patchJson({
-        to: to.value.trim(), subject: subject.value, body: body.value }));
-      return true;
-    } catch (e) {
-      notice(say, "bad", e.message);
-      return false;
-    }
-  };
-  const send = el("button", { className: "action", textContent: "send" });
-  send.addEventListener("click", async () => {
-    if (!(await save())) return;
-    send.disabled = true;
-    spinner(say, "Sending...");
-    const done = await act(`/api/outbox/${mail.mail_id}/send`, { method: "POST" })();
-    if (done) notice($("outbox-note"), "ok", `Sent to ${done.sent.to_addr}.`);
-    send.disabled = false;
-  });
-  const keep = el("button", { className: "action ghost", textContent: "save" });
-  keep.addEventListener("click", async () => { if (await save()) notice(say, "ok", "Saved."); });
-  const drop = el("button", { className: "action ghost", textContent: "discard" });
-  drop.addEventListener("click", act(`/api/outbox/${mail.mail_id}`, { method: "DELETE" }));
-
-  const heading = [mail.kind === "chase" ? "Reminder" : mail.kind === "quote" ? "Quote request" : "Order",
-                   mail.supplier].filter(Boolean).join(" · ");
-  return el("div", { className: "sheet" }, [
-    el("div", { className: "sheet-title" }, [el("strong", { textContent: heading }),
-      mail.state === "failed" ? el("span", { className: "bad", textContent:
-        `not sent: ${mail.error ?? ""}` }) : el("span")]),
-    el("label", { className: "field" }, [el("span", { textContent: "to" }), to]),
-    el("label", { className: "field" }, [el("span", { textContent: "subject" }), subject]),
-    el("label", { className: "field" }, [el("span", { textContent: "message" }), body]),
-    el("div", { className: "row tight" }, [send, keep, drop]),
-    say,
-  ]);
-}
-
-function drawOutbox(data) {
-  $("outbox-smtp").textContent = data.smtp?.ready
-    ? `Mails go out from ${data.smtp.detail}.` : (data.smtp?.detail ?? "");
-  fillOutboxPickers();
-  $("outbox-drafts").replaceChildren(...(data.drafts ?? []).map(draftBox));
-  if (!(data.drafts ?? []).length) {
-    $("outbox-drafts").append(el("p", { className: "muted", textContent: "No draft." }));
-  }
-
-  renderTable($("table-threads"), [
-    { label: "Sent", cell: (row) => document.createTextNode((row.sent_at ?? "").slice(0, 10)) },
-    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier ?? "—") },
-    { label: "What", cell: (row) => document.createTextNode(
-        `${row.kind === "quote" ? "quote" : "order"} #${row.ref_id}`) },
-    { label: "State", cell: (row) => el("span", {
-        className: row.needs_chase ? "bad" : (row.state === "confirmed" ? "ok" : "muted"),
-        textContent: row.state === "confirmed" ? "confirmed" : `waiting ${row.days_waiting} day(s)`
-          + (row.chase_count ? `, chased ${row.chase_count}x` : "") }) },
-    { label: "Expect", cell: (row) => document.createTextNode(row.expected_on) },
-    { label: "", cell: (row) => {
-      const box = el("span");
-      if (row.needs_chase) {
-        const chase = el("button", { className: "mini", textContent: "chase" });
-        chase.addEventListener("click", async () => {
-          try {
-            drawOutbox((await api("/api/outbox/draft-chase", postJson({ mail_id: row.mail_id }))).outbox);
-          } catch (e) {
-            notice($("outbox-note"), "bad", e.message);
-          }
-        });
-        box.append(chase, " ");
-      }
-      const done = el("button", { className: "mini", textContent: "received" });
-      done.addEventListener("click", async () => {
-        try {
-          drawOutbox((await api(`/api/outbox/${row.mail_id}/close`, { method: "POST" })).outbox);
-        } catch (e) {
-          notice($("outbox-note"), "bad", e.message);
-        }
-      });
-      box.append(done);
-      return box;
-    } },
-  ], data.threads ?? [], "Nothing is waiting on an answer.");
-
-  renderTable($("table-owing"), [
-    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier) },
-    { label: "Lines", cell: (row) => document.createTextNode(row.lines.map((line) =>
-        `${showNum(line.quantity ?? 0)} x ${line.article}`
-        + (line.expected_on ? ` (promised ${line.expected_on})` : "")).join(", ")) },
-    { label: "", cell: (row) => {
-      const chase = el("button", { className: "mini", textContent: "draft a reminder" });
-      chase.addEventListener("click", async () => {
-        try {
-          drawOutbox((await api("/api/outbox/draft-backorder",
-                                postJson({ supplier: row.supplier }))).outbox);
-        } catch (e) {
-          notice($("outbox-note"), "bad", e.message);
-        }
-      });
-      return chase;
-    } },
-  ], data.owing ?? [], "No line is owed late.");
-
-  renderTable($("table-mail-log"), [
-    { label: "When", cell: (row) => document.createTextNode((row.sent_at ?? row.created_at ?? "").replace("T", " ")) },
-    { label: "", cell: (row) => document.createTextNode(row.direction === "in" ? "received" : "sent") },
-    { label: "Supplier", cell: (row) => document.createTextNode(row.supplier ?? "—") },
-    { label: "Subject", cell: (row) => document.createTextNode(row.subject ?? "") },
-  ], data.log ?? [], "No mail yet.");
-}
-
-async function loadOutbox() {
-  try {
-    drawOutbox(await api("/api/outbox"));
-  } catch {
-  }
-}
-
-async function askDraft(button, path, body) {
-  button.disabled = true;
-  try {
-    const done = await api(path, postJson(body));
-    drawOutbox(done.outbox);
-    notice($("outbox-note"), (done.unassigned ?? []).length ? "warn" : "ok",
-           (done.unassigned ?? []).length
-             ? `No supplier is known for: ${done.unassigned.join(", ")}. Those lines are not in any draft.`
-             : `${(done.drafts ?? []).length} draft(s) ready below.`);
-  } catch (e) {
-    notice($("outbox-note"), "bad", e.message);
-  } finally {
-    button.disabled = false;
-  }
-}
-
-$("ob-order").addEventListener("focus", fillOutboxPickers);
-$("ob-quote").addEventListener("focus", fillOutboxPickers);
-$("ob-draft-order").addEventListener("click", () => $("ob-order").value
-  && askDraft($("ob-draft-order"), "/api/outbox/draft-order", { list_id: Number($("ob-order").value) }));
-$("ob-draft-quote").addEventListener("click", () => $("ob-quote").value
-  && askDraft($("ob-draft-quote"), "/api/outbox/draft-quote", { quote_id: Number($("ob-quote").value) }));
-
-// ---- what is ticked "to order" waits, then Plutus orders it ---------------
-
-function drawQueue(data) {
-  const counts = data.counts ?? {};
-  $("queue-summary").textContent =
-    `Plutus reads every line ticked "to order" and orders it ${data.delay_days} days later. `
-    + `${counts.waiting ?? 0} waiting, ${counts.due ?? 0} due, ${counts.ordered ?? 0} ordered.`;
-  $("queue-place").disabled = !counts.due;
-  renderTable($("table-queue"), [
-    { label: "Article", cell: (row) => document.createTextNode(row.article) },
-    { label: "Qty", numeric: true, cell: (row) => document.createTextNode(showNum(row.quantity)) },
-    { label: "Site", cell: (row) => document.createTextNode(row.site || "—") },
-    { label: "Work item", cell: (row) => document.createTextNode(row.work_item || "—") },
-    { label: "Read on", cell: (row) => document.createTextNode(row.queued_on) },
-    { label: "Orders on", cell: (row) => document.createTextNode(row.due_on) },
-    { label: "State", cell: (row) => document.createTextNode(
-        row.state === "ordered" ? `ordered, list #${row.ordered_list}`
-          : row.days_left <= 0 ? "due" : `in ${row.days_left} day(s)`) },
-  ], data.rows ?? [], "Nothing is ticked \"to order\".");
-}
-
-async function loadOrderQueue() {
-  try {
-    drawQueue(await api("/api/order-queue"));
-  } catch {
-  }
-}
-
-async function askQueue(button, path, said) {
-  button.disabled = true;
-  try {
-    const data = await api(path, { method: "POST" });
-    drawQueue(data);
-    notice($("queue-note"), "ok", said(data));
-    if (path.endsWith("place") && data.orders.length) await refresh();
-  } catch (e) {
-    notice($("queue-note"), "bad", e.message);
-  } finally {
-    button.disabled = false;
-  }
-}
-
-$("queue-read").addEventListener("click", () =>
-  askQueue($("queue-read"), "/api/order-queue/collect",
-           (data) => `${data.added} line(s) read, ${data.dropped} let go.`));
-$("queue-place").addEventListener("click", () =>
-  askQueue($("queue-place"), "/api/order-queue/place",
-           (data) => `${data.orders.length} order(s) placed from ${data.lines} line(s).`));
-
 // ---- landing dashboard and autonomy --------------------------------------
 
 const td = (value) => document.createTextNode(value == null || value === "" ? "—" : String(value));
@@ -4586,14 +4290,16 @@ var dashOpen = false;
 
 function showDashboardButton() {
   const home = !$("panel-home").hidden;
-  $("dash-toggle").hidden = !home;
-  $("dash-card").hidden = !(home && dashOpen);
+  const shown = home && dashOpen;
+  // On any other screen the button stays, and a press brings the dashboard up on the landing page.
+  $("dash-toggle").hidden = false;
+  $("dash-toggle").setAttribute("aria-expanded", String(shown));
+  $("dash-toggle").textContent = shown ? "Fold dashboard" : "Bugs dashboard";
+  $("dash-card").hidden = !shown;
 }
 
 function setDashboard(open) {
   dashOpen = open;
-  $("dash-toggle").setAttribute("aria-expanded", String(open));
-  $("dash-toggle").textContent = open ? "Fold dashboard" : "Bugs dashboard";
   showDashboardButton();
   try {
     localStorage.setItem("dash-open", open ? "1" : "0");
@@ -4601,7 +4307,15 @@ function setDashboard(open) {
   }
 }
 
-$("dash-toggle").addEventListener("click", () => setDashboard(!dashOpen));
+$("dash-toggle").addEventListener("click", () => {
+  if ($("panel-home").hidden) {
+    treePick = null;
+    openTab("home");
+    setDashboard(true);
+    return;
+  }
+  setDashboard(!dashOpen);
+});
 try {
   dashOpen = localStorage.getItem("dash-open") === "1";
 } catch {
@@ -5059,185 +4773,6 @@ $("pk-go").addEventListener("click", async () => {
   }
 });
 
-// ---- quote answers, comparison, awards ---------------------------------------------
-
-function fillOfferQuotes() {
-  const box = $("of-quote");
-  const keep = box.value;
-  box.replaceChildren(el("option", { value: "", textContent: "choose..." }),
-    ...quoteRows.map((q) => el("option", { value: String(q.quote_id),
-      textContent: `#${q.quote_id} · ${q.supplier ?? "?"} · ${q.state}` })));
-  box.value = keep;
-}
-
-function drawCompare(data) {
-  const rows = [];
-  for (const art of data.articles ?? []) for (const o of art.offers) rows.push({ article: art.article, ...o });
-  renderTable($("table-compare"), [
-    { label: "Article", cell: (row) => td(row.article) },
-    { label: "Supplier", cell: (row) => td(row.supplier) },
-    { label: "Price", numeric: true, cell: (row) => el("span", {
-        className: row.cheapest ? "ok" : (row.expired ? "muted" : ""), textContent: row.unit_price.toFixed(2)
-          + (row.cheapest ? " cheapest" : "") + (row.expired ? " expired" : "") }) },
-    { label: "Lead (days)", numeric: true, cell: (row) => el("span", {
-        className: row.fastest ? "ok" : "", textContent: row.lead_days == null ? "—" : String(row.lead_days)
-          + (row.fastest ? " fastest" : "") }) },
-    { label: "For the quantity", numeric: true, cell: (row) => td(money(row.total)) },
-    { label: "", cell: (row) => {
-      const win = el("button", { className: "mini", textContent: "award" });
-      win.addEventListener("click", async () => {
-        try {
-          drawCompare(await api("/api/award", postJson({ quote_id: row.quote_id, line_no: row.line_no })));
-          notice($("offers-note"), "ok", `${row.supplier} is now the agreed supplier for ${row.article}.`);
-          loadQuotes();
-        } catch (e) { notice($("offers-note"), "bad", e.message); }
-      });
-      return win;
-    } },
-  ], rows, "No answer has been entered yet.");
-  renderTable($("table-agreements"), [
-    { label: "Article", cell: (row) => td(row.article) },
-    { label: "Supplier", cell: (row) => td(row.supplier) },
-    { label: "Price", numeric: true, cell: (row) => td(row.unit_price.toFixed(2)) },
-    { label: "From", cell: (row) => td(row.valid_from) },
-    { label: "Until", cell: (row) => td(row.valid_to) },
-    { label: "", cell: (row) => {
-      const stop = el("button", { className: "mini", textContent: "end it" });
-      stop.addEventListener("click", async () => {
-        try { drawCompare(await api(`/api/agreements/${row.agreement_id}`, { method: "DELETE" })); }
-        catch (e) { notice($("offers-note"), "bad", e.message); }
-      });
-      return stop;
-    } },
-  ], data.agreements ?? [], "No agreed price yet.");
-}
-
-async function loadOfferLines() {
-  const id = Number($("of-quote").value);
-  if (!id) { $("table-offer-lines").replaceChildren(); return; }
-  const data = await api(`/api/offers/${id}`);
-  renderTable($("table-offer-lines"), [
-    { label: "Line", cell: (row) => td(`${showNum(row.quantity)} ${row.unit} ${row.article}`) },
-    { label: "Price", cell: (row) => { row.priceBox = el("input", { className: "cell", size: 7,
-        inputMode: "decimal", value: row.unit_price ?? "" }); return row.priceBox; } },
-    { label: "Lead (days)", cell: (row) => { row.leadBox = el("input", { className: "cell", size: 4,
-        inputMode: "numeric", value: row.lead_days ?? "" }); return row.leadBox; } },
-    { label: "Stands until", cell: (row) => { row.untilBox = el("input", { className: "cell", type: "date",
-        value: row.valid_until ?? "" }); return row.untilBox; } },
-    { label: "", cell: (row) => {
-      const save = el("button", { className: "mini", textContent: "save" });
-      save.addEventListener("click", async () => {
-        try {
-          const done = await api("/api/offers", putJson({ quote_id: id, line_no: row.line_no,
-            unit_price: Number(row.priceBox.value), lead_days: row.leadBox.value ? Number(row.leadBox.value) : null,
-            valid_until: row.untilBox.value || null }));
-          drawCompare(done);
-          notice($("offers-note"), "ok", "Answer saved.");
-          loadQuotes();
-        } catch (e) { notice($("offers-note"), "bad", e.message); }
-      });
-      return save;
-    } },
-  ], data.offers ?? [], "");
-}
-
-async function loadCompare() { try { drawCompare(await api("/api/compare")); } catch {} }
-
-$("of-quote").addEventListener("focus", fillOfferQuotes);
-$("of-quote").addEventListener("change", loadOfferLines);
-$("of-copy").addEventListener("click", async () => {
-  const id = Number($("of-quote").value);
-  const names = $("of-others").value.split(",").map((x) => x.trim()).filter(Boolean);
-  if (!id || !names.length) return;
-  try {
-    const done = await api(`/api/quotes/${id}/ask-others`, postJson({ suppliers: names }));
-    notice($("offers-note"), "ok", `${done.made.length} copy(ies) made: ${done.made.map((n) => "#" + n).join(", ")}.`);
-    await loadQuotes();
-    fillOfferQuotes();
-  } catch (e) { notice($("offers-note"), "bad", e.message); }
-});
-
-// ---- disputes, deliveries to sites, orders to come ------------------------------------
-
-function drawDisputes(data) {
-  renderTable($("table-disputes"), [
-    { label: "#", numeric: true, cell: (row) => td(row.dispute_id) },
-    { label: "Supplier", cell: (row) => td(row.supplier) },
-    { label: "Why", cell: (row) => td(row.reason) },
-    { label: "Claimed", numeric: true, cell: (row) => td(row.claimed == null ? "—" : money(row.claimed)) },
-    { label: "State", cell: (row) => el("span", { className: row.overdue ? "bad" : (row.state === "closed" ? "ok" : ""),
-        textContent: row.state + (row.overdue ? `, ${row.age_days} days without a credit note` : "")
-          + (row.credited ? `, credited ${money(row.credited)}` : "") }) },
-    { label: "Credit note", cell: (row) => {
-      if (row.state === "closed") return td(row.credit_ref);
-      const ref = el("input", { className: "cell", size: 8, placeholder: "ref" });
-      const amount = el("input", { className: "cell", size: 7, inputMode: "decimal", placeholder: "amount" });
-      const save = el("button", { className: "mini", textContent: "record" });
-      save.addEventListener("click", async () => {
-        try {
-          drawDisputes(await api(`/api/disputes/${row.dispute_id}/credit`, postJson({
-            ref: ref.value, amount: Number(amount.value) })));
-          loadBills();
-        } catch (e) { notice($("match-note"), "bad", e.message); }
-      });
-      return el("span", {}, [ref, amount, save]);
-    } },
-  ], data.disputes ?? [], "No dispute.");
-}
-
-async function loadDisputes() { try { drawDisputes(await api("/api/disputes")); } catch {} }
-
-function drawDispatches(data) {
-  $("dp-van").replaceChildren(el("option", { value: "", textContent: "no van yet" }),
-    ...(data.vehicles ?? []).map((v) => el("option", { value: String(v.vehicle_id), textContent: v.name })));
-  const orders = lists.map((sheet) => el("option", { value: String(sheet.id),
-    textContent: `#${sheet.id} · ${[sheet.list_date, sheet.site, sheet.work_item].filter(Boolean).join(" · ")}` }));
-  const keep = $("dp-order").value;
-  $("dp-order").replaceChildren(el("option", { value: "", textContent: "choose..." }), ...orders);
-  $("dp-order").value = keep;
-  const act = (path, body) => async () => {
-    try { drawDispatches(await api(path, body ? postJson(body) : { method: "POST" })); }
-    catch (e) { notice($("dispatch-note"), "bad", e.message); }
-  };
-  renderTable($("table-dispatches"), [
-    { label: "#", numeric: true, cell: (row) => td(row.dispatch_id) },
-    { label: "Site", cell: (row) => td([row.site, row.work_item].filter(Boolean).join(" / ")) },
-    { label: "Van", cell: (row) => td(row.vehicle) },
-    { label: "Planned", cell: (row) => td(row.planned_on) },
-    { label: "State", cell: (row) => td(row.state + (row.received_by ? `, signed by ${row.received_by}` : "")) },
-    { label: "Paper", cell: (row) => el("span", {}, [
-      el("a", { className: "mini", href: `/api/dispatches/${row.dispatch_id}/note.pdf`, target: "_blank", textContent: "delivery note" }), " ",
-      el("a", { className: "mini", href: `/api/dispatches/${row.dispatch_id}/labels.pdf`, target: "_blank", textContent: "labels" })]) },
-    { label: "", cell: (row) => {
-      const box = el("span");
-      if (row.state === "planned") {
-        const b = el("button", { className: "mini", textContent: "loaded" });
-        b.addEventListener("click", act(`/api/dispatches/${row.dispatch_id}/load`));
-        box.append(b);
-      }
-      if (row.state === "planned" || row.state === "loaded" || row.state === "part delivered") {
-        const who = el("input", { className: "cell", size: 10, placeholder: "signed by" });
-        const b = el("button", { className: "mini", textContent: "delivered" });
-        b.addEventListener("click", () => act(`/api/dispatches/${row.dispatch_id}/deliver`, { received_by: who.value })());
-        box.append(" ", who, b);
-      }
-      return box;
-    } },
-  ], data.dispatches ?? [], "No delivery planned.");
-}
-
-async function loadDispatches() { try { drawDispatches(await api("/api/dispatches")); } catch {} }
-
-$("dp-order").addEventListener("focus", loadDispatches);
-$("dp-go").addEventListener("click", async () => {
-  if (!$("dp-order").value) return;
-  try {
-    drawDispatches(await api("/api/dispatches", postJson({ list_id: Number($("dp-order").value),
-      vehicle_id: $("dp-van").value ? Number($("dp-van").value) : null, planned_on: $("dp-day").value || null })));
-    notice($("dispatch-note"), "ok", "Planned. Print the delivery note and the labels from the table.");
-  } catch (e) { notice($("dispatch-note"), "bad", e.message); }
-});
-
 async function loadComing() {
   try {
     const data = await api("/api/planned-orders");
@@ -5693,14 +5228,6 @@ function renderWaiting(data) {
     } },
     { label: "Site / work item", cell: (line) => document.createTextNode(
       [line.site, line.work_item].filter(Boolean).join(" / ") || "—") },
-    { label: "", cell: (line) => {
-      const came = el("button", { className: "mini", type: "button", textContent: "arrived" });
-      came.addEventListener("click", async () => {
-        await api(`/api/backorders/${line.note_id}/${line.line_no}`, patchJson({ settled: true }));
-        await loadWaiting();
-      });
-      return came;
-    } },
   ], lines, "Every delivery note is complete.");
 }
 
@@ -5876,8 +5403,8 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadOrderQueue(), loadMatch(), loadStockControl(), loadLeadTimes(), loadOutbox(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(), loadPolicies(), loadCharters(), loadReplenish(), loadJudge(), loadWallet(),
-      loadPacks(), loadCompare(), loadDisputes(), loadDispatches(), loadComing(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadMatch(), loadStockControl(), loadLeadTimes(), loadDashboard(), loadCalendar(), loadBillTo(), loadTuning(), loadPolicies(), loadCharters(), loadReplenish(), loadJudge(), loadWallet(),
+      loadPacks(), loadComing(),
     ]);
     notice($("global-notice"), "", "");
   } catch (e) {
@@ -5891,6 +5418,10 @@ async function refresh() {
 const SCREEN_MENUS = [
   { menu: "system-menu", drop: "system-drop", button: "menu-system",
     panel: "panel-settings", tab: "settings", key: "settings-card", title: "System",
+    // Nine entries nobody used. Their cards stay in the page so the settings behind them
+    // still load, but no menu line reaches them.
+    retired: ["pack-card", "site-stock-card", "stock-moves-card", "cycle-card", "wallet-card",
+              "policies-card", "charters-card", "calendar-card", "archive-card"],
     skip: [] },
   { menu: "inv-menu", drop: "inv-drop", button: "menu-inventory",
     panel: "panel-inventory", tab: "inventory", key: "inventory-card", title: "Inventory",
@@ -5904,8 +5435,13 @@ const SCREEN_MENUS = [
     skip: ["chain-card"], go: openChain },
   { menu: "tools-menu", drop: "tools-drop", button: "menu-ddmrp",
     panel: "panel-ddmrp", tab: "ddmrp", key: "ddmrp-card", title: "DDMRP",
-    // The buffers are the screen itself, so the menu lists what sits under them.
-    skip: ["ddmrp-landing"], alone: ["plutus-card"], go: openPredictions },
+    // The buffers show only when the DDMRP name on the bar is pressed; an entry under it
+    // shows its own card and nothing else.
+    skip: ["ddmrp-landing"], landing: "ddmrp-landing", go: openPredictions,
+    bar: () => {
+      openPredictions();
+      showLanding(ALL_MENUS.find((one) => one.menu === "tools-menu"));
+    } },
 ];
 
 // A menu that walks to another screen instead of picking a card on this one.
@@ -5926,7 +5462,8 @@ function cardName(card) {
 
 function menuCards(spec) {
   return [...document.querySelectorAll(`#${spec.panel} .card`)]
-    .filter((card) => !spec.skip.includes(card.id) && card.querySelector("h2"));
+    .filter((card) => !spec.skip.includes(card.id) && !(spec.retired ?? []).includes(card.id)
+                      && card.querySelector("h2"));
 }
 
 function showOnly(spec, card) {
@@ -5937,7 +5474,8 @@ function showOnly(spec, card) {
   // want the whole screen to themselves.
   for (const id of spec.skip) {
     const own = $(id);
-    if (own && spec.alone) own.hidden = spec.alone.includes(card.id);
+    if (own && spec.landing) own.hidden = true;
+    else if (own && spec.alone) own.hidden = spec.alone.includes(card.id);
   }
   for (const entry of document.querySelectorAll(`#${spec.drop} button`)) {
     entry.setAttribute("aria-current", String(entry.dataset.card === cardName(card)));
@@ -5945,6 +5483,15 @@ function showOnly(spec, card) {
   try {
     localStorage.setItem(spec.key, cardName(card));
   } catch {
+  }
+}
+
+// The screen's own card on its own: every card the menu lists is put away.
+function showLanding(spec) {
+  for (const other of menuCards(spec)) other.hidden = true;
+  $(spec.landing).hidden = false;
+  for (const entry of document.querySelectorAll(`#${spec.drop} button`)) {
+    entry.setAttribute("aria-current", "false");
   }
 }
 
@@ -5977,14 +5524,18 @@ function buildMenu(spec) {
     return entry;
   }));
 
+  for (const id of spec.retired ?? []) {
+    if ($(id)) $(id).hidden = true;
+  }
   let wanted = null;
   try {
     const saved = localStorage.getItem(spec.key);
     wanted = cards.find((card) => cardName(card) === saved) ?? null;
   } catch {
   }
-  showOnly(spec, wanted ?? cards[0]);
-  hover(spec, spec.go ?? (() => openTab(spec.tab)));
+  if (spec.landing) showLanding(spec);
+  else showOnly(spec, wanted ?? cards[0]);
+  hover(spec, spec.bar ?? spec.go ?? (() => openTab(spec.tab)));
 }
 
 function hover(spec, onClick) {

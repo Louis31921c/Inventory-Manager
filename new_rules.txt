@@ -278,3 +278,25 @@ functionnalities to developp :
         names known, no duplicate, the buffers still ask for it and for that quantity, supplier, price, whole
         packs), Plutus approves what clears it, the wallet covers it, then it is sent and marked ordered.
         Also fixed: Plutus's own supply orders were being counted as stock shipped out
+
+- DONE: Partly delivered has no "arrived" button: a waiting line settles itself when a later delivery
+        note brings the same article for the same supplier, site and work item (backorders.reconcile)
+- in the "partly delivered" table, remove the "arrived" button - it should automatically know when it's arrived with the delivery note
+
+- DONE: Answers/comparison/awards, Suppliers, Deliveries to sites and To order, waiting are gone from
+        the screens (cards and their page code; the server side still runs). Bills against deliveries is
+        two buttons that each open one list: delivered, not billed / billed, not delivered
+- within purchase orders : remove "answer, comparison, award" , "suupliers", "deliveries to sites", "to order, waiting". For "bills against deliveries", just add two developp buttons for "delivered, not billed" and "billed, not delivered", remove the rest. 
+
+- DONE: the buffers show only on the DDMRP name (bar or left tree); each entry under it shows its own
+        card alone
+- within the ddmrp, I only wanna see buffers when I click on the "ddmrp" button, I don't wanna see it on every rolling menu entries
+
+- DONE: the first 9 System entries are off the menu (Pack sizes to Photo archive). Their cards stay in
+        the page, hidden, so wallet, policies and rules still load but cannot be reached
+- remove the first 9 entries of the "system" rolling menu - it's useless
+
+- DONE: the Bugs dashboard button is on every screen; from another screen it walks home and opens it
+- the bugs dashboard button doesn't appear when I'm already on a page. It should.
+
+- Overall you've got to be more efficient in the UX/UI, sometimes it's messy and can lead to misunderstandings

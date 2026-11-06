@@ -2441,6 +2441,22 @@ def test_the_missing_lines_are_listed_by_note(db_path):
     assert backorders.rows(db_path, settled=True)[0]["article"] == "MESH ST25"
 
 
+def test_a_missing_line_settles_itself_when_a_later_note_brings_it(db_path):
+    from inventory import backorders
+
+    first = make_note(lines=[Line(article="MESH ST25", quantity=5, backorder=True),
+                             Line(article="CEMENT 35KG", quantity=40, backorder=True)])
+    db.save_note(db_path, first, "sha-first", "", "ALEX")
+    assert backorders.summary(db_path)["lines"] == 2
+
+    later = make_note(lines=[Line(article="MESH ST25", quantity=5)])
+    db.save_note(db_path, later, "sha-later", "", "ALEX")
+
+    waiting = backorders.rows(db_path)
+    assert [line["article"] for line in waiting] == ["CEMENT 35KG"]
+    assert backorders.rows(db_path, settled=True)[0]["article"] == "MESH ST25"
+
+
 def test_a_van_says_when_the_load_does_not_fit(db_path):
     from inventory import routing
 

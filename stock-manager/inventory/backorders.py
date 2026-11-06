@@ -5,8 +5,37 @@ from . import db
 from .models import parse_date
 
 
+def reconcile(db_path):
+    """A waiting line settles itself when a later delivery note brings the article in full.
+
+    Same supplier, same article, same site and work item, on a note read after the one that
+    marked it missing and not itself marked as a backorder. Nobody presses anything."""
+    waiting = db.read(db_path, """
+            SELECT note_id, line_no, article, coalesce(supplier, ''), coalesce(site, ''),
+                   coalesce(work_item, '')
+            FROM inventory_lines WHERE backorder AND settled_on IS NULL
+            """)
+    if not waiting:
+        return 0
+    came = db.read(db_path, """
+            SELECT note_id, article, coalesce(supplier, ''), coalesce(site, ''),
+                   coalesce(work_item, '')
+            FROM inventory_lines WHERE NOT coalesce(backorder, FALSE) AND quantity > 0
+            """)
+    brought = {}
+    for note_id, article, supplier, site, work_item in came:
+        key = (article, supplier, site, work_item)
+        brought[key] = max(brought.get(key, 0), note_id)
+    done = [(note_id, line_no) for note_id, line_no, article, supplier, site, work_item in waiting
+            if brought.get((article, supplier, site, work_item), 0) > note_id]
+    for note_id, line_no in done:
+        settle(db_path, note_id, line_no)
+    return len(done)
+
+
 def rows(db_path, settled=False):
     """One line per article still to come, newest note first."""
+    reconcile(db_path)
     where = "l.settled_on IS NOT NULL" if settled else "l.settled_on IS NULL"
     found = db.read(db_path, f"""
             SELECT l.note_id, l.line_no, l.article, l.quantity, l.designation,
