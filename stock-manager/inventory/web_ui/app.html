@@ -468,7 +468,7 @@
   </div>
 </section>
 
-
+<section class="panel" id="panel-bills" role="tabpanel" hidden>
   <div class="card">
     <h2>Monthly bill</h2>
     <div class="row" id="bill-totals"></div>
@@ -476,6 +476,7 @@
   </div>
 
   <div class="card" id="match-card">
+    <div class="heading-tabs">
       <button class="heading-tab" type="button" id="match-unbilled-btn" aria-expanded="false"
               aria-controls="match-unbilled">delivered, not billed</button>
       <button class="heading-tab" type="button" id="match-unpaid-btn" aria-expanded="false"
@@ -490,19 +491,6 @@
       <div class="scroll-x short-box"><table id="table-match"></table></div>
     </div>
     <div id="match-note"></div>
-  </div>
-
-  <div class="card">
-    <h2>Read a bill</h2>
-    <label class="file-drop" for="bill-photo">
-      <input type="file" id="bill-photo" accept="image/jpeg,image/png,image/webp,application/pdf">
-      <img class="thumb" id="thumb-bill" alt="" hidden>
-      <span><strong id="bill-name">Choose a bill</strong></span>
-    </label>
-    <div class="row">
-      <button class="action" id="bill-read" disabled>ENTER</button>
-    </div>
-    <div id="bill-status" hidden></div>
   </div>
 
   <div class="card" id="bill-review" hidden>
@@ -1167,7 +1155,6 @@ let lists = [];
 let draft = null;
 let draftFile = null;
 let draftSha = null;
-let billFile = null;
 let proposed = null;
 let listDraft = null;
 let listFile = null;
@@ -3382,19 +3369,6 @@ function billFromForm() {
   return bill;
 }
 
-async function readBillFile(file) {
-  const body = new FormData();
-  body.append("photo", file);
-  spinner($("bill-status"), `Reading ${file.name}...`);
-  try {
-    const answer = await api("/api/bills/read", { method: "POST", body });
-    $("bill-status").hidden = true;
-    openBillReview(answer.bill, { sha256: answer.sha256 });
-  } catch (e) {
-    notice($("bill-status"), "bad", e.message);
-  }
-}
-
 async function readQueuedBill(item) {
   spinner($("queue-note"), `Reading ${item.name} as a bill...`);
   try {
@@ -3452,7 +3426,7 @@ async function loadBills() {
   try {
     data = await api("/api/bills");
   } catch (e) {
-    notice($("bill-status"), "bad", e.message);
+    notice($("global-notice"), "bad", e.message);
     return;
   }
   billMonths = data.months ?? [];
@@ -3510,9 +3484,6 @@ function wireMatchButtons() {
 }
 wireMatchButtons();
 
-pickPhoto($("bill-photo"), $("bill-name"), "thumb-bill", $("bill-read"),
-          (file) => { billFile = file; });
-$("bill-read").addEventListener("click", () => billFile && readBillFile(billFile));
 
 // ---- Mailbox settings -----------------------------------------------------
 
