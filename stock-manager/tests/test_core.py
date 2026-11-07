@@ -6261,3 +6261,25 @@ def test_the_program_refuses_to_serve_without_a_licence_and_takes_one_on_its_pag
         sealed = client.get("/api/data")
         assert sealed.status_code == 423 and "unsigned build" in sealed.json()["detail"]
         assert "do not match the vendor" in client.get("/license-required").text
+
+
+def test_the_doctor_reports_each_check_and_fails_on_a_loose_permission(vault_home, db_path, tmp_path):
+    from inventory import audit, health
+
+    config = make_config(tmp_path)
+    audit.record(db_path, "alex", "note.save")
+    config = SimpleNamespace(db_path=db_path, data_dir=tmp_path)
+    done = health.report(config)
+    names = [c["name"] for c in done["checks"]]
+    assert names == ["version", "licence", "program files", "database", "audit log", "permissions", "secrets", "backup"]
+    by = {c["name"]: c for c in done["checks"]}
+    assert by["database"]["ok"] and by["audit log"]["ok"] and "1 events chained" in by["audit log"]["detail"]
+    assert by["backup"]["ok"] is False and by["backup"]["detail"] == "none yet"
+    assert done["ok"] is False
+
+    vault_home.mkdir(parents=True, exist_ok=True)
+    (vault_home / "settings.env").write_text("IMAP_PASSWORD=plain-secret\n")
+    (vault_home / "settings.env").chmod(0o644)
+    again = {c["name"]: c for c in health.report(config)["checks"]}
+    assert again["permissions"]["ok"] is False and "settings.env" in again["permissions"]["detail"]
+    assert again["secrets"]["ok"] is False and "IMAP_PASSWORD" in again["secrets"]["detail"]

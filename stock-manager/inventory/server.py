@@ -38,7 +38,7 @@ from . import (
     stockctl, units, verify, vocabulary, wallet, watch,
     workdays,
 )
-from . import access, integrity, licensing, vault
+from . import access, health, integrity, licensing, vault
 from .config import config_dir, load_config, set_setting
 from .models import Note, parse_date
 
@@ -2095,6 +2095,11 @@ class PasswordBody(BaseModel):
     password: str = ""
     old: str = ""
     new: str = ""
+
+
+@app.get("/api/health")
+def read_health():
+    return health.report(config)
 
 
 @app.get("/api/audit/verify")

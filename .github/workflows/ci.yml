@@ -1,0 +1,23 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: stock-manager
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev,slack,discord,outlook]" ruff mypy pip-audit
+      - run: ruff check inventory tools tests
+      - run: mypy
+      - run: python -m pytest -q
+      - run: pip-audit -r requirements.lock --no-deps --disable-pip

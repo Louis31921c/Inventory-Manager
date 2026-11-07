@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff
+        files: ^stock-manager/
+  - repo: local
+    hooks:
+      - id: no-secrets
+        name: no key or token in the diff
+        entry: python3 stock-manager/tools/check_secrets.py
+        language: system
+        pass_filenames: true

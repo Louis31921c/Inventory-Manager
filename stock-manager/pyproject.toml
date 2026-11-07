@@ -1,6 +1,6 @@
 [project]
 name = "stock-manager"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Read delivery notes and handwritten hardware lists from photos into a local DuckDB file, from the terminal."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -49,6 +49,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["inventory"]
+
+[tool.setuptools.dynamic]
+version = { attr = "inventory.__version__" }
 
 [tool.setuptools.package-data]
 inventory = ["MANIFEST.json", "rules.md", "prompts/*.md", "web_ui/*.html", "web_ui/*.css", "web_ui/*.txt",

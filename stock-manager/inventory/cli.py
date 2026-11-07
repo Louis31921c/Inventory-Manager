@@ -176,6 +176,22 @@ def cmd_vocab(config, args):
     return 0
 
 
+def cmd_version(config, args):
+    from . import __version__
+
+    print(f"stock-manager {__version__}")
+    return 0
+
+
+def cmd_doctor(config, args):
+    from . import health
+
+    done = health.report(config)
+    for check in done["checks"]:
+        print(f"{'ok  ' if check['ok'] else 'FAIL'} {check['name']:<14} {check['detail']}")
+    return 0 if done["ok"] else 1
+
+
 def cmd_audit(config, args):
     if args.verify:
         done = audit.verify(config.db_path)
@@ -357,6 +373,9 @@ def build_parser():
 
     password = sub.add_parser("password", help="set or change the password the app asks for")
     password.set_defaults(func=cmd_password)
+
+    sub.add_parser("version", help="the version of this copy").set_defaults(func=cmd_version)
+    sub.add_parser("doctor", help="check that this copy is in good order").set_defaults(func=cmd_doctor)
 
     where = sub.add_parser("where", help="where the data and settings live")
     where.set_defaults(func=cmd_where)
