@@ -13,7 +13,7 @@ web page open in the same browser, hostile mail from a supplier address, and mis
 | Network | binds to 127.0.0.1 on a free port; no inbound webhooks; every outbound address is https (localhost excepted) |
 | Sign-in | scrypt password hashes, a global limit of 5 wrong tries per 5 minutes, signed session cookie (HttpOnly, SameSite=Strict, 12 hours) |
 | Roles | viewer, buyer, approver, admin; one permission table (`access.py`), checked on every request; a test walks every route |
-| Browser | same-origin check on every write, CSP, X-Frame-Options DENY, no-sniff, no referrer, `Cache-Control: no-store` on the API |
+| Browser | same-origin check on every write, CSP, X-Frame-Options DENY, no-sniff, referrer only to ourselves, `Cache-Control: no-store` on the API |
 | Secrets | mail password, chat tokens, model keys and supplier tokens are encrypted (Fernet) in the settings file and the database; the key is in the OS keyring or a 0600 file |
 | Files | settings and data folders are owner-only; loose permissions are tightened at start and reported by `stock doctor` |
 | SQL | every value is a bound parameter; the only text put into SQL is a fixed column or table name; the SQL screen is read-only |

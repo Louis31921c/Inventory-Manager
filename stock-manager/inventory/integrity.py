@@ -22,7 +22,7 @@ from . import licensing
 
 PACKAGE = Path(__file__).resolve().parent
 MANIFEST = PACKAGE / "MANIFEST.json"
-SUFFIXES = {".py", ".html", ".css", ".md", ".txt", ".png", ".woff2", ".json"}
+SUFFIXES = {".py", ".html", ".css", ".js", ".md", ".txt", ".png", ".woff2", ".json"}
 SKIP_DIRS = {"__pycache__"}
 SKIP_FILES = {"MANIFEST.json"}
 RECHECK_SECONDS = 300

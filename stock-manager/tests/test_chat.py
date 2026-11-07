@@ -284,7 +284,7 @@ def test_a_slack_test_that_works_names_the_bot_and_never_the_token(monkeypatch):
 def test_the_slack_card_can_test_the_connection():
     from inventory import server as server_module
 
-    page = server_module.PAGE.read_text()
+    page = server_module.page_source()
     assert 'id="slack-check"' in page
 
 
@@ -369,7 +369,7 @@ def test_a_basket_turned_into_a_purchase_order_is_an_order_the_chat_placed(db_pa
 def test_a_click_on_a_wedge_opens_its_history_in_a_window_of_its_own():
     from inventory import server as server_module
 
-    page = server_module.PAGE.read_text()
+    page = server_module.page_source()
     screen = page[page.index('id="panel-chain"'):page.index('id="panel-query"')]
     assert 'id="step-pop"' in screen and 'id="table-step"' in screen
     # The wheel is handed the way to open one, and every wedge is one button.

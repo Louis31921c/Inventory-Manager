@@ -46,6 +46,14 @@ log = logging.getLogger("inventory.web")
 
 WEB = Path(__file__).resolve().parent / "web_ui"
 PAGE = WEB / "app.html"
+SCRIPTS = WEB / "js"
+SCRIPT_NAME = re.compile(r"^[0-9]{2}-[a-z0-9-]+\.js$")
+
+
+def page_source():
+    """The page and every script it loads, as one text (for the tests that read what the page wires up)."""
+    return PAGE.read_text(encoding="utf-8") + "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(SCRIPTS.glob("*.js")))
 LICENCE = WEB / "license.html"
 UNLOCK = WEB / "unlock.html"
 SUPPORTED = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
@@ -307,7 +315,9 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    # same-origin, not no-referrer: with no-referrer a browser sends "Origin: null" on a same-site POST,
+    # which the same-origin check would refuse.
+    response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
     response.headers.setdefault("Content-Security-Policy", CSP)
     if request.url.path.startswith(("/api/", "/export")):
@@ -505,6 +515,13 @@ async def licence_install(request: Request):
     audit.record(config.db_path, "licence", "licence.install", licensing.status()["licensee"], None,
                  request.client.host if request.client else "?")
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/js/{name}")
+def page_script(name: str):
+    if not SCRIPT_NAME.match(name) or not (SCRIPTS / name).is_file():
+        raise HTTPException(404, "No such script.")
+    return FileResponse(SCRIPTS / name, media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/license", response_class=HTMLResponse)

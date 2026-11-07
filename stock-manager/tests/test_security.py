@@ -368,7 +368,7 @@ def test_a_role_limits_what_the_browser_may_do_and_the_pages_carry_security_head
         assert sign_in(boss, "alex", "correct horse", "correct horse").status_code == 303
         home = boss.get("/api/data")
         for header, value in (("x-content-type-options", "nosniff"), ("x-frame-options", "DENY"),
-                              ("referrer-policy", "no-referrer"), ("cache-control", "no-store")):
+                              ("referrer-policy", "same-origin"), ("cache-control", "no-store")):
             assert home.headers[header] == value
         assert "frame-ancestors 'none'" in home.headers["content-security-policy"]
         assert "default-src 'self'" in boss.get("/unlock").headers["content-security-policy"]
