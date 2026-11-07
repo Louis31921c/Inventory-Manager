@@ -633,7 +633,7 @@ device` to the Admin. Repeats are muted.
 - overall growth
 ## Licence
 
-MIT: see [LICENSE](LICENSE). Copyright @louis31921c.
+Proprietary: see [LICENSE](LICENSE). Copyright Louis31921c, all rights reserved. Not open source.
 
 What comes back from a photo is a draft. Models misread quantities, references and dates, which is
 why the correction step exists. This is not a system of record.

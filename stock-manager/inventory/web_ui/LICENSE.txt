@@ -1,21 +1,32 @@
-MIT License
+Stock Manager: proprietary software licence
 
-Copyright (c) 2026 @louis31921c
+Copyright (c) 2026 Louis31921c. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software and everything delivered with it (the program, its screens, its prompts, its rule
+files and its documentation) is the property of the copyright holder and is licensed, not sold.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Grant. The holder grants the licensee named in the licence file a non-exclusive,
+   non-transferable right to install and run one copy of the program for the licensee's own
+   internal business, for the term and on the machines the licence file states.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Restrictions. Without the holder's written permission the licensee may not: copy or
+   redistribute the program; sell, rent, lend or sublicense it; modify it, remove or bypass its
+   licence check or its integrity check; decompile, disassemble or reverse engineer it except
+   where the law allows that despite this clause; use it to build a competing product; or give
+   anyone else access to it or to its source.
+
+3. What the licensee owns. The data the licensee enters or imports, and the settings and rule
+   values the program lets the licensee change, belong to the licensee. The program's code is not
+   among them.
+
+4. No warranty. The program is provided as it is. It prepares, checks and, when switched on,
+   carries out purchasing and payment steps from numbers and rules the licensee sets; the licensee
+   is responsible for those rules, for the funds put in its wallet and for checking what it does.
+   To the extent the law allows, the holder is not liable for indirect or consequential loss.
+
+5. Ending. The licence ends at the end of its term, or at once if the licensee breaks clause 2.
+   The licensee then stops using the program and deletes every copy. Clause 3 survives.
+
+6. Law. This licence is governed by the law of the holder's country of residence.
+
+Third-party components keep their own licences, which are listed in THIRD-PARTY.md.
