@@ -33,7 +33,7 @@ from . import (account, agents, alerts, bankdrop, channels, counting, receiving,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
                shortcuts, simulation, slack_bot, stock, stockctl, units, verify, vocabulary, watch,
                workdays)
-from . import access, vault
+from . import access, integrity, licensing, vault
 from .config import config_dir, load_config, set_setting
 from .models import Note, parse_date
 
@@ -50,7 +50,8 @@ app = FastAPI(title="Stock manager")
 lock = account.Lock(config.data_dir)
 backend = None
 stopper = None
-OPEN_PATHS = ("/unlock", "/robots.txt", "/sap.css", "/logo.png", "/icon.png")
+OPEN_PATHS = ("/unlock", "/robots.txt", "/sap.css", "/logo.png", "/icon.png", "/license-required",
+              "/license/install")
 OPEN_PREFIXES = ("/fonts/",)
 WRITING = ("POST", "PUT", "PATCH", "DELETE")
 MAX_UPLOAD = 30 * 1024 * 1024
@@ -274,6 +275,27 @@ async def require_unlock(request: Request, call_next):
     return response
 
 
+# What a copy that may not run still answers: the page that says why, and the files that page needs.
+HELD_OPEN = ("/license-required", "/license/install", "/license", "/api/license")
+
+
+@app.middleware("http")
+async def licence_gate(request: Request, call_next):
+    """No licence, an ended one, or program files that no longer match the vendor's signature: nothing is served
+    but the page that says so. The check is off for development (STOCK_LICENSE, STOCK_INTEGRITY)."""
+    path = request.url.path
+    if path in HELD_OPEN or path in OPEN_PATHS and path != "/unlock" or path.startswith(OPEN_PREFIXES):
+        return await call_next(request)
+    held = licensing.status()
+    sealed = integrity.status()
+    if held["valid"] and sealed["ok"]:
+        return await call_next(request)
+    why = held["reason"] if not held["valid"] else sealed["reason"]
+    if path.startswith(("/api/", "/export")):
+        return JSONResponse({"detail": f"This copy may not run: {why}.", "licence": held, "integrity": sealed}, 423)
+    return RedirectResponse("/license-required", status_code=303)
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     """What the browser is told about the page: no framing, no sniffing, only this origin, never cached."""
@@ -427,6 +449,57 @@ def robots():
 @app.get("/", response_class=HTMLResponse)
 def page():
     return HTMLResponse(PAGE.read_text(encoding="utf-8"))
+
+
+def _licence_page(note=""):
+    held, sealed = licensing.status(), integrity.status()
+    changed = sealed["changed"] + sealed["missing"] + sealed["added"]
+    body = ["<meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>",
+            "<title>Licence - Stock Manager</title><link rel='icon' href='/icon.png'>",
+            "<style>@import url('/sap.css');body{padding:24px;max-width:760px;margin:auto}"
+            "textarea{width:100%;min-height:160px;font-family:monospace;font-size:12px}"
+            ".bad{color:#b00020}code{background:#eee;padding:1px 4px}</style>",
+            "<h1>Stock Manager</h1>"]
+    if note:
+        body.append(f"<p class='bad'>{html.escape(note)}</p>")
+    if not sealed["ok"]:
+        body.append(f"<h2>The program files do not match the vendor's signature</h2><p class='bad'>{html.escape(sealed['reason'])}</p>"
+                    "<p>The program refuses to run until its files are put back as the vendor delivered them.</p>")
+        if changed:
+            body.append("<ul>" + "".join(f"<li><code>{html.escape(name)}</code></li>" for name in changed[:20]) + "</ul>")
+    if not held["valid"]:
+        body.append(f"<h2>This copy has no valid licence</h2><p class='bad'>{html.escape(held['reason'])}.</p>"
+                    f"<p>Machine id: <code>{held['machine']}</code>. Give it to the vendor with your order, then paste the "
+                    "licence file they send you.</p>"
+                    "<form method='post' action='/license/install'><textarea name='text' "
+                    "placeholder='{ \"payload\": ..., \"signature\": ... }'></textarea>"
+                    "<p><button class='action' type='submit'>install the licence</button></p></form>")
+    if held["valid"] and sealed["ok"]:
+        body.append(f"<p>Licensed to <b>{html.escape(str(held['licensee']))}</b> until {held['expires']}.</p>"
+                    "<p><a href='/'>Open the program</a></p>")
+    return HTMLResponse("".join(body))
+
+
+@app.get("/license-required", response_class=HTMLResponse)
+def licence_required():
+    return _licence_page()
+
+
+@app.get("/api/license")
+def licence_status():
+    return {"licence": licensing.status(), "integrity": {k: v for k, v in integrity.status().items() if k != "added"}}
+
+
+@app.post("/license/install")
+async def licence_install(request: Request):
+    form = await request.form()
+    try:
+        licensing.install(str(form.get("text") or ""))
+    except ValueError as e:
+        return _licence_page(str(e))
+    audit.record(config.db_path, "licence", "licence.install", licensing.status()["licensee"], None,
+                 request.client.host if request.client else "?")
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/license", response_class=HTMLResponse)

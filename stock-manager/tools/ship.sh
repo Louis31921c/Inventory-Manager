@@ -46,7 +46,9 @@ git diff --cached --name-only | sed 's/^/    /'
 git commit -q -m "$message"
 echo "committed  $(git log --oneline -1)"
 
-if git remote get-url origin >/dev/null 2>&1; then
+if [ -n "${SHIP_NO_PUSH:-}" ]; then
+    echo "SHIP_NO_PUSH is set: committed only"
+elif git remote get-url origin >/dev/null 2>&1; then
     git push -q && echo "pushed     $(git rev-parse --abbrev-ref HEAD) -> origin"
 else
     echo "no remote: committed only"
@@ -55,6 +57,13 @@ fi
 # Into the venv, so a .py edit is one the running app can actually load.
 if [ -x "$venv/bin/pip" ]; then
     "$venv/bin/pip" install -q "$here" && echo "installed  $venv"
+    # The installed copy is signed, so the program can tell if a file of it is changed later.
+    pkg=$("$venv/bin/python" -c 'import inventory, os; print(os.path.dirname(inventory.__file__))')
+    if [ -f "${STOCK_VENDOR_KEY:-$HOME/.stock-manager-vendor/vendor.key}" ]; then
+        "$venv/bin/python" "$here/tools/vendor.py" manifest --root "$pkg"
+    else
+        echo "no vendor key: the installed copy is not signed and will not start with the integrity check on"
+    fi
     echo
     echo "Restart Stock Manager for the Python to take. A reload is enough for html and css."
 else

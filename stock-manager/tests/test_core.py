@@ -6126,3 +6126,138 @@ def test_the_audit_log_is_chained_and_an_edit_or_a_removal_shows(vault_home, db_
     vault.key_file().unlink()
     vault.forget_cached_key()
     assert audit.verify(db_path)["ok"] is False
+
+
+# ---- the licence and the signed program files ------------------------------------------------
+
+def _vendor():
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    key = Ed25519PrivateKey.generate()
+    private = base64.b64encode(key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                                                 serialization.NoEncryption())).decode()
+    public = base64.b64encode(key.public_key().public_bytes(serialization.Encoding.Raw,
+                                                            serialization.PublicFormat.Raw)).decode()
+    return private, public
+
+
+def test_a_licence_is_signed_by_the_vendor_and_judged_on_who_when_and_where(tmp_path, monkeypatch):
+    from inventory import licensing
+
+    private, public = _vendor()
+    _other_private, other_public = _vendor()
+    today = date(2026, 11, 7)
+    good = licensing.issue(private, "ACME BUILD", 100, "any", today)
+    assert licensing.check(good, today, public)["valid"] is True
+    found = licensing.check(good, today, public)
+    assert found["licensee"] == "ACME BUILD" and found["days_left"] == 100 and found["warn"] is False
+    assert licensing.check(good, date(2027, 2, 1), public)["warn"] is True                  # within 30 days of the end
+    assert "ended on 2027-02-15" in licensing.check(good, date(2027, 3, 1), public)["reason"]
+    assert "not signed by the vendor" in licensing.check(good, today, other_public)["reason"]
+    forged = {**good, "payload": {**good["payload"], "expires": "2099-01-01"}}              # a longer date, same signature
+    assert "not signed by the vendor" in licensing.check(forged, today, public)["reason"]
+    assert "not a licence" in licensing.check({"hello": 1}, today, public)["reason"]
+    mine = licensing.issue(private, "ACME BUILD", 100, licensing.machine_id(), today)
+    assert licensing.check(mine, today, public)["valid"] is True
+    elsewhere = licensing.issue(private, "ACME BUILD", 100, "0123456789abcdef", today)
+    assert "another machine" in licensing.check(elsewhere, today, public)["reason"]
+    with monkeypatch.context() as m:
+        m.setattr(licensing, "PRODUCT", "something-else")                                    # signed for another product
+        other_product = licensing.issue(private, "ACME BUILD", 100, "any", today)
+    assert "another product" in licensing.check(other_product, today, public)["reason"]
+
+    monkeypatch.setattr(licensing, "PUBLIC_KEY", public)
+    monkeypatch.setenv("STOCK_LICENSE", "on")
+    monkeypatch.setenv("STOCK_LICENSE_FILE", str(tmp_path / "license.json"))
+    assert licensing.status()["reason"] == "there is no licence file yet"
+    with pytest.raises(ValueError):
+        licensing.install("not json")
+    with pytest.raises(ValueError):
+        licensing.install(json.dumps(forged))
+    assert licensing.install(json.dumps(good))["valid"] and licensing.status()["licensee"] == "ACME BUILD"
+    assert oct((tmp_path / "license.json").stat().st_mode & 0o777) == "0o600"
+    monkeypatch.setenv("STOCK_LICENSE", "off")
+    assert licensing.status()["off"] is True
+
+
+def test_changed_added_or_missing_program_files_fail_the_signature(tmp_path):
+    from inventory import integrity
+
+    private, public = _vendor()
+    root = tmp_path / "pkg"
+    (root / "web_ui").mkdir(parents=True)
+    (root / "app.py").write_text("print('a')\n")
+    (root / "web_ui" / "app.html").write_text("<p>hi</p>")
+    (root / "__pycache__").mkdir()
+    (root / "__pycache__" / "x.pyc").write_bytes(b"\x00")                                    # never part of the check
+    (root / "notes.xyz").write_text("not a program file")
+    manifest = tmp_path / "MANIFEST.json"
+    manifest.write_text(json.dumps(integrity.build(private, root)))
+    assert sorted(json.loads(manifest.read_text())["files"]) == ["app.py", "web_ui/app.html"]
+
+    assert integrity.verify(root, manifest, public)["ok"] is True
+    (root / "app.py").write_text("print('b')\n")
+    done = integrity.verify(root, manifest, public)
+    assert done["ok"] is False and done["changed"] == ["app.py"] and "changed" in done["reason"]
+    (root / "app.py").write_text("print('a')\n")
+    (root / "extra.py").write_text("import os\n")
+    assert integrity.verify(root, manifest, public)["added"] == ["extra.py"]
+    (root / "extra.py").unlink()
+    (root / "web_ui" / "app.html").unlink()
+    assert integrity.verify(root, manifest, public)["missing"] == ["web_ui/app.html"]
+    (root / "web_ui" / "app.html").write_text("<p>hi</p>")
+    assert integrity.verify(root, manifest, public)["ok"] is True
+
+    document = json.loads(manifest.read_text())
+    document["files"]["app.py"] = "0" * 64                                                   # a manifest edited to match
+    manifest.write_text(json.dumps(document))
+    assert "not signed by the vendor" in integrity.verify(root, manifest, public)["reason"]
+    assert "unsigned build" in integrity.verify(root, tmp_path / "none.json", public)["reason"]
+    assert integrity.verify(root, manifest, _vendor()[1])["ok"] is False
+
+
+def test_the_program_refuses_to_serve_without_a_licence_and_takes_one_on_its_page(tmp_path, monkeypatch):
+    import importlib
+
+    from fastapi.testclient import TestClient
+
+    private, public = _vendor()
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("STOCK_LICENSE", "on")
+    monkeypatch.setenv("STOCK_LICENSE_FILE", str(tmp_path / "license.json"))
+    monkeypatch.delenv("STOCK_USER", raising=False)
+    from inventory import config as config_module
+    from inventory import licensing
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+    monkeypatch.setattr(licensing, "PUBLIC_KEY", public)
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        assert client.get("/", follow_redirects=False).headers["location"] == "/license-required"
+        assert client.get("/unlock", follow_redirects=False).headers["location"] == "/license-required"
+        held = client.get("/api/data")
+        assert held.status_code == 423 and "no licence file" in held.json()["detail"]
+        page = client.get("/license-required").text
+        assert licensing.machine_id() in page and "install the licence" in page
+        assert client.get("/sap.css").status_code == 200
+
+        bad = client.post("/license/install", data={"text": "{}"}, headers=mine)
+        assert "cannot be used" in bad.text or "not a licence" in bad.text
+        good = json.dumps(licensing.issue(private, "ACME BUILD", 30))
+        done = client.post("/license/install", data={"text": good}, headers=mine, follow_redirects=False)
+        assert done.status_code == 303 and done.headers["location"] == "/"
+        assert client.get("/unlock", follow_redirects=False).status_code == 200            # now the sign-in page
+        assert client.get("/api/license").status_code == 401                                # and the rest wants a sign-in
+
+        monkeypatch.setenv("STOCK_INTEGRITY", "on")
+        from inventory import integrity
+        integrity._last.update(at=0.0, result=None)
+        sealed = client.get("/api/data")
+        assert sealed.status_code == 423 and "unsigned build" in sealed.json()["detail"]
+        assert "do not match the vendor" in client.get("/license-required").text
