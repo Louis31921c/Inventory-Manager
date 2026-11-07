@@ -32,26 +32,25 @@ done
 [ "$staged" = 1 ] || true
 
 if git diff --cached --quiet; then
-    echo "Nothing to ship: no source file has changed."
-    exit 0
-fi
-
-files=$(git diff --cached --name-only | sed 's|.*/||' | sort -u | tr '\n' ' ')
-count=$(git diff --cached --name-only | wc -l)
-message=${1:-"Edits by hand: $files"}
-
-echo "--- shipping $count file(s) ---"
-git diff --cached --name-only | sed 's/^/    /'
-
-git commit -q -m "$message"
-echo "committed  $(git log --oneline -1)"
-
-if [ -n "${SHIP_NO_PUSH:-}" ]; then
-    echo "SHIP_NO_PUSH is set: committed only"
-elif git remote get-url origin >/dev/null 2>&1; then
-    git push -q && echo "pushed     $(git rev-parse --abbrev-ref HEAD) -> origin"
+    echo "Nothing new to commit: installing what is committed."
 else
-    echo "no remote: committed only"
+    files=$(git diff --cached --name-only | sed 's|.*/||' | sort -u | tr '\n' ' ')
+    count=$(git diff --cached --name-only | wc -l)
+    message=${1:-"Edits by hand: $files"}
+
+    echo "--- shipping $count file(s) ---"
+    git diff --cached --name-only | sed 's/^/    /'
+
+    git commit -q -m "$message"
+    echo "committed  $(git log --oneline -1)"
+
+    if [ -n "${SHIP_NO_PUSH:-}" ]; then
+        echo "SHIP_NO_PUSH is set: committed only"
+    elif git remote get-url origin >/dev/null 2>&1; then
+        git push -q && echo "pushed     $(git rev-parse --abbrev-ref HEAD) -> origin"
+    else
+        echo "no remote: committed only"
+    fi
 fi
 
 # Into the venv, so a .py edit is one the running app can actually load.
