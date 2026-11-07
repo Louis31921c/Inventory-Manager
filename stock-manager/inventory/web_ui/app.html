@@ -733,6 +733,27 @@
     <div id="bk-note"></div>
   </div>
 
+  <div class="card" id="users-card">
+    <h2>Users</h2>
+    <p class="muted">viewer reads; buyer enters the day's work; approver decides what spends or changes the books;
+      admin sets the program up. The first account is always an administrator.</p>
+    <div class="row">
+      <label class="field grow"><span>name</span><input id="us-name" autocomplete="off"></label>
+      <label class="field narrow"><span>role</span><select id="us-role"></select></label>
+      <label class="field grow"><span>password, 8 characters or more</span><input id="us-pass" type="password" autocomplete="new-password"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" type="button" id="us-add">add</button></label>
+    </div>
+    <div id="us-note"></div>
+    <div class="scroll-x short-box"><table id="table-users"></table></div>
+    <p class="eyebrow">My password</p>
+    <div class="row">
+      <label class="field grow"><span>old</span><input id="mp-old" type="password" autocomplete="current-password"></label>
+      <label class="field grow"><span>new</span><input id="mp-new" type="password" autocomplete="new-password"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action ghost" type="button" id="mp-save">change</button></label>
+    </div>
+    <div id="mp-note"></div>
+  </div>
+
   <div class="card" id="pack-card">
     <h2>Pack sizes</h2>
     <p class="muted">What a supplier sells an article in. An order for 130 washers goes out as the
@@ -5586,6 +5607,66 @@ setInterval(() => {
   if (!document.hidden && !$("panel-inventory").hidden) { loadReceiving(); loadCounting(); }
 }, 60000);
 
+// ---- users and roles ----------------------------------------------------------
+
+function drawUsers(data) {
+  const roles = data.roles ?? [];
+  const keep = $("us-role").value;
+  $("us-role").replaceChildren(...roles.map((role) => el("option", { value: role, textContent: role })));
+  $("us-role").value = roles.includes(keep) ? keep : "buyer";
+  renderTable($("table-users"), [
+    { label: "Name", cell: (row) => td(row.user + (row.user === data.me ? " (you)" : "")) },
+    { label: "Role", cell: (row) => {
+      if (row.first) return td("admin (first account)");
+      const pick = el("select", { className: "cell" }, roles.map((role) => el("option", { value: role, textContent: role })));
+      pick.value = row.role;
+      pick.addEventListener("change", async () => {
+        try {
+          drawUsers(await api(`/api/users/${encodeURIComponent(row.user)}/role`, putJson({ role: pick.value })));
+          notice($("us-note"), "ok", `${row.user} is now ${pick.value}.`);
+        } catch (e) { notice($("us-note"), "bad", e.message); }
+      });
+      return pick;
+    } },
+    { label: "Since", cell: (row) => td((row.created_at ?? "").slice(0, 10)) },
+    { label: "", cell: (row) => {
+      const fresh = el("input", { className: "cell", type: "password", size: 12, placeholder: "new password" });
+      const reset = el("button", { className: "mini", type: "button", textContent: "set password" });
+      reset.addEventListener("click", async () => {
+        try {
+          drawUsers(await api(`/api/users/${encodeURIComponent(row.user)}/password`, putJson({ password: fresh.value })));
+          notice($("us-note"), "ok", `${row.user} has a new password.`);
+        } catch (e) { notice($("us-note"), "bad", e.message); }
+      });
+      const parts = [fresh, reset];
+      if (!row.first && row.user !== data.me) {
+        parts.push(confirmButton("Remove", () => api(`/api/users/${encodeURIComponent(row.user)}`, { method: "DELETE" })));
+      }
+      return el("span", { className: "row tight" }, parts);
+    } },
+  ], data.users ?? [], "");
+}
+
+async function loadUsers() { try { drawUsers(await api("/api/users")); } catch {} }
+
+$("us-add").addEventListener("click", async () => {
+  try {
+    drawUsers(await api("/api/users", postJson({ user: $("us-name").value, role: $("us-role").value, password: $("us-pass").value })));
+    notice($("us-note"), "ok", `${$("us-name").value.toUpperCase()} can sign in now.`);
+    $("us-name").value = "";
+    $("us-pass").value = "";
+  } catch (e) { notice($("us-note"), "bad", e.message); }
+});
+
+$("mp-save").addEventListener("click", async () => {
+  try {
+    await api("/api/account/password", postJson({ old: $("mp-old").value, new: $("mp-new").value }));
+    $("mp-old").value = "";
+    $("mp-new").value = "";
+    notice($("mp-note"), "ok", "Your password is changed.");
+  } catch (e) { notice($("mp-note"), "bad", e.message); }
+});
+
 async function refresh() {
   try {
     const data = await api("/api/data");
@@ -5612,7 +5693,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadMatch(), loadStockControl(), loadLeadTimes(), loadDashboard(), loadCalendar(), loadBillTo(), loadRequests(), loadConnections(), loadReceiving(), loadCounting(), loadPolicies(), loadCharters(), loadJudge(), loadWallet(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadMatch(), loadStockControl(), loadLeadTimes(), loadDashboard(), loadCalendar(), loadBillTo(), loadRequests(), loadConnections(), loadReceiving(), loadCounting(), loadUsers(), loadPolicies(), loadCharters(), loadJudge(), loadWallet(),
       loadPacks(), loadComing(),
     ]);
     notice($("global-notice"), "", "");

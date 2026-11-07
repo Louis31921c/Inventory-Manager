@@ -1,8 +1,10 @@
-"""The one account that unlocks this copy: a name, a password, and a signed session.
+"""The accounts that unlock this copy: a name, a password, a role, and a signed session.
 
-The password is stored as a scrypt hash in the settings folder, never in the database and never in
-plain text. It keeps the window shut, nothing more: the data file itself is readable by anyone who
-can read your home folder, so use full disk encryption if the machine travels.
+The first account is the administrator. Others can be added with a role (viewer, buyer, approver,
+admin); what each role may do is in access.py. Passwords are stored as scrypt hashes in the settings
+folder, never in the database and never in plain text. They keep the window shut, nothing more: the data
+file itself is readable by anyone who can read your home folder, so use full disk encryption if the
+machine travels.
 """
 
 import base64
@@ -24,6 +26,8 @@ MAX_ATTEMPTS = 5
 WINDOW_SECONDS = 300
 SESSION_HOURS = 12
 MIN_LENGTH = 8
+ROLES = ("viewer", "buyer", "approver", "admin")
+RANK = {role: number for number, role in enumerate(ROLES)}
 
 
 class TooManyAttempts(Exception):
@@ -75,12 +79,120 @@ def write_account(user, password, path=None):
 
 
 def change_password(old, new, path=None):
+    """The first account's password, as `stock password` changes it."""
     account = read_account(path)
     if account is None:
         raise ValueError("No account yet.")
     if not check_password(old, account["hash"]):
         raise ValueError("The old password does not match.")
     return write_account(account["user"], new, path)
+
+
+def _save(account, path=None):
+    path = Path(path or account_file())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(account), encoding="utf-8")
+    path.chmod(0o600)
+
+
+def _same(one, other):
+    return (one or "").strip().upper() == (other or "").strip().upper()
+
+
+def everyone(account):
+    """Every account with its hash: the first (an administrator) and then the others."""
+    if not account:
+        return []
+    first = {"user": account["user"], "hash": account["hash"], "role": "admin",
+             "created_at": account.get("created_at"), "first": True}
+    return [first] + [dict(other, first=False) for other in account.get("users", [])]
+
+
+def find(account, name):
+    return next((one for one in everyone(account) if _same(one["user"], name)), None)
+
+
+def users(path=None):
+    """Who may sign in, and as what. Never the hashes."""
+    return [{"user": one["user"], "role": one["role"], "created_at": one["created_at"], "first": one["first"]}
+            for one in everyone(read_account(path))]
+
+
+def _check_role(role):
+    if role not in ROLES:
+        raise ValueError("A role is " + ", ".join(ROLES) + ".")
+    return role
+
+
+def add_user(user, role, password, path=None):
+    account = read_account(path)
+    if account is None:
+        raise ValueError("No account yet.")
+    name = clean_name(user)
+    if not name:
+        raise ValueError("A name is 1 to 32 characters: letters, digits, space, dot, dash, underscore.")
+    _check_role(role)
+    if len(password) < MIN_LENGTH:
+        raise ValueError(f"The password needs at least {MIN_LENGTH} characters.")
+    if find(account, name):
+        raise ValueError(f"{name} already has an account.")
+    account.setdefault("users", []).append({"user": name, "hash": hash_password(password), "role": role,
+                                            "created_at": time.strftime("%Y-%m-%dT%H:%M:%S")})
+    _save(account, path)
+    return name
+
+
+def _other(account, name):
+    found = find(account, name)
+    if found is None:
+        raise ValueError(f"No account named {name}.")
+    if found["first"]:
+        raise ValueError("The first account is the administrator and keeps that role.")
+    return found
+
+
+def set_role(user, role, path=None):
+    account = read_account(path)
+    found = _other(account, user)
+    _check_role(role)
+    for one in account["users"]:
+        if _same(one["user"], found["user"]):
+            one["role"] = role
+    _save(account, path)
+    return found["user"]
+
+
+def remove_user(user, path=None):
+    account = read_account(path)
+    found = _other(account, user)
+    account["users"] = [one for one in account["users"] if not _same(one["user"], found["user"])]
+    _save(account, path)
+    return found["user"]
+
+
+def reset_password(user, new, path=None):
+    """An administrator sets someone's password; the person changes it from their own screen."""
+    account = read_account(path)
+    found = find(account, user)
+    if found is None:
+        raise ValueError(f"No account named {user}.")
+    if len(new) < MIN_LENGTH:
+        raise ValueError(f"The password needs at least {MIN_LENGTH} characters.")
+    if found["first"]:
+        account["hash"] = hash_password(new)
+    else:
+        for one in account["users"]:
+            if _same(one["user"], found["user"]):
+                one["hash"] = hash_password(new)
+    _save(account, path)
+    return found["user"]
+
+
+def change_own_password(user, old, new, path=None):
+    found = find(read_account(path), user)
+    if found is None or not check_password(old, found["hash"]):
+        raise ValueError("The old password does not match.")
+    return reset_password(user, new, path)
 
 
 class Lock:
@@ -104,17 +216,30 @@ class Lock:
         account = self.account
         return account["user"] if account else None
 
-    def unlock(self, password):
+    def authenticate(self, user, password):
+        """The account's name when the password is right, else None. Guessing is slowed for everyone at once."""
         now = time.time()
         self._attempts = [t for t in self._attempts if now - t < WINDOW_SECONDS]
         if len(self._attempts) >= MAX_ATTEMPTS:
             raise TooManyAttempts(int(WINDOW_SECONDS - (now - self._attempts[0])))
         account = self.account
-        if account and check_password(password, account["hash"]):
+        candidates = everyone(account)
+        found = (find(account, user) if (user or "").strip()
+                 else (candidates[0] if len(candidates) == 1 else None))
+        if found and check_password(password, found["hash"]):
             self._attempts = []
-            return True
+            return found["user"]
         self._attempts.append(now)
-        return False
+        return None
+
+    def unlock(self, password, user=None):
+        """True when the password is right, for the first account unless another is named."""
+        first = self.user
+        return self.authenticate(user or first, password) is not None
+
+    def role(self, user):
+        found = find(self.account, user)
+        return found["role"] if found else None
 
     @property
     def key(self):
@@ -128,8 +253,8 @@ class Lock:
     def _sign(self, payload):
         return hmac.new(self.key, payload.encode(), hashlib.sha256).hexdigest()
 
-    def new_session(self, hours=SESSION_HOURS):
-        payload = f"{int(time.time()) + int(hours * 3600)}:{self.user or ''}"
+    def new_session(self, hours=SESSION_HOURS, user=None):
+        payload = f"{int(time.time()) + int(hours * 3600)}:{user or self.user or ''}"
         return f"{payload}.{self._sign(payload)}"
 
     def read_session(self, cookie):
@@ -144,6 +269,5 @@ class Lock:
                 return None
         except ValueError:
             return None
-        if user != (self.user or ""):
-            return None
-        return user or None
+        found = find(self.account, user)
+        return found["user"] if found else None

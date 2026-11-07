@@ -33,7 +33,8 @@ from . import (account, agents, alerts, bankdrop, channels, counting, receiving,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
                shortcuts, simulation, slack_bot, stock, stockctl, units, verify, vocabulary, watch,
                workdays)
-from .config import load_config, set_setting
+from . import access, vault
+from .config import config_dir, load_config, set_setting
 from .models import Note, parse_date
 
 log = logging.getLogger("inventory.web")
@@ -85,6 +86,10 @@ async def startup():
     simulation.init(config.db_path)
     db.keep_open(config.db_path)
     config.images_dir.mkdir(parents=True, exist_ok=True)
+    for path in vault.harden(config_dir(), config.data_dir):
+        log.warning("permissions tightened: %s", path)
+    if vault.seal_database(config.db_path):
+        log.info("stored supplier tokens are now encrypted")
     log.info("database: %s", config.db_path)
     log.info("error reports: %s", alerts.destination(config.sms))
     asyncio.create_task(_purge_loop())
@@ -239,6 +244,12 @@ async def _mail_loop():
             log.warning("mail fetch failed: %s", e)
 
 
+# The pages carry their own script and style, so those two allow inline; nothing may come from another site.
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; "
+       "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+
+
 @app.middleware("http")
 async def require_unlock(request: Request, call_next):
     """Nothing is served until the password has been typed on this run."""
@@ -254,8 +265,26 @@ async def require_unlock(request: Request, call_next):
         return RedirectResponse("/unlock", status_code=303)
 
     request.state.user = user
+    request.state.role = lock.role(user)
+    if not access.allowed(request.state.role, request.method, path):
+        need = access.required_role(request.method, path)
+        return JSONResponse({"detail": f"A {request.state.role} may not do this: it takes a {need}."}, 403)
     response = await call_next(request)
     response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    return response
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """What the browser is told about the page: no framing, no sniffing, only this origin, never cached."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Content-Security-Policy", CSP)
+    if request.url.path.startswith(("/api/", "/export")):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -299,24 +328,20 @@ def unlock(request: Request, password: str = Form(""), user: str = Form(""),
         return _unlocked(name)
 
     typed = (user or "").strip()
-    if typed and typed.upper() != (lock.user or "").upper():
-        audit.record(config.db_path, lock.user, "unlock.refused", None, "wrong user", caller)
-        return unlock_page("Wrong user or password.", user)
-
     try:
-        ok = lock.unlock(password)
+        name = lock.authenticate(typed, password)
     except account.TooManyAttempts as e:
         return unlock_page(str(e))
-    if not ok:
-        audit.record(config.db_path, lock.user, "unlock.refused", None, "wrong password", caller)
-        return unlock_page("Wrong password.")
-    audit.record(config.db_path, lock.user, "unlock", None, None, caller)
-    return _unlocked(lock.user)
+    if name is None:
+        audit.record(config.db_path, typed or lock.user, "unlock.refused", None, "wrong user or password", caller)
+        return unlock_page("Wrong user or password.", user)
+    audit.record(config.db_path, name, "unlock", None, None, caller)
+    return _unlocked(name)
 
 
 def _unlocked(name):
     response = RedirectResponse("/", status_code=303)
-    response.set_cookie(account.COOKIE, lock.new_session(),
+    response.set_cookie(account.COOKIE, lock.new_session(user=name),
                         max_age=account.SESSION_HOURS * 3600, httponly=True, samesite="strict",
                         path="/")
     return response
@@ -1973,6 +1998,62 @@ def test_bank_drop(request: Request):
     except (ValueError, OSError, subprocess.SubprocessError) as e:
         raise HTTPException(422, str(e)) from e
     event(request, "bankdrop.test", None)
+    return {"ok": True}
+
+
+# ---- users and roles --------------------------------------------------------------
+
+class UserBody(BaseModel):
+    user: str
+    role: str = "buyer"
+    password: str = ""
+
+
+class RoleBody(BaseModel):
+    role: str
+
+
+class PasswordBody(BaseModel):
+    password: str = ""
+    old: str = ""
+    new: str = ""
+
+
+@app.get("/api/users")
+def read_users(request: Request):
+    return {"users": account.users(), "roles": list(account.ROLES), "me": request.state.user}
+
+
+@app.post("/api/users")
+def add_user(request: Request, body: UserBody):
+    _do(request, "user.add", body.user, lambda: account.add_user(body.user, body.role, body.password))
+    return read_users(request)
+
+
+@app.put("/api/users/{name}/role")
+def set_user_role(request: Request, name: str, body: RoleBody):
+    _do(request, "user.role", name, lambda: account.set_role(name, body.role))
+    return read_users(request)
+
+
+@app.put("/api/users/{name}/password")
+def reset_user_password(request: Request, name: str, body: PasswordBody):
+    _do(request, "user.reset", name, lambda: account.reset_password(name, body.password))
+    return read_users(request)
+
+
+@app.delete("/api/users/{name}")
+def delete_user(request: Request, name: str):
+    if name.strip().upper() == (request.state.user or "").upper():
+        raise HTTPException(422, "You cannot remove the account you are using.")
+    _do(request, "user.remove", name, lambda: account.remove_user(name))
+    return read_users(request)
+
+
+@app.post("/api/account/password")
+def change_my_password(request: Request, body: PasswordBody):
+    _do(request, "user.password", request.state.user, lambda: account.change_own_password(
+        request.state.user, body.old, body.new))
     return {"ok": True}
 
 

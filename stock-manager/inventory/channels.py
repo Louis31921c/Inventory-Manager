@@ -27,7 +27,7 @@ import urllib.request
 from datetime import date
 from urllib.parse import urlparse
 
-from . import db, outbox
+from . import db, outbox, vault
 from .models import parse_date
 
 TIMEOUT = 20
@@ -48,7 +48,7 @@ def get(db_path, supplier):
                             "WHERE upper(supplier) = upper(?)", [supplier or ""])
     if not rows or rows[0][1] != "webhook" or not rows[0][2]:
         return None
-    return {"supplier": rows[0][0], "kind": rows[0][1], "url": rows[0][2], "token": rows[0][3] or ""}
+    return {"supplier": rows[0][0], "kind": rows[0][1], "url": rows[0][2], "token": vault.unseal(rows[0][3] or "")}
 
 
 def has(db_path, supplier):
@@ -71,7 +71,7 @@ def save(db_path, supplier, url, token=None):
         raise ValueError("Name the supplier.")
     url = _check_url(url)
     keep = db.read(db_path, "SELECT token FROM supplier_channels WHERE upper(supplier) = upper(?)", [supplier])
-    secret = (token or "").strip() or (keep[0][0] if keep else "")
+    secret = (token or "").strip() or (vault.unseal(keep[0][0]) if keep else "")
     if not secret:
         raise ValueError("A token is needed to sign the orders.")
     db.write(db_path, """
@@ -79,7 +79,7 @@ def save(db_path, supplier, url, token=None):
             VALUES (?, 'webhook', ?, ?, now())
             ON CONFLICT (supplier) DO UPDATE SET url = excluded.url, token = excluded.token,
                 kind = 'webhook', updated_at = now()
-            RETURNING supplier""", [supplier, url, secret])
+            RETURNING supplier""", [supplier, url, vault.seal(secret)])
     return listing(db_path)
 
 

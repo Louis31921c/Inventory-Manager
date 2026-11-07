@@ -5884,3 +5884,215 @@ def test_a_count_over_the_tolerance_needs_a_second_one_and_the_cause_is_looked_f
     assert all(set(t) == {"article", "due_on", "where"} for t in counting.tasks(db_path))
     counting.submit(db_path, added[0], stock.on_hand_map(db_path)[added[0]])
     assert added[0] not in [t["article"] for t in counting.tasks(db_path)]
+
+
+# ---- secrets are encrypted on disk -----------------------------------------------------------
+
+@pytest.fixture
+def vault_home(tmp_path, monkeypatch):
+    from inventory import vault
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    monkeypatch.setenv("STOCK_VAULT_KEYRING", "0")
+    vault.forget_cached_key()
+    yield tmp_path / "cfg" / "stock-manager"
+    vault.forget_cached_key()
+
+
+def test_a_secret_is_written_encrypted_and_read_back_in_the_clear(vault_home, monkeypatch):
+    from inventory import config as cfg
+    from inventory import vault
+
+    monkeypatch.delenv("IMAP_PASSWORD", raising=False)
+    cfg.set_setting("IMAP_USER", "buyer@example.com")
+    cfg.set_setting("IMAP_PASSWORD", "hunter2-plain")
+    text = cfg.settings_file().read_text()
+    assert "IMAP_USER=buyer@example.com" in text                     # not a secret: as typed
+    assert "hunter2-plain" not in text and "IMAP_PASSWORD=enc:v1:" in text
+    assert oct(cfg.settings_file().stat().st_mode & 0o777) == "0o600"
+    assert oct(vault.key_file().stat().st_mode & 0o777) == "0o600"
+
+    monkeypatch.delenv("IMAP_PASSWORD")                              # a new run reads the file again
+    cfg.load_config(vault_home.parent / "data")
+    assert __import__("os").environ["IMAP_PASSWORD"] == "hunter2-plain"
+
+    # An older file with the secret in the clear, and its backup, are encrypted when the program starts.
+    cfg.settings_file().write_text("SLACK_BOT_TOKEN=xoxb-oldplain\nMAIL_PROVIDER=gmail\n")
+    cfg.settings_file().with_name("settings.env.bak").write_text("SLACK_BOT_TOKEN=xoxb-oldplain\n")
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    cfg.load_config(vault_home.parent / "data")
+    assert "xoxb-oldplain" not in cfg.settings_file().read_text()
+    assert "xoxb-oldplain" not in cfg.settings_file().with_name("settings.env.bak").read_text()
+    assert "MAIL_PROVIDER=gmail" in cfg.settings_file().read_text()
+    assert __import__("os").environ["SLACK_BOT_TOKEN"] == "xoxb-oldplain"
+
+
+def test_a_lost_key_reads_as_not_set_and_a_plain_value_is_still_read(vault_home):
+    from inventory import vault
+
+    token = vault.seal("s3cret")
+    assert vault.unseal(token) == "s3cret" and vault.unseal("never-sealed") == "never-sealed"
+    assert vault.seal(token) == token and vault.seal("") == ""            # sealed twice is sealed once
+    vault.key_file().unlink()
+    vault.forget_cached_key()
+    assert vault.unseal(token) == ""                                      # a new key cannot open the old token
+
+
+def test_supplier_tokens_are_encrypted_in_the_database_and_old_ones_are_sealed(vault_home, db_path):
+    from inventory import channels, vault
+
+    channels.save(db_path, "ACME", "https://acme.example/o", "tok-abc")
+    stored = db.read(db_path, "SELECT token FROM supplier_channels")[0][0]
+    assert stored.startswith("enc:v1:") and "tok-abc" not in stored
+    assert channels.get(db_path, "ACME")["token"] == "tok-abc"
+    channels.save(db_path, "ACME", "https://acme.example/o2", "")        # token left empty keeps the old one
+    assert channels.get(db_path, "ACME")["token"] == "tok-abc"
+
+    db.write(db_path, "UPDATE supplier_channels SET token = 'plain-old' RETURNING supplier")
+    assert vault.seal_database(db_path) == 1 and vault.seal_database(db_path) == 0
+    assert channels.get(db_path, "ACME")["token"] == "plain-old"
+
+
+def test_loose_permissions_are_tightened(tmp_path):
+    from inventory import vault
+
+    folder = tmp_path / "cfg"
+    folder.mkdir()
+    for name in ("settings.env", "account.json"):
+        (folder / name).write_text("x")
+        (folder / name).chmod(0o644)
+    folder.chmod(0o755)
+    fixed = vault.harden(folder)
+    assert len(fixed) == 3 and oct(folder.stat().st_mode & 0o777) == "0o700"
+    assert oct((folder / "settings.env").stat().st_mode & 0o777) == "0o600"
+    assert vault.harden(folder) == []
+
+
+# ---- roles ---------------------------------------------------------------------------------
+
+def test_accounts_have_roles_and_the_first_one_stays_administrator(tmp_path):
+    from inventory import account
+
+    path = tmp_path / "account.json"
+    account.write_account("alex", "correct horse", path)
+    assert account.users(path) == [{"user": "ALEX", "role": "admin", "first": True,
+                                    "created_at": account.read_account(path)["created_at"]}]
+    account.add_user("marie", "buyer", "marie-password", path)
+    account.add_user("paul", "viewer", "paul-password", path)
+    with pytest.raises(ValueError):
+        account.add_user("Marie", "buyer", "another-pass", path)             # same name
+    with pytest.raises(ValueError):
+        account.add_user("zed", "boss", "zed-password", path)                # no such role
+    with pytest.raises(ValueError):
+        account.add_user("zed", "buyer", "short", path)
+    assert [(u["user"], u["role"]) for u in account.users(path)] == [("ALEX", "admin"), ("MARIE", "buyer"), ("PAUL", "viewer")]
+    assert "hash" not in str(account.users(path))
+
+    assert account.set_role("marie", "approver", path) == "MARIE"
+    with pytest.raises(ValueError):
+        account.set_role("alex", "viewer", path)                             # the first stays administrator
+    with pytest.raises(ValueError):
+        account.remove_user("alex", path)
+    lock = account.Lock(tmp_path, path)
+    assert lock.authenticate("marie", "marie-password") == "MARIE" and lock.role("MARIE") == "approver"
+    assert lock.authenticate("marie", "wrong") is None
+    assert lock.authenticate("", "correct horse") is None                     # several accounts: a name is needed
+    cookie = lock.new_session(user="MARIE")
+    assert lock.read_session(cookie) == "MARIE"
+    account.remove_user("marie", path)
+    assert lock.read_session(cookie) is None and lock.role("MARIE") is None  # a removed account loses its session
+
+    account.reset_password("paul", "a-new-password", path)
+    assert lock.authenticate("paul", "a-new-password") == "PAUL"
+    with pytest.raises(ValueError):
+        account.change_own_password("paul", "not it", "another-pass", path)
+    account.change_own_password("paul", "a-new-password", "third-password", path)
+    assert lock.authenticate("paul", "third-password") == "PAUL"
+
+
+def test_the_permission_table_covers_every_write_and_keeps_viewers_out_of_decisions():
+    from inventory import access, server
+
+    assert access.required_role("GET", "/api/data") == "viewer"
+    assert access.required_role("GET", "/api/users") == "admin"
+    assert access.required_role("POST", "/api/notes") == "buyer"                # the default for a write
+    assert access.required_role("DELETE", "/api/notes/3") == "approver"         # a delete is a decision
+    assert access.required_role("POST", "/api/gate/4/approve") == "approver"
+    assert access.required_role("POST", "/api/stockctl/adjust") == "approver"
+    assert access.required_role("POST", "/api/wallet/deposit") == "admin"
+    assert access.required_role("PUT", "/api/channels") == "admin"
+    assert access.required_role("PUT", "/api/charters/plutus/send_orders") == "admin"
+    assert access.required_role("POST", "/api/plutus/mode") == "admin"
+    assert access.required_role("POST", "/api/plutus/run") == "approver"
+    assert access.required_role("POST", "/api/payments/batch/2/executed") == "approver"
+    assert access.required_role("POST", "/api/account/password") == "viewer"
+    # Anything that moves money or sets the program up needs an approver at least; no write is left to a viewer.
+    for route in server.app.routes:
+        for method in sorted((getattr(route, "methods", None) or set()) - {"GET", "HEAD", "OPTIONS"}):
+            if route.path in ("/unlock", "/lock", "/exit", "/api/account/password"):
+                continue
+            assert access.required_role(method, route.path) != "viewer", (method, route.path)
+            if any(word in route.path for word in ("/wallet", "/bank", "/payer", "/charters", "/channels", "/users")):
+                assert access.required_role(method, route.path) == "admin", (method, route.path)
+
+
+def test_a_role_limits_what_the_browser_may_do_and_the_pages_carry_security_headers(tmp_path, monkeypatch):
+    import importlib
+
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("STOCK_VAULT_KEYRING", "0")
+    monkeypatch.delenv("STOCK_USER", raising=False)
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+    mine = {"origin": "http://testserver"}
+
+    def sign_in(client, user, password, again=None):
+        data = {"user": user, "password": password}
+        if again:
+            data["again"] = again
+        return client.post("/unlock", data=data, headers=mine, follow_redirects=False)
+
+    with TestClient(server.app) as boss, TestClient(server.app) as buyer, TestClient(server.app) as viewer:
+        assert sign_in(boss, "alex", "correct horse", "correct horse").status_code == 303
+        home = boss.get("/api/data")
+        for header, value in (("x-content-type-options", "nosniff"), ("x-frame-options", "DENY"),
+                              ("referrer-policy", "no-referrer"), ("cache-control", "no-store")):
+            assert home.headers[header] == value
+        assert "frame-ancestors 'none'" in home.headers["content-security-policy"]
+        assert "default-src 'self'" in boss.get("/unlock").headers["content-security-policy"]
+
+        made = boss.post("/api/users", json={"user": "marie", "role": "buyer", "password": "marie-password"}, headers=mine)
+        assert made.status_code == 200 and [u["user"] for u in made.json()["users"]] == ["ALEX", "MARIE"]
+        boss.post("/api/users", json={"user": "paul", "role": "viewer", "password": "paul-password"}, headers=mine)
+
+        assert sign_in(buyer, "marie", "marie-password").status_code == 303
+        assert sign_in(viewer, "paul", "paul-password").status_code == 303
+        assert sign_in(viewer, "paul", "wrong-password").status_code == 200
+
+        assert viewer.get("/api/data").status_code == 200
+        assert viewer.get("/api/users").status_code == 403
+        denied = viewer.post("/api/notes", json={}, headers=mine)
+        assert denied.status_code == 403 and "viewer may not do this" in denied.json()["detail"]
+        assert buyer.post("/api/notes", json={}, headers=mine).status_code != 403          # allowed to try
+        assert buyer.delete("/api/notes/1", headers=mine).status_code == 403              # a delete is a decision
+        assert buyer.post("/api/gate/1/approve", headers=mine).status_code == 403
+        assert buyer.put("/api/channels", json={"supplier": "A", "url": "https://a.example", "token": "x"},
+                         headers=mine).status_code == 403
+        assert buyer.get("/api/users").status_code == 403
+
+        assert boss.put("/api/users/MARIE/role", json={"role": "approver"}, headers=mine).status_code == 200
+        assert buyer.post("/api/gate/1/approve", headers=mine).status_code != 403          # the role is read on each request
+        assert boss.delete("/api/users/ALEX", headers=mine).status_code == 422              # not yourself
+        assert boss.delete("/api/users/PAUL", headers=mine).status_code == 200
+        assert viewer.get("/api/data").status_code == 401                                   # its account is gone
+
+        assert buyer.post("/api/account/password", json={"old": "marie-password", "new": "marie-new-pass"},
+                          headers=mine).status_code == 200
+        assert buyer.post("/api/account/password", json={"old": "marie-password", "new": "marie-again-1"},
+                          headers=mine).status_code == 422

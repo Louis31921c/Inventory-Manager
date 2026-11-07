@@ -153,7 +153,10 @@ def set_setting(key, value, path=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     lines = [line for line in lines if not line.startswith(f"{key}=")]
-    lines.append(f"{key}={value}")
+    from . import vault
+
+    # A secret is written encrypted; the running program keeps it in the clear, in memory only.
+    lines.append(f"{key}={vault.seal(str(value)) if key in vault.SECRET_KEYS else value}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     path.chmod(0o600)
     os.environ[key] = str(value)
@@ -161,7 +164,13 @@ def set_setting(key, value, path=None):
 
 
 def load_config(data_dir=None, user=None):
-    load_dotenv(settings_file())
+    from . import vault
+
+    kept = settings_file()
+    for path in (kept, kept.with_name(kept.name + ".bak")):
+        vault.seal_file(path)                   # an older file with a secret in the clear is encrypted now
+    load_dotenv(kept)
+    vault.unseal_environment()
     here = Path.cwd() / ".env"
     if here.is_file():
         load_dotenv(here)
