@@ -4423,7 +4423,7 @@ def test_a_dispute_drafts_the_mail_and_runs_until_the_credit_note(db_path):
     assert draft["kind"] == "dispute" and "10 x BOLT à 2.00" in draft["body"] and "30.00 EUR" in draft["body"]
     assert disputes.open_for_bill(db_path, bill_id, "T", today)["dispute_id"] == opened["dispute_id"]
 
-    assert disputes.listing(db_path, date(2026, 11, 20))[0]["overdue"] is True      # 14+ days, no credit
+    assert disputes.listing(db_path, date.today() + timedelta(days=14))[0]["overdue"] is True      # 14+ days, no credit
     part = disputes.record_credit(db_path, opened["dispute_id"], "AV-1", 10.0, today)
     assert part["state"] == "credited" and part["closed_on"] is None
     done = disputes.record_credit(db_path, opened["dispute_id"], "AV-2", 20.0, today)
@@ -5793,3 +5793,228 @@ def test_a_site_request_holds_back_stock_orders_the_rest_and_reports_its_state(d
                                   check_names=False)
     gone = requisitions.cancel(db_path, pending["req_id"], "marc")
     assert gone["state"] == "cancelled" and gate.one(db_path, pending["gate_request_id"])["state"] == "cancelled"
+
+
+# ---- carriers, the dispatcher, receiving and counting -------------------------------------
+
+def _customer_order(db_path, site, ship_by, article="SHELF", quantity=3.0):
+    """A customer order (not Plutus's) with its ship-by day: one line on the shelf, one to order."""
+    list_id = db.save_purchase_order(db_path, {
+        "list_date": date(2026, 11, 2), "site": site, "work_item": "W1", "drafter": "X",
+        "lines": [{"article": article, "quantity": quantity, "in_stock": True},
+                  {"article": "NOT HERE", "quantity": 1.0, "in_stock": False}]}, None, None, "T")
+    db.write(db_path, "UPDATE purchase_orders SET ship_by = ? WHERE list_id = ? RETURNING list_id", [ship_by, list_id])
+    return list_id
+
+
+def test_a_dispatch_is_booked_with_a_carrier_followed_and_signed_for_by_the_tracking(db_path):
+    import json
+
+    from inventory import carriers, outbound
+
+    list_id = _customer_order(db_path, "NORD", date(2026, 11, 9))
+    made = outbound.create_from_order(db_path, list_id, None, "2026-11-09", "T", skip_to_order=True)
+    assert [l["article"] for l in made["lines"]] == ["SHELF"]                 # the line to order is not on the van
+
+    with pytest.raises(ValueError):
+        carriers.save(db_path, "FASTBOX", "http://fastbox.example/book", "", "s3cr3t-fb")           # plain http
+    with pytest.raises(ValueError):
+        carriers.save(db_path, "FASTBOX", "https://fastbox.example/book", "https://x.example/t", "s3cr3t-fb")  # no {tracking}
+    with pytest.raises(ValueError):
+        carriers.book(db_path, made["dispatch_id"], None)                                        # none set up
+    shown = carriers.save(db_path, "fastbox", "https://fastbox.example/book",
+                          "https://fastbox.example/track/{tracking}", "s3cr3t-fb", True)
+    assert shown[0]["is_default"] is True and "s3cr3t-fb" not in json.dumps(shown) and shown[0]["has_token"] is True
+
+    sent = []
+
+    def post(url, body, headers):
+        sent.append((url, json.loads(body), headers))
+        return 201, '{"tracking": "FB 123", "label_url": "https://fastbox.example/l/1", "eta": "2026-11-10"}'
+
+    shipment = carriers.book(db_path, made["dispatch_id"], None, "T", post=post)             # the default carrier
+    url, document, headers = sent[0]
+    assert url == "https://fastbox.example/book" and headers["Idempotency-Key"] == f"stock-manager-dispatch-{made['dispatch_id']}"
+    assert headers["X-Signature"].startswith("sha256=") and document["reference"] == f"dispatch-{made['dispatch_id']}"
+    assert [p["article"] for p in document["parcels"]] == ["SHELF"] and document["delivery"]["site"] == "NORD"
+    assert shipment["tracking"] == "FB 123" and shipment["state"] == "booked" and shipment["eta"] == "2026-11-10"
+    assert "FASTBOX" in outbound.one(db_path, made["dispatch_id"])["note"]
+    with pytest.raises(ValueError):
+        carriers.book(db_path, made["dispatch_id"], "FASTBOX", post=post)                       # never twice
+
+    asked = []
+
+    def moving(url, headers):
+        asked.append((url, headers))
+        return 200, '{"status": "out_for_delivery", "eta": "2026-11-10", "detail": "on the van"}'
+
+    assert carriers.track(db_path, get_=moving) == [f"dispatch #{made['dispatch_id']}: FASTBOX says in transit"]
+    assert asked[0][0] == "https://fastbox.example/track/FB%20123" and asked[0][1]["Authorization"] == "Bearer s3cr3t-fb"
+    assert carriers.late(db_path, date(2026, 11, 10)) == []
+    assert carriers.late(db_path, date(2026, 11, 12))[0]["why"] == "past its eta, 2026-11-10"
+    assert carriers.track(db_path, get_=lambda u, h: (503, "down")) == []                       # an outage changes nothing
+    assert carriers.one(db_path, shipment["shipment_id"])["error"] == "FASTBOX answered 503"
+
+    done = lambda u, h: (200, '{"status": "DELIVERED", "signed_by": "M. Durand"}')
+    assert carriers.track(db_path, get_=done) == [f"dispatch #{made['dispatch_id']}: FASTBOX says delivered"]
+    closed = outbound.one(db_path, made["dispatch_id"])
+    assert closed["state"] == "delivered" and closed["received_by"] == "M. Durand"            # the proof of delivery
+    assert carriers.track(db_path, get_=done) == []                                              # closed: not asked again
+
+    other = outbound.create_from_order(db_path, _customer_order(db_path, "SUD", date(2026, 11, 9)), None, "2026-11-09",
+                                       skip_to_order=True)
+    carriers.book(db_path, other["dispatch_id"], "FASTBOX", post=post)
+    bad = lambda u, h: (200, '{"status": "returned", "detail": "refused at the gate"}')
+    carriers.track(db_path, get_=bad)
+    assert carriers.late(db_path, date(2026, 11, 9))[0]["why"] == "the carrier reports a problem"
+
+
+def test_the_dispatcher_plans_the_next_day_by_site_van_and_carrier_and_notices_a_missing_signature(db_path):
+    import json
+
+    from inventory import carriers, dispatching, outbound, routing, watch
+
+    monday = date(2026, 11, 9)
+    a1 = _customer_order(db_path, "NORD", monday)
+    a2 = _customer_order(db_path, "NORD", monday)                       # same site: same stop
+    b = _customer_order(db_path, "SUD", monday)
+    c = _customer_order(db_path, "EST", monday)
+    d = _customer_order(db_path, "OUEST", monday)
+    stale = _customer_order(db_path, "OLD", date(2026, 10, 1))        # missed long ago: said, not dispatched
+    plutus = _customer_order(db_path, "NORD", monday)
+    db.write(db_path, "UPDATE purchase_orders SET drafter = 'PLUTUS' WHERE list_id = ? RETURNING list_id", [plutus])
+    assert len(routing.vehicles(db_path)) == 3
+    dispatching.save_settings(db_path, max_stops=1)
+
+    booked = []
+
+    def post(url, body, headers):
+        booked.append(json.loads(body)["reference"])
+        return 200, '{"tracking": "T-1"}'
+
+    done = dispatching.plan(db_path, monday, post=post)
+    assert {p["list_id"] for p in done["planned"]} == {a1, a2, c, d}          # sites in alphabetical order get the vans
+    by_site = {}
+    for p in done["planned"]:
+        by_site.setdefault(p["site"], set()).add(p["by"])
+    assert len(by_site["NORD"]) == 1 and len({next(iter(v)) for v in by_site.values()}) == 3   # one van a site, 3 vans
+    assert [u["list_id"] for u in done["unplaced"]] == [b] and "no van has room and no carrier" in done["unplaced"][0]["why"]
+    assert [m["list_id"] for m in done["missed"]] == [stale]
+    assert db.read(db_path, "SELECT count(*) FROM dispatches WHERE list_id = ?", [plutus]) == [(0,)]
+    again = dispatching.plan(db_path, monday, post=post)
+    assert again["planned"] == [] and [u["list_id"] for u in again["unplaced"]] == []        # idempotent: nothing twice
+
+    # With a default carrier, the overflow is booked on the spot.
+    carriers.save(db_path, "FASTBOX", "https://fastbox.example/book", "", "tok", True)
+    e = _customer_order(db_path, "CENTRE", monday)
+    over = dispatching.plan(db_path, monday, post=post)
+    assert [p["by"] for p in over["planned"]] == ["FASTBOX"] and booked == [f"dispatch-{over['planned'][0]['dispatch_id']}"]
+
+    # The day is the next working day after the cut-off hour, the day itself before it.
+    friday_evening = datetime(2026, 11, 6, 16, 0)
+    assert dispatching.target_day(db_path, friday_evening) == monday
+    assert dispatching.target_day(db_path, datetime(2026, 11, 6, 9, 0)) == date(2026, 11, 6)
+    dispatching.save_settings(db_path, auto=False)
+    assert dispatching.run(db_path, friday_evening)["skipped"] == "the dispatcher is off"
+
+    # Nobody signs: it is late from the next day, louder every day, and the watch says so.
+    assert dispatching.unsigned(db_path, monday) == []
+    late = dispatching.unsigned(db_path, date(2026, 11, 12))
+    assert late[0]["days_late"] == 3 and {r["dispatch_id"] for r in late} == {p["dispatch_id"] for p in done["planned"] + over["planned"] + done["unplaced"]}
+    watch.scan(db_path, date(2026, 11, 12))
+    notices = [n for n in watch.open_notices(db_path) if n["kind"] == "delivery"]
+    assert notices and notices[0]["severity"] == "critical" and "no signature" in notices[0]["title"]
+    first = done["planned"][0]["dispatch_id"]
+    outbound.deliver(db_path, first, "Chef de chantier")
+    assert first not in {r["dispatch_id"] for r in dispatching.unsigned(db_path, date(2026, 11, 12))}
+    board = dispatching.board(db_path, date(2026, 11, 12))
+    assert any(r["carried_by"] == "FASTBOX" and r["late"] for r in board["dispatches"])
+
+
+def test_a_delivered_line_is_checked_against_the_orders_and_put_away_where_it_was_last(db_path):
+    from inventory import receiving, watch
+
+    db.save_purchase_order(db_path, {
+        "list_date": date(2026, 11, 1), "site": "NORD", "work_item": "W1", "drafter": "PLUTUS",
+        "lines": [{"article": "BOLT", "quantity": 10.0, "in_stock": False}]}, None, None, "PLUTUS")
+    today = date.today().isoformat()
+    first = db.save_note(db_path, make_note(supplier="ACME", site="NORD", delivery_date=today,
+                                            lines=[Line(article="BOLT", quantity=8), Line(article="CHAIN", quantity=2)]),
+                         "rv1", "", "T")
+    assert receiving.sync(db_path) == 2 and receiving.sync(db_path) == 0             # safe to run again
+    rows = {r["article"]: r for r in receiving.listing(db_path)}
+    assert rows["BOLT"]["check_word"] == "as ordered" and rows["BOLT"]["suggested"] == "RECEIVING"
+    assert rows["CHAIN"]["check_word"] == "not on any order"
+
+    # 8 came, 2 more were expected: the next delivery of 5 is more than ordered.
+    db.save_note(db_path, make_note(supplier="ACME", site="NORD", delivery_date=today, lines=[Line(article="BOLT", quantity=5)]),
+                 "rv2", "", "T")
+    receiving.sync(db_path)
+    over = [r for r in receiving.listing(db_path) if r["article"] == "BOLT" and r["check_word"] == "more than ordered"]
+    assert over and "5 came, 2 was still expected" in over[0]["check_detail"]
+    watch.scan(db_path)
+    assert any(n["kind"] == "receiving" and "delivery line(s) arrived not as ordered" in n["title"]
+               and "CHAIN (not on any order)" in n["detail"] for n in watch.open_notices(db_path))
+
+    with pytest.raises(ValueError):
+        receiving.put_away(db_path, rows["BOLT"]["putaway_id"], "x" * 50)
+    receiving.put_away(db_path, rows["BOLT"]["putaway_id"], "rack 3 / bay b", "marc")
+    assert receiving.where(db_path, "BOLT") == [{"site": "NORD", "location": "RACK 3 / BAY B"}]
+    with pytest.raises(ValueError):
+        receiving.put_away(db_path, rows["BOLT"]["putaway_id"], "rack 4")             # already put away
+    db.save_note(db_path, make_note(supplier="ACME", site="NORD", delivery_date=today, lines=[Line(article="BOLT", quantity=1)]),
+                 "rv3", "", "T")
+    receiving.sync(db_path)
+    learned = [r for r in receiving.listing(db_path) if r["suggested"] == "RACK 3 / BAY B"]
+    assert [r["quantity"] for r in learned] == [1.0]                  # the next delivery is suggested the same place
+    assert receiving.confirm_suggested(db_path, "marc") == 1
+    assert receiving.listing(db_path, "put away")[0]["location"] == "RACK 3 / BAY B"
+    assert receiving.overview(db_path)["summary"]["waiting"] == len(receiving.listing(db_path))
+
+
+def test_a_count_over_the_tolerance_needs_a_second_one_and_the_cause_is_looked_for(db_path):
+    from inventory import counting, stock, watch
+
+    today = date.today()
+    # 100 CABLE came twice from ACME (one note stored twice by mistake) and 40 left on an order.
+    for number in range(2):
+        db.save_note(db_path, make_note(supplier="ACME", site="NORD", delivery_date=today.isoformat(),
+                                        lines=[Line(article="CABLE", quantity=50)]), f"ct{number}", "", "T")
+    assert stock.on_hand_map(db_path)["CABLE"] == 100
+
+    # Inside the tolerance (2%, at least one unit): posted at once, and the count list loses it.
+    assert counting.submit(db_path, "cable", 99)["state"] == "posted"
+    assert stock.on_hand_map(db_path)["CABLE"] == 99
+
+    # 50 on the shelf: the books are not touched, a recount is asked, and the duplicate note is named.
+    asked = counting.submit(db_path, "cable", 49)
+    assert asked["state"] == "recount" and stock.on_hand_map(db_path)["CABLE"] == 99
+    assert "a delivery noted twice" in asked["causes_said"] and "50 from ACME" in asked["causes_said"]
+    assert [r["article"] for r in counting.recounts(db_path)] == ["CABLE"]
+
+    done = counting.submit(db_path, "cable", 50)                 # the second count agrees within a unit
+    assert done["state"] == "confirmed" and done["variance"] == -49 and stock.on_hand_map(db_path)["CABLE"] == 50
+    assert counting.recounts(db_path) == []
+
+    # Two counts that disagree post nothing and wait for a person, who is told.
+    counting.submit(db_path, "cable", 10)
+    assert counting.submit(db_path, "cable", 30)["state"] == "disputed"
+    assert stock.on_hand_map(db_path)["CABLE"] == 50
+    watch.scan(db_path)
+    assert any("Two counts of CABLE disagree" in n["title"] for n in watch.open_notices(db_path))
+    check = counting.disputed(db_path)[0]
+    counting.settle(db_path, check["check_id"], 12)
+    assert stock.on_hand_map(db_path)["CABLE"] == 12 and counting.disputed(db_path) == []
+    with pytest.raises(ValueError):
+        counting.settle(db_path, check["check_id"], 12)
+    with pytest.raises(ValueError):
+        counting.submit(db_path, "cable", -1)
+
+    # The daily list is made once a day and never says what the books expect.
+    db.save_note(db_path, make_note(supplier="ACME", site="NORD", delivery_date=today.isoformat(),
+                                    lines=[Line(article="HINGE", quantity=30)]), "ct9", "", "T")   # never counted: due
+    added = counting.assign(db_path, today)
+    assert added == ["HINGE"] and counting.assign(db_path, today) == []
+    assert all(set(t) == {"article", "due_on", "where"} for t in counting.tasks(db_path))
+    counting.submit(db_path, added[0], stock.on_hand_map(db_path)[added[0]])
+    assert added[0] not in [t["article"] for t in counting.tasks(db_path)]

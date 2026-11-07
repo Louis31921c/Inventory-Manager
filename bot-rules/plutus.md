@@ -49,6 +49,7 @@ One per line: `- name = number : what it means`.
 - send_disputes = 1 : open a dispute and mail it for a bill that does not match its deliveries (1 yes, 0 no)
 - dispute_max_claim = 2000.0 : EUR: it disputes no bill by itself for more than this; a person decides
 - bank_upload = 1 : hand a batch of payments to the bank by SFTP by itself (1 yes, 0 no: a person uploads it)
+- count_tolerance_pct = 2.0 : a hand count within this percent of the books (at least one unit) is posted at once; a bigger gap needs a second count that agrees
 - pay_bills = 1 : pay supplier bills out of the wallet by itself (1 yes, 0 no)
 - pay_max_total = 5000 : EUR: the most one bill may be before a person has to pay it
 - pay_per_day = 10000 : EUR: the most it pays in a day

@@ -16,13 +16,16 @@ from .models import normalize_name, parse_date
 STATES = ("planned", "loaded", "delivered", "part delivered", "failed")
 
 
-def create_from_order(db_path, list_id, vehicle_id=None, planned_on=None, user=None, note=None):
+def create_from_order(db_path, list_id, vehicle_id=None, planned_on=None, user=None, note=None,
+                      skip_to_order=False):
     head = db.read(db_path, "SELECT site, work_item FROM purchase_orders WHERE list_id = ?", [list_id])
     if not head:
         raise ValueError(f"No order #{list_id} to deliver.")
-    lines = db.read(db_path, """
+    # skip_to_order: lines ticked "to order" are not on the shelf, so they are not on this delivery.
+    lines = db.read(db_path, f"""
             SELECT article, designation, quantity FROM purchase_order_lines
-            WHERE list_id = ? AND quantity IS NOT NULL AND quantity > 0 ORDER BY line_no""",
+            WHERE list_id = ? AND quantity IS NOT NULL AND quantity > 0
+              {"AND in_stock IS NOT FALSE" if skip_to_order else ""} ORDER BY line_no""",
                     [list_id])
     if not lines:
         raise ValueError(f"Order #{list_id} has no line with a quantity.")

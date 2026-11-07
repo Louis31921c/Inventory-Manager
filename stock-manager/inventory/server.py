@@ -16,7 +16,7 @@ import socket
 import subprocess
 import tempfile
 import threading
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import duckdb
@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, bankdrop, channels, replies, requisitions, archive, audit, autonomy, charters, feedback, judge, payments, policies, purchasing, replenish, wallet, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
+from . import (account, agents, alerts, bankdrop, carriers, channels, counting, dispatching, receiving, replies, requisitions, archive, audit, autonomy, charters, feedback, judge, payments, policies, purchasing, replenish, wallet, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
@@ -191,6 +191,14 @@ async def _watch_loop():
             for kind, list_id, lines in ordered.get("orders", []):
                 log.info("Plutus wrote the %s order #%s: %d line(s) from the DDMRP", kind, list_id, lines)
             await asyncio.to_thread(judge.decide, config.db_path)
+            await asyncio.to_thread(receiving.sync, config.db_path)
+            counts = await asyncio.to_thread(counting.assign, config.db_path)
+            if counts:
+                await asyncio.to_thread(watch.deliver, config, "To count today: " + ", ".join(counts), "Count list")
+            plan = await asyncio.to_thread(dispatching.run, config.db_path)
+            if plan["planned"] or plan["unplaced"]:
+                log.info("dispatcher: %d planned, %d without a van or carrier", len(plan["planned"]), len(plan["unplaced"]))
+            await asyncio.to_thread(carriers.track, config.db_path)
             for finished in await asyncio.to_thread(requisitions.refresh, config.db_path):
                 await asyncio.to_thread(watch.deliver, config, requisitions.text(finished),
                                         f"Request #{finished['req_id']} is complete")
@@ -1970,6 +1978,142 @@ def test_bank_drop(request: Request):
         raise HTTPException(422, str(e)) from e
     event(request, "bankdrop.test", None)
     return {"ok": True}
+
+
+# ---- carriers, the day's deliveries, receiving and counting -----------------------------
+
+class CarrierBody(BaseModel):
+    name: str
+    book_url: str
+    track_url: str = ""
+    token: str = ""
+    is_default: bool = False
+
+
+class BookBody(BaseModel):
+    carrier: str | None = None
+
+
+class DeliverySettings(BaseModel):
+    auto: bool | None = None
+    max_stops: int | None = None
+    cutoff_hour: int | None = None
+
+
+class PlaceBody(BaseModel):
+    location: str | None = None
+
+
+class CountBody(BaseModel):
+    article: str
+    quantity: float
+
+
+class QuantityBody(BaseModel):
+    quantity: float
+
+
+@app.get("/api/carriers")
+def read_carriers():
+    return {"carriers": carriers.listing(config.db_path), "shipments": carriers.shipments(config.db_path)}
+
+
+@app.put("/api/carriers")
+def put_carrier(request: Request, body: CarrierBody):
+    _do(request, "carrier.set", body.name, lambda: carriers.save(
+        config.db_path, body.name, body.book_url, body.track_url, body.token, body.is_default))
+    return read_carriers()
+
+
+@app.delete("/api/carriers/{name}")
+def delete_carrier(request: Request, name: str):
+    _do(request, "carrier.remove", name, lambda: carriers.remove(config.db_path, name))
+    return read_carriers()
+
+
+@app.post("/api/carriers/{name}/test")
+def test_carrier(request: Request, name: str):
+    try:
+        done = carriers.test(config.db_path, name)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "carrier.test", name)
+    return done
+
+
+@app.get("/api/deliveries")
+def read_deliveries():
+    return dispatching.board(config.db_path)
+
+
+@app.post("/api/deliveries/plan")
+def plan_deliveries(request: Request):
+    done = dispatching.run(config.db_path)
+    event(request, "dispatch.plan", dispatching.target_day(config.db_path, datetime.now()).isoformat(),
+          f"{len(done['planned'])} planned, {len(done['unplaced'])} without a van or carrier")
+    return {**done, **dispatching.board(config.db_path)}
+
+
+@app.put("/api/deliveries/settings")
+def put_delivery_settings(request: Request, body: DeliverySettings):
+    _do(request, "dispatch.settings", None, lambda: dispatching.save_settings(
+        config.db_path, body.auto, body.max_stops, body.cutoff_hour))
+    return dispatching.board(config.db_path)
+
+
+@app.post("/api/deliveries/track")
+def track_deliveries(request: Request):
+    changed = carriers.track(config.db_path)
+    event(request, "carrier.track", None, f"{len(changed)} changed")
+    return {"changed": changed, **dispatching.board(config.db_path)}
+
+
+@app.post("/api/dispatches/{dispatch_id}/book")
+def book_dispatch(request: Request, dispatch_id: int, body: BookBody):
+    _do(request, "carrier.book", f"dispatch #{dispatch_id}", lambda: carriers.book(
+        config.db_path, dispatch_id, body.carrier, who(request)[0]))
+    return dispatching.board(config.db_path)
+
+
+@app.get("/api/receiving")
+def read_receiving():
+    return receiving.overview(config.db_path)
+
+
+@app.post("/api/receiving/confirm-suggested")
+def receiving_confirm(request: Request):
+    done = receiving.confirm_suggested(config.db_path, who(request)[0])
+    event(request, "receiving.confirm", None, f"{done} line(s)")
+    return receiving.overview(config.db_path)
+
+
+@app.post("/api/receiving/{putaway_id}/put-away")
+def receiving_put_away(request: Request, putaway_id: int, body: PlaceBody):
+    _do(request, "receiving.putaway", f"line #{putaway_id}", lambda: receiving.put_away(
+        config.db_path, putaway_id, body.location, who(request)[0]))
+    return receiving.overview(config.db_path)
+
+
+@app.get("/api/counting")
+def read_counting():
+    return counting.overview(config.db_path)
+
+
+@app.post("/api/counting/count")
+def count_article(request: Request, body: CountBody):
+    try:
+        done = counting.submit(config.db_path, body.article, body.quantity, who(request)[0])
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    event(request, "count", done["article"], done["state"])
+    return {"result": done, **counting.overview(config.db_path)}
+
+
+@app.post("/api/counting/{check_id}/settle")
+def settle_count(request: Request, check_id: int, body: QuantityBody):
+    _do(request, "count.settle", f"count #{check_id}", lambda: counting.settle(
+        config.db_path, check_id, body.quantity, who(request)[0]))
+    return counting.overview(config.db_path)
 
 
 # ---- what suppliers asked ------------------------------------------------------------

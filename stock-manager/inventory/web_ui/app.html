@@ -262,6 +262,34 @@
     </div>
     <div class="scroll-x short-box"><table id="table-inventory"></table></div>
   </div>
+
+  <div class="card" id="receiving-card">
+    <h2>To put away</h2>
+    <p class="muted" id="rv-summary"></p>
+    <div class="row">
+      <button class="action" type="button" id="rv-confirm">confirm every learned place</button>
+    </div>
+    <div id="rv-note"></div>
+    <div class="scroll-x short-box"><table id="table-putaway"></table></div>
+  </div>
+
+  <div class="card" id="counting-card">
+    <h2>Count today</h2>
+    <p class="muted">A blind count: the books are never shown. A count close to the books is posted at once; a bigger
+      gap asks for a second count, and the books only move when the two agree.</p>
+    <div class="row">
+      <label class="field grow"><span>article</span><input id="ct-article" autocomplete="off"></label>
+      <label class="field narrow"><span>counted</span><input id="ct-qty" inputmode="decimal" autocomplete="off"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" type="button" id="ct-go">count</button></label>
+    </div>
+    <div id="ct-note"></div>
+    <p class="eyebrow">On today's list</p>
+    <div class="scroll-x short-box"><table id="table-counts"></table></div>
+    <p class="eyebrow">Count again</p>
+    <div class="scroll-x short-box"><table id="table-recounts"></table></div>
+    <p class="eyebrow">Two counts disagree</p>
+    <div class="scroll-x short-box"><table id="table-disputed"></table></div>
+  </div>
  </section>
 
 <section class="panel" id="panel-chain" role="tabpanel" hidden>
@@ -446,6 +474,23 @@
 </section>
 
 <section class="panel" id="panel-route" role="tabpanel" hidden>
+  <div class="card" id="deliveries-card">
+    <h2>Deliveries</h2>
+    <p class="muted" id="dl-summary"></p>
+    <div class="row">
+      <label class="field narrow"><span>plans itself</span><select id="dl-auto"><option value="1">on</option><option value="0">off</option></select></label>
+      <label class="field narrow"><span>stops a van</span><input id="dl-stops" inputmode="numeric"></label>
+      <label class="field narrow"><span>plans after (h)</span><input id="dl-cutoff" inputmode="numeric"></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action ghost" type="button" id="dl-save">save</button></label>
+    </div>
+    <div class="row">
+      <button class="action" type="button" id="dl-plan">plan the next day now</button>
+      <button class="action ghost" type="button" id="dl-track">ask the carriers now</button>
+    </div>
+    <div id="dl-note"></div>
+    <div class="scroll-x short-box"><table id="table-deliveries"></table></div>
+  </div>
+
   <div class="card">
     <h2>Departure Hub</h2>
     <div class="row">
@@ -684,6 +729,23 @@
     </div>
     <div id="ch-note"></div>
     <div class="scroll-x short-box"><table id="table-channels"></table></div>
+
+    <p class="eyebrow">Carriers</p>
+    <p class="muted">A delivery no van can take is booked with the default carrier: the delivery is posted as signed
+      JSON and answered with a tracking number. Tracking is asked hourly at the tracking address ({tracking} stands for
+      the number); a delivered status records the signature on its own.</p>
+    <div class="row">
+      <label class="field grow"><span>carrier</span><input id="cr-name" autocomplete="off"></label>
+      <label class="field grow"><span>booking address, https://</span><input id="cr-book" autocomplete="off" style="text-transform: none"></label>
+      <label class="field grow"><span>tracking address, with {tracking}</span><input id="cr-track" autocomplete="off" style="text-transform: none"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>token</span><input id="cr-token" type="password" autocomplete="off" placeholder="kept; leave empty to keep the old one"></label>
+      <label class="field narrow"><span>default</span><select id="cr-default"><option value="0">no</option><option value="1">yes</option></select></label>
+      <label class="field narrow" style="justify-content: flex-end"><button class="action" type="button" id="cr-save">save</button></label>
+    </div>
+    <div id="cr-note"></div>
+    <div class="scroll-x short-box"><table id="table-carriers"></table></div>
 
     <p class="eyebrow">Bank drop, SFTP</p>
     <p class="muted">The payment file is put in the bank's folder by SFTP and the bank's report is read back. It uses
@@ -5449,6 +5511,213 @@ $("bk-test").addEventListener("click", async () => {
   }
 });
 
+// ---- receiving, counting, deliveries, carriers --------------------------------------
+
+function drawReceiving(data) {
+  const lines = data.to_put_away ?? [];
+  const sum = data.summary ?? {};
+  $("rv-summary").textContent = lines.length
+    ? `${sum.waiting} line(s) to put away, ${sum.unexpected} not as ordered, ${sum.suggested} with a learned place.`
+    : "Everything that arrived has been put away.";
+  $("rv-confirm").disabled = !sum.suggested;
+  renderTable($("table-putaway"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Qty", numeric: true, cell: (row) => td(showNum(row.quantity)) },
+    { label: "Site", cell: (row) => td(row.site) },
+    { label: "From", cell: (row) => td(row.supplier) },
+    { label: "Against the orders", cell: (row) => {
+      const word = el("span", { className: row.check_word === "as ordered" ? "ok" : "bad", textContent: row.check_word });
+      word.title = row.check_detail ?? "";
+      return word;
+    } },
+    { label: "Place", cell: (row) => {
+      const place = el("input", { className: "cell", size: 14, value: row.suggested ?? "" });
+      const go = el("button", { className: "mini", type: "button", textContent: "put away" });
+      go.addEventListener("click", async () => {
+        try {
+          drawReceiving(await api(`/api/receiving/${row.putaway_id}/put-away`, postJson({ location: place.value })));
+          notice($("rv-note"), "", "");
+        } catch (e) { notice($("rv-note"), "bad", e.message); }
+      });
+      return el("span", { className: "row tight" }, [place, go]);
+    } },
+  ], lines, "Nothing to put away.");
+}
+
+async function loadReceiving() { try { drawReceiving(await api("/api/receiving")); } catch {} }
+
+$("rv-confirm").addEventListener("click", async () => {
+  try { drawReceiving(await api("/api/receiving/confirm-suggested", { method: "POST" })); }
+  catch (e) { notice($("rv-note"), "bad", e.message); }
+});
+
+function countAnswer(done) {
+  const cause = done.causes_said ? ` ${done.causes_said}.` : "";
+  return {
+    posted: ["ok", `${done.article}: counted ${showNum(done.counted)}, the books are corrected (${done.variance >= 0 ? "+" : ""}${showNum(done.variance)}).`],
+    confirmed: ["ok", `${done.article}: the two counts agree, the books now say ${showNum(done.counted)} (${done.variance >= 0 ? "+" : ""}${showNum(done.variance)}).${cause}`],
+    recount: ["warn", `${done.article}: that is far from the books. Count it again; nothing was changed.${cause}`],
+    disputed: ["bad", `${done.article}: the two counts disagree, so a person settles it below.`],
+  }[done.state];
+}
+
+function drawCounting(data) {
+  const say = (box, text) => notice($("ct-note"), box, text);
+  const ask = (article, input, button) => async () => {
+    try {
+      const done = await api("/api/counting/count", postJson({ article, quantity: Number(input.value) }));
+      const [kind, text] = countAnswer(done.result);
+      say(kind, text);
+      drawCounting(done);
+    } catch (e) { say("bad", e.message); }
+  };
+  const counter = (row) => {
+    const input = el("input", { className: "cell", size: 7, inputMode: "decimal", placeholder: "counted" });
+    const go = el("button", { className: "mini", type: "button", textContent: "count" });
+    go.addEventListener("click", ask(row.article, input, go));
+    return el("span", { className: "row tight" }, [input, go]);
+  };
+  renderTable($("table-counts"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Where", cell: (row) => td(row.where) },
+    { label: "", cell: counter },
+  ], data.tasks ?? [], "Nothing to count today.");
+  renderTable($("table-recounts"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Asked", cell: (row) => td(row.asked_at) },
+    { label: "", cell: counter },
+  ], data.recounts ?? [], "No second count is waiting.");
+  renderTable($("table-disputed"), [
+    { label: "Article", cell: (row) => td(row.article) },
+    { label: "Counts", cell: (row) => td(`${showNum(row.first_count)} and ${showNum(row.second_count)}`) },
+    { label: "Likely cause", cell: (row) => td(row.explanation) },
+    { label: "", cell: (row) => {
+      const input = el("input", { className: "cell", size: 7, inputMode: "decimal", placeholder: "the right number" });
+      const go = el("button", { className: "mini", type: "button", textContent: "settle" });
+      go.addEventListener("click", async () => {
+        try { drawCounting(await api(`/api/counting/${row.check_id}/settle`, postJson({ quantity: Number(input.value) }))); }
+        catch (e) { say("bad", e.message); }
+      });
+      return el("span", { className: "row tight" }, [input, go]);
+    } },
+  ], data.disputed ?? [], "None.");
+}
+
+async function loadCounting() { try { drawCounting(await api("/api/counting")); } catch {} }
+
+$("ct-go").addEventListener("click", async () => {
+  try {
+    const done = await api("/api/counting/count", postJson({ article: $("ct-article").value, quantity: Number($("ct-qty").value) }));
+    const [kind, text] = countAnswer(done.result);
+    notice($("ct-note"), kind, text);
+    $("ct-article").value = "";
+    $("ct-qty").value = "";
+    drawCounting(done);
+  } catch (e) { notice($("ct-note"), "bad", e.message); }
+});
+
+function drawDeliveries(data) {
+  const rows = data.dispatches ?? [];
+  const setting = data.settings ?? {};
+  if (document.activeElement !== $("dl-stops")) $("dl-stops").value = setting.max_stops ?? "";
+  if (document.activeElement !== $("dl-cutoff")) $("dl-cutoff").value = setting.cutoff_hour ?? "";
+  $("dl-auto").value = setting.auto ? "1" : "0";
+  const late = rows.filter((one) => one.late).length;
+  $("dl-summary").textContent = rows.length
+    ? `${rows.length} delivery(ies), ${late} past their day without a signature.`
+    : "No delivery planned.";
+  renderTable($("table-deliveries"), [
+    { label: "#", numeric: true, cell: (row) => td(row.dispatch_id) },
+    { label: "Site / work item", cell: (row) => td([row.site, row.work_item].filter(Boolean).join(" / ")) },
+    { label: "Day", cell: (row) => td(row.planned_on) },
+    { label: "Carried by", cell: (row) => td(row.carried_by ?? "nobody yet") },
+    { label: "Tracking", cell: (row) => td(row.tracking) },
+    { label: "State", cell: (row) => el("span", { className: row.late ? "bad" : "",
+        textContent: row.late ? `${row.state}: not signed` : (row.shipment_state && row.shipment_state !== row.state
+          ? `${row.state} (${row.shipment_state})` : row.state) }) },
+    { label: "Signed by", cell: (row) => td(row.received_by) },
+    { label: "", cell: (row) => {
+      if (row.carried_by || !["planned", "loaded"].includes(row.state) || !(data.carriers ?? []).length) return "";
+      const book = el("button", { className: "mini", type: "button", textContent: "book a carrier" });
+      book.addEventListener("click", async () => {
+        try { drawDeliveries(await api(`/api/dispatches/${row.dispatch_id}/book`, postJson({}))); }
+        catch (e) { notice($("dl-note"), "bad", e.message); }
+      });
+      return book;
+    } },
+  ], rows, "No delivery planned.");
+}
+
+async function loadDeliveries() { try { drawDeliveries(await api("/api/deliveries")); } catch {} }
+
+$("dl-save").addEventListener("click", async () => {
+  try {
+    drawDeliveries(await api("/api/deliveries/settings", putJson({
+      auto: $("dl-auto").value === "1", max_stops: Number($("dl-stops").value), cutoff_hour: Number($("dl-cutoff").value) })));
+    notice($("dl-note"), "ok", "Saved.");
+  } catch (e) { notice($("dl-note"), "bad", e.message); }
+});
+$("dl-plan").addEventListener("click", async () => {
+  $("dl-plan").disabled = true;
+  try {
+    const done = await api("/api/deliveries/plan", { method: "POST" });
+    drawDeliveries(done);
+    notice($("dl-note"), done.unplaced.length ? "warn" : "ok",
+      done.skipped ?? `${done.planned.length} planned for ${done.day}`
+        + (done.unplaced.length ? `, ${done.unplaced.length} without a van or carrier` : "")
+        + (done.missed.length ? `, ${done.missed.length} missed long ago` : "") + ".");
+  } catch (e) { notice($("dl-note"), "bad", e.message); }
+  finally { $("dl-plan").disabled = false; }
+});
+$("dl-track").addEventListener("click", async () => {
+  try {
+    const done = await api("/api/deliveries/track", { method: "POST" });
+    drawDeliveries(done);
+    notice($("dl-note"), "ok", done.changed.length ? done.changed.join("; ") : "Nothing changed.");
+  } catch (e) { notice($("dl-note"), "bad", e.message); }
+});
+setInterval(() => {
+  if (document.hidden) return;
+  if (!$("panel-route").hidden) loadDeliveries();
+  if (!$("panel-inventory").hidden) { loadReceiving(); loadCounting(); }
+}, 60000);
+
+function drawCarriers(data) {
+  renderTable($("table-carriers"), [
+    { label: "Carrier", cell: (row) => td(row.name + (row.is_default ? " (default)" : "")) },
+    { label: "Booking", cell: (row) => td(row.book_url) },
+    { label: "Tracking", cell: (row) => td(row.track_url) },
+    { label: "Token", cell: (row) => td(row.has_token ? "set" : "missing") },
+    { label: "", cell: (row) => {
+      const test = el("button", { className: "mini", type: "button", textContent: "test" });
+      test.addEventListener("click", async () => {
+        try {
+          const done = await api(`/api/carriers/${encodeURIComponent(row.name)}/test`, { method: "POST" });
+          notice($("cr-note"), "ok", `${row.name} answered ${done.status} to a test (nothing was booked).`);
+        } catch (e) { notice($("cr-note"), "bad", e.message); }
+      });
+      const gone = el("button", { className: "mini", type: "button", textContent: "remove" });
+      gone.addEventListener("click", async () => {
+        try { drawCarriers(await api(`/api/carriers/${encodeURIComponent(row.name)}`, { method: "DELETE" })); }
+        catch (e) { notice($("cr-note"), "bad", e.message); }
+      });
+      return el("span", { className: "row tight" }, [test, gone]);
+    } },
+  ], data.carriers ?? [], "No carrier is set up: deliveries are made by the own vans.");
+}
+
+async function loadCarriers() { try { drawCarriers(await api("/api/carriers")); } catch {} }
+
+$("cr-save").addEventListener("click", async () => {
+  try {
+    drawCarriers(await api("/api/carriers", putJson({
+      name: $("cr-name").value, book_url: $("cr-book").value, track_url: $("cr-track").value,
+      token: $("cr-token").value, is_default: $("cr-default").value === "1" })));
+    $("cr-token").value = "";
+    notice($("cr-note"), "ok", "Saved.");
+  } catch (e) { notice($("cr-note"), "bad", e.message); }
+});
+
 async function refresh() {
   try {
     const data = await api("/api/data");
@@ -5475,7 +5744,7 @@ async function refresh() {
       renderStorage(), renderChecks(), renderModels(), renderErrors(), renderBackups(),
       renderAccuracy(), renderVocabulary(), renderAudit(), loadQueue(), loadDdmrp(), loadGate(),
       loadBills(), loadMailSettings(), loadBaskets(), loadStock(), loadTables(),
-      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadMatch(), loadStockControl(), loadLeadTimes(), loadDashboard(), loadCalendar(), loadBillTo(), loadRequests(), loadConnections(), loadPolicies(), loadCharters(), loadJudge(), loadWallet(),
+      loadQuotes(), loadRoute(), loadContacts(), loadWaiting(), loadMatch(), loadStockControl(), loadLeadTimes(), loadDashboard(), loadCalendar(), loadBillTo(), loadRequests(), loadConnections(), loadReceiving(), loadCounting(), loadDeliveries(), loadCarriers(), loadPolicies(), loadCharters(), loadJudge(), loadWallet(),
       loadPacks(), loadComing(),
     ]);
     notice($("global-notice"), "", "");

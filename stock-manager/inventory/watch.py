@@ -20,7 +20,7 @@ What it looks at:
 import os
 from datetime import date, datetime, timedelta
 
-from . import db, disputes, forecast, gate, matching, outbox, replies, requisitions, stockctl
+from . import carriers, counting, db, dispatching, disputes, forecast, gate, matching, outbox, receiving, replies, requisitions, stockctl
 
 SEVERITIES = ("critical", "high", "normal", "low")
 PRICE_JUMP = 0.25          # a new price this much above the usual one is a notice
@@ -61,6 +61,24 @@ def conditions(db_path, today=None):
                 "critical" if thread["days_waiting"] >= 10 else "normal",
                 f"{thread['supplier']}: {thread['why']} ({thread['kind']} #{thread['ref_id']})",
                 f"waiting {thread['days_waiting']} working day(s), expected {thread['expected_on']}")
+    for d in dispatching.unsigned(db_path, today):
+        add(f"unsigned:{d['dispatch_id']}", "delivery", "critical" if d["days_late"] >= 3 else "high",
+            f"Dispatch #{d['dispatch_id']} to {d['site'] or 'a site'} has no signature, {d['days_late']} day(s) late",
+            (f"with {d['carrier']}, tracking {d['tracking'] or '?'}" if d["carrier"] else f"van {d['vehicle'] or 'not assigned'}"))
+    for s in carriers.late(db_path, today):
+        add(f"shipment:{s['shipment_id']}", "delivery", "high",
+            f"{s['carrier']} shipment {s['tracking'] or ''} for dispatch #{s['dispatch_id']}: {s['why']}".replace("  ", " "),
+            s["detail"] or "")
+    odd = [line for line in receiving.problems(db_path, today) if line["state"] == "to put away"]
+    if odd:                                   # one notice, not one a line: a quiet week still has a few
+        none = sum(1 for line in odd if line["check_word"] == "not on any order")
+        add("receiving", "receiving", "normal",
+            f"{len(odd)} delivery line(s) arrived not as ordered ({none} on no order)",
+            ", ".join(f"{line['article']} ({line['check_word']})" for line in odd[:4]))
+    for c in counting.disputed(db_path):
+        add(f"count:{c['check_id']}", "stock", "high",
+            f"Two counts of {c['article']} disagree ({c['first_count']:g} and {c['second_count']:g})",
+            "a person settles it on the Count today card")
     for late in requisitions.late(db_path, today):
         add(f"request-late:{late['req_id']}", "request", "high",
             f"Request #{late['req_id']} for {late['site']} / {late['work_item']} is late",

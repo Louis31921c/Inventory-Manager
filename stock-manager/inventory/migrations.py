@@ -847,6 +847,79 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        30,
+        "carriers and their shipments, put-away locations, and the two-count rule",
+        """
+        CREATE TABLE IF NOT EXISTS carriers (
+            name        VARCHAR PRIMARY KEY,
+            book_url    VARCHAR,
+            track_url   VARCHAR,
+            token       VARCHAR,
+            is_default  BOOLEAN NOT NULL DEFAULT false,
+            updated_at  TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );
+        CREATE SEQUENCE IF NOT EXISTS shipment_seq START 1;
+        CREATE TABLE IF NOT EXISTS shipments (
+            shipment_id  INTEGER PRIMARY KEY DEFAULT nextval('shipment_seq'),
+            dispatch_id  INTEGER NOT NULL,
+            carrier      VARCHAR NOT NULL,
+            tracking     VARCHAR,
+            label_url    VARCHAR,
+            state        VARCHAR NOT NULL DEFAULT 'booked',
+            booked_at    TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            last_checked TIMESTAMP,
+            eta          DATE,
+            signed_by    VARCHAR,
+            detail       VARCHAR,
+            error        VARCHAR
+        );
+        CREATE SEQUENCE IF NOT EXISTS putaway_seq START 1;
+        CREATE TABLE IF NOT EXISTS putaways (
+            putaway_id    INTEGER PRIMARY KEY DEFAULT nextval('putaway_seq'),
+            note_id       INTEGER NOT NULL,
+            line_no       INTEGER NOT NULL,
+            article       VARCHAR NOT NULL,
+            site          VARCHAR,
+            supplier      VARCHAR,
+            quantity      DOUBLE,
+            suggested     VARCHAR,
+            location      VARCHAR,
+            state         VARCHAR NOT NULL DEFAULT 'to put away',
+            check_word    VARCHAR,
+            check_detail  VARCHAR,
+            created_at    TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            done_at       TIMESTAMP,
+            done_by       VARCHAR
+        );
+        CREATE TABLE IF NOT EXISTS article_homes (
+            article    VARCHAR NOT NULL,
+            site       VARCHAR NOT NULL DEFAULT '',
+            location   VARCHAR NOT NULL,
+            last_used  TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            PRIMARY KEY (article, site)
+        );
+        CREATE SEQUENCE IF NOT EXISTS count_check_seq START 1;
+        CREATE TABLE IF NOT EXISTS count_checks (
+            check_id      INTEGER PRIMARY KEY DEFAULT nextval('count_check_seq'),
+            article       VARCHAR NOT NULL,
+            expected      DOUBLE NOT NULL,
+            first_count   DOUBLE NOT NULL,
+            counted_by    VARCHAR,
+            asked_at      TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            state         VARCHAR NOT NULL DEFAULT 'recount',
+            second_count  DOUBLE,
+            explanation   VARCHAR,
+            closed_at     TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS count_tasks (
+            article  VARCHAR NOT NULL,
+            due_on   DATE NOT NULL,
+            state    VARCHAR NOT NULL DEFAULT 'open',
+            PRIMARY KEY (article, due_on)
+        );
+        """,
+    ),
 ]
 
 VERSION_TABLE = """
