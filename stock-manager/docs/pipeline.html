@@ -1,0 +1,518 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stock Manager pipeline</title><style>
+:root{--bg:#fff;--fg:#1f2328;--mut:#59636e;--line:#8c959f;--rail:#d0d7de;
+--teal-f:#E1F5EE;--teal-s:#0F6E56;--teal-t:#085041;
+--purple-f:#EEEDFE;--purple-s:#534AB7;--purple-t:#3C3489;
+--amber-f:#FAEEDA;--amber-s:#854F0B;--amber-t:#633806;
+--coral-f:#FAECE7;--coral-s:#993C1D;--coral-t:#712B13;
+--gray-f:#F1EFE8;--gray-s:#5F5E5A;--gray-t:#444441;--else:#A32D2D}
+@media (prefers-color-scheme:dark){:root{--bg:#161b22;--fg:#e6edf3;--mut:#9da7b3;--line:#7d8590;--rail:#30363d;
+--teal-f:#085041;--teal-s:#5DCAA5;--teal-t:#E1F5EE;
+--purple-f:#3C3489;--purple-s:#AFA9EC;--purple-t:#EEEDFE;
+--amber-f:#633806;--amber-s:#EF9F27;--amber-t:#FAEEDA;
+--coral-f:#712B13;--coral-s:#F0997B;--coral-t:#FAECE7;
+--gray-f:#444441;--gray-s:#B4B2A9;--gray-t:#F1EFE8;--else:#F09595}}
+*{box-sizing:border-box}body{margin:0;padding:24px 16px 48px;background:var(--bg);color:var(--fg);
+font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:800px;margin:0 auto}h1{font-size:22px;font-weight:600;margin:0 0 4px}
+h2{font-size:17px;font-weight:600;margin:36px 0 2px;padding-bottom:4px;border-bottom:1px solid var(--rail)}
+p{margin:4px 0 10px;color:var(--mut)}.note{font-size:13px;margin-top:6px}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--mut);margin:10px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}.legend i{width:12px;height:12px;border-radius:3px;border:1px solid}
+.th{font-size:14px;font-weight:600}.ts{font-size:12px}.te{font-size:12px;font-style:italic}
+.num{font-weight:400;opacity:.7}.arr{stroke:var(--line);stroke-width:1.5;fill:none}
+.k-teal rect{fill:var(--teal-f);stroke:var(--teal-s);stroke-width:1}.k-teal .th{fill:var(--teal-t)}.k-teal .ts{fill:var(--teal-s)}.k-teal .te{fill:var(--else)}.k-purple rect{fill:var(--purple-f);stroke:var(--purple-s);stroke-width:1}.k-purple .th{fill:var(--purple-t)}.k-purple .ts{fill:var(--purple-s)}.k-purple .te{fill:var(--else)}.k-amber rect{fill:var(--amber-f);stroke:var(--amber-s);stroke-width:1}.k-amber .th{fill:var(--amber-t)}.k-amber .ts{fill:var(--amber-s)}.k-amber .te{fill:var(--else)}.k-coral rect{fill:var(--coral-f);stroke:var(--coral-s);stroke-width:1}.k-coral .th{fill:var(--coral-t)}.k-coral .ts{fill:var(--coral-s)}.k-coral .te{fill:var(--else)}.k-gray rect{fill:var(--gray-f);stroke:var(--gray-s);stroke-width:1}.k-gray .th{fill:var(--gray-t)}.k-gray .ts{fill:var(--gray-s)}.k-gray .te{fill:var(--else)}</style><main><h1>Stock Manager: the whole pipeline, step by step</h1>
+<p>Read each diagram as a snake: left to right, then down, then right to left. The red italic line under a step is what happens when it does not pass.</p>
+<div class="legend"><span><i style="background:var(--teal-f);border-color:var(--teal-s);"></i>runs by itself</span><span><i style="background:var(--purple-f);border-color:var(--purple-s);"></i>decided by Plutus or Terminus</span><span><i style="background:var(--amber-f);border-color:var(--amber-s);"></i>a person acts</span><span><i style="background:var(--coral-f);border-color:var(--coral-s);"></i>money moves</span><span><i style="background:var(--gray-f);border-color:var(--gray-s);border-style:dashed"></i>missing or manual only</span></div>
+<h2>1. Delivery notes come in</h2><p>Mail is checked every 15 minutes (MAIL_EVERY_MINUTES). By hand, a note joins at step 5.</p>
+<svg viewBox="0 0 760 416" role="img" aria-label="1. Delivery notes come in">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="k-amber"><rect x="24" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="36"><tspan class="num">1</tspan>  By hand</text>
+<text class="ts" x="36" y="57">scan a photo, or import</text>
+<text class="ts" x="36" y="73">a csv/xlsx and map columns</text>
+<text class="te" x="36" y="96">joins at Read</text>
+</g>
+<g class="k-teal"><rect x="274" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="36"><tspan class="num">2</tspan>  Mail check</text>
+<text class="ts" x="286" y="57">unread mail, every 15 min;</text>
+<text class="ts" x="286" y="73">attachments: pdf, photo, sheet</text>
+<text class="te" x="286" y="96">no mailbox: skipped</text>
+</g>
+<g class="k-teal"><rect x="524" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="36"><tspan class="num">3</tspan>  Intake queue</text>
+<text class="ts" x="536" y="57">file hashed; same file twice</text>
+<text class="ts" x="536" y="73">is dropped; waits as waiting</text>
+</g>
+<g class="k-teal"><rect x="524" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="176"><tspan class="num">4</tspan>  Bill or quote?</text>
+<text class="ts" x="536" y="197">file name or subject says</text>
+<text class="ts" x="536" y="213">invoice, avoir, devis, bill</text>
+<text class="te" x="536" y="236">yes: waits for a person</text>
+</g>
+<g class="k-purple"><rect x="274" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="176"><tspan class="num">5</tspan>  Read (Claude CLI)</text>
+<text class="ts" x="286" y="197">photo or pdf becomes a note:</text>
+<text class="ts" x="286" y="213">supplier, date, lines</text>
+<text class="te" x="286" y="236">unreadable: waits</text>
+</g>
+<g class="k-teal"><rect x="24" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="176"><tspan class="num">6</tspan>  Clean?</text>
+<text class="ts" x="36" y="197">date valid, an article on</text>
+<text class="ts" x="36" y="213">every line, quantities</text>
+<text class="te" x="36" y="236">to fix: waits</text>
+</g>
+<g class="k-teal"><rect x="24" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="316"><tspan class="num">7</tspan>  Store the note</text>
+<text class="ts" x="36" y="337">photo shrunk to 1600 px;</text>
+<text class="ts" x="36" y="353">signed MAIL; audit entry</text>
+<text class="te" x="36" y="376">seen before: skipped</text>
+</g>
+<g class="k-teal"><rect x="274" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="316"><tspan class="num">8</tspan>  Article names</text>
+<text class="ts" x="286" y="337">aliases applied from the</text>
+<text class="ts" x="286" y="353">shared vocabulary</text>
+<text class="te" x="286" y="376">unknown: kept as typed</text>
+</g>
+<g class="k-teal"><rect x="524" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="316"><tspan class="num">9</tspan>  Books updated</text>
+<text class="ts" x="536" y="337">received += lines; lines marked</text>
+<text class="ts" x="536" y="353">backorder become owed lines</text>
+</g>
+<line class="arr" x1="237" y1="64" x2="271" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="64" x2="521" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="629" y1="115" x2="629" y2="153" marker-end="url(#a)"/>
+<line class="arr" x1="521" y1="204" x2="487" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="271" y1="204" x2="237" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="129" y1="255" x2="129" y2="293" marker-end="url(#a)"/>
+<line class="arr" x1="237" y1="344" x2="271" y2="344" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="344" x2="521" y2="344" marker-end="url(#a)"/>
+</svg>
+<p class="note">Waiting files have no screen any more: the intake table is not on a page.</p>
+<h2>2. Stock, receiving and counting</h2><p>The books are worked out from paperwork. A hand count wins over the sum for that article.</p>
+<svg viewBox="0 0 760 416" role="img" aria-label="2. Stock, receiving and counting">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="k-teal"><rect x="24" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="36"><tspan class="num">1</tspan>  Books</text>
+<text class="ts" x="36" y="57">received minus shipped (a day</text>
+<text class="ts" x="36" y="73">after the order) +/- moves</text>
+<text class="te" x="36" y="96">count replaces the sum</text>
+</g>
+<g class="k-teal"><rect x="274" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="36"><tspan class="num">2</tspan>  Free stock</text>
+<text class="ts" x="286" y="57">on hand minus what is held</text>
+<text class="ts" x="286" y="73">back for work items</text>
+</g>
+<g class="k-teal"><rect x="524" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="36"><tspan class="num">3</tspan>  Receiving check</text>
+<text class="ts" x="536" y="57">hourly: each new line against</text>
+<text class="ts" x="536" y="73">orders of the last 120 days</text>
+</g>
+<g class="k-teal"><rect x="524" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="176"><tspan class="num">4</tspan>  Against the orders</text>
+<text class="ts" x="536" y="197">as ordered, more than ordered,</text>
+<text class="ts" x="536" y="213">or on no order at all</text>
+<text class="te" x="536" y="236">odd: one alert</text>
+</g>
+<g class="k-amber"><rect x="274" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="176"><tspan class="num">5</tspan>  Put away</text>
+<text class="ts" x="286" y="197">suggested place = last one for</text>
+<text class="ts" x="286" y="213">that article, else RECEIVING</text>
+<text class="te" x="286" y="236">person confirms</text>
+</g>
+<g class="k-teal"><rect x="24" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="176"><tspan class="num">6</tspan>  Count list</text>
+<text class="ts" x="36" y="197">daily, 5 articles: busiest</text>
+<text class="ts" x="36" y="213">monthly, then 2, then 3 months</text>
+<text class="te" x="36" y="236">pushed to alerts</text>
+</g>
+<g class="k-amber"><rect x="24" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="316"><tspan class="num">7</tspan>  Blind count</text>
+<text class="ts" x="36" y="337">the person counts; the books</text>
+<text class="ts" x="36" y="353">are never shown</text>
+</g>
+<g class="k-purple"><rect x="274" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="316"><tspan class="num">8</tspan>  Within 2%?</text>
+<text class="ts" x="286" y="337">yes (at least 1 unit): posted</text>
+<text class="ts" x="286" y="353">now; no: 2nd count, causes</text>
+<text class="te" x="286" y="376">named</text>
+</g>
+<g class="k-amber"><rect x="524" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="316"><tspan class="num">9</tspan>  Second count</text>
+<text class="ts" x="536" y="337">agrees: posted. Disagrees:</text>
+<text class="ts" x="536" y="353">nothing posted, person settles</text>
+<text class="te" x="536" y="376">alert raised</text>
+</g>
+<line class="arr" x1="237" y1="64" x2="271" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="64" x2="521" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="629" y1="115" x2="629" y2="153" marker-end="url(#a)"/>
+<line class="arr" x1="521" y1="204" x2="487" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="271" y1="204" x2="237" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="129" y1="255" x2="129" y2="293" marker-end="url(#a)"/>
+<line class="arr" x1="237" y1="344" x2="271" y2="344" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="344" x2="521" y2="344" marker-end="url(#a)"/>
+</svg>
+<h2>3. From a need to a written order</h2><p>Four ways a need appears. All end as a purchase order or a basket for the gate.</p>
+<svg viewBox="0 0 760 416" role="img" aria-label="3. From a need to a written order">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="k-teal"><rect x="24" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="36"><tspan class="num">1</tspan>  Forecast</text>
+<text class="ts" x="36" y="57">use per day from shipped</text>
+<text class="ts" x="36" y="73">orders; lead time learned</text>
+<text class="te" x="36" y="96">per supplier (3+ deliveries)</text>
+</g>
+<g class="k-teal"><rect x="274" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="36"><tspan class="num">2</tspan>  DDMRP buffers</text>
+<text class="ts" x="286" y="57">red, yellow, green zones;</text>
+<text class="ts" x="286" y="73">pack sizes; feedback factors</text>
+<text class="te" x="286" y="96">empty shelf: +15% safety</text>
+</g>
+<g class="k-amber"><rect x="524" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="36"><tspan class="num">3</tspan>  Site request</text>
+<text class="ts" x="536" y="57">site, work item, day;</text>
+<text class="ts" x="536" y="73">screen or /request in chat</text>
+</g>
+<g class="k-teal"><rect x="524" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="176"><tspan class="num">4</tspan>  Shelf first</text>
+<text class="ts" x="536" y="197">free stock is held back</text>
+<text class="ts" x="536" y="213">for the work item</text>
+<text class="te" x="536" y="236">rest goes to the gate</text>
+</g>
+<g class="k-amber"><rect x="274" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="176"><tspan class="num">5</tspan>  Ticked to order</text>
+<text class="ts" x="286" y="197">lines on a customer order;</text>
+<text class="ts" x="286" y="213">queue reads them hourly</text>
+<text class="te" x="286" y="236">ordered after 15 days</text>
+</g>
+<g class="k-purple"><rect x="24" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="176"><tspan class="num">6</tspan>  Cycle order</text>
+<text class="ts" x="36" y="197">every 14 days, Monday: all that</text>
+<text class="ts" x="36" y="213">fall under yellow before next</text>
+<text class="te" x="36" y="236">up to green + cycle use</text>
+</g>
+<g class="k-purple"><rect x="24" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="316"><tspan class="num">7</tspan>  Urgent order</text>
+<text class="ts" x="36" y="337">other working days after 8h:</text>
+<text class="ts" x="36" y="353">only articles already in red</text>
+<text class="te" x="36" y="376">once a day at most</text>
+</g>
+<g class="k-purple"><rect x="274" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="316"><tspan class="num">8</tspan>  Common sense</text>
+<text class="ts" x="286" y="337">on its way: left alone; 90 days</text>
+<text class="ts" x="286" y="353">cover cap; no use in 8 weeks</text>
+<text class="te" x="286" y="376">supplier under 30 EUR waits</text>
+</g>
+<g class="k-teal"><rect x="524" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="316"><tspan class="num">9</tspan>  Order written</text>
+<text class="ts" x="536" y="337">purchase order drafted PLUTUS,</text>
+<text class="ts" x="536" y="353">or a basket for the request</text>
+<text class="te" x="536" y="376">enters the gate</text>
+</g>
+<line class="arr" x1="237" y1="64" x2="271" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="64" x2="521" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="629" y1="115" x2="629" y2="153" marker-end="url(#a)"/>
+<line class="arr" x1="521" y1="204" x2="487" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="271" y1="204" x2="237" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="129" y1="255" x2="129" y2="293" marker-end="url(#a)"/>
+<line class="arr" x1="237" y1="344" x2="271" y2="344" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="344" x2="521" y2="344" marker-end="url(#a)"/>
+</svg>
+<h2>4. The purchase round (every hour)</h2><p>Mode comes first: off does nothing, dry run only writes down what it would do, live acts.</p>
+<svg viewBox="0 0 760 416" role="img" aria-label="4. The purchase round (every hour)">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="k-teal"><rect x="24" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="36"><tspan class="num">1</tspan>  Mode</text>
+<text class="ts" x="36" y="57">off | dry run (3 days min)</text>
+<text class="ts" x="36" y="73">| live</text>
+<text class="te" x="36" y="96">limits from the charter</text>
+</g>
+<g class="k-teal"><rect x="274" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="36"><tspan class="num">2</tspan>  Gate request</text>
+<text class="ts" x="286" y="57">Plutus's order enters the gate</text>
+<text class="ts" x="286" y="73">like any chat basket</text>
+<text class="te" x="286" y="96">sealed in the log</text>
+</g>
+<g class="k-purple"><rect x="524" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="36"><tspan class="num">3</tspan>  Terminus reads</text>
+<text class="ts" x="536" y="57">same article, new, or unsure</text>
+<text class="ts" x="536" y="73">(Claude CLI, names only)</text>
+<text class="te" x="536" y="96">unsure: held</text>
+</g>
+<g class="k-purple"><rect x="524" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="176"><tspan class="num">4</tspan>  Terminus decides</text>
+<text class="ts" x="536" y="197">approves if all same and within</text>
+<text class="ts" x="536" y="213">500 EUR, 1000/day; cancels</text>
+<text class="te" x="536" y="236">repeat, refused, 14 days old</text>
+</g>
+<g class="k-purple"><rect x="274" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="176"><tspan class="num">5</tspan>  Plutus approves</text>
+<text class="ts" x="286" y="197">same limits; dear line, new</text>
+<text class="ts" x="286" y="213">supplier, no price: held</text>
+<text class="te" x="286" y="236">unless the charter allows</text>
+</g>
+<g class="k-amber"><rect x="24" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="176"><tspan class="num">6</tspan>  Held: a person</text>
+<text class="ts" x="36" y="197">sees the reasons, approves</text>
+<text class="ts" x="36" y="213">or cancels; no expiry</text>
+<text class="te" x="36" y="236">10% price drift asks again</text>
+</g>
+<g class="k-coral"><rect x="24" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="316"><tspan class="num">7</tspan>  Wallet</text>
+<text class="ts" x="36" y="337">free = balance - committed</text>
+<text class="ts" x="36" y="353">- reserve; sending commits</text>
+<text class="te" x="36" y="376">short: held</text>
+</g>
+<g class="k-teal"><rect x="274" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="316"><tspan class="num">8</tspan>  Window and limits</text>
+<text class="ts" x="286" y="337">8h-17h working days; 5000 per</text>
+<text class="ts" x="286" y="353">order, 20000/day; price drift</text>
+<text class="te" x="286" y="376">over 10%: held</text>
+</g>
+<g class="k-teal"><rect x="524" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="316"><tspan class="num">9</tspan>  Send or place</text>
+<text class="ts" x="536" y="337">mail (with PDF) or signed</text>
+<text class="ts" x="536" y="353">webhook; a basket becomes PO</text>
+<text class="te" x="536" y="376">marked ordered</text>
+</g>
+<line class="arr" x1="237" y1="64" x2="271" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="64" x2="521" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="629" y1="115" x2="629" y2="153" marker-end="url(#a)"/>
+<line class="arr" x1="521" y1="204" x2="487" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="271" y1="204" x2="237" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="129" y1="255" x2="129" y2="293" marker-end="url(#a)"/>
+<line class="arr" x1="237" y1="344" x2="271" y2="344" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="344" x2="521" y2="344" marker-end="url(#a)"/>
+</svg>
+<h2>5. Suppliers, after the order</h2><p>A reply only counts from a supplier on file. The mail is data, never instructions.</p>
+<svg viewBox="0 0 760 416" role="img" aria-label="5. Suppliers, after the order">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="k-teal"><rect x="24" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="36"><tspan class="num">1</tspan>  Thread opens</text>
+<text class="ts" x="36" y="57">order sent; expected day =</text>
+<text class="ts" x="36" y="73">sent + usual lead time</text>
+<text class="te" x="36" y="96">working days, cut-off hour</text>
+</g>
+<g class="k-teal"><rect x="274" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="36"><tspan class="num">2</tspan>  Reply arrives</text>
+<text class="ts" x="286" y="57">sender must be a supplier on</text>
+<text class="ts" x="286" y="73">file (address or domain)</text>
+<text class="te" x="286" y="96">stranger: ignored</text>
+</g>
+<g class="k-teal"><rect x="524" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="36"><tspan class="num">3</tspan>  Reply filed</text>
+<text class="ts" x="536" y="57">names the order number:</text>
+<text class="ts" x="536" y="73">confirmed; first date = eta</text>
+</g>
+<g class="k-purple"><rect x="524" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="176"><tspan class="num">4</tspan>  Reply read</text>
+<text class="ts" x="536" y="197">Claude fills a form: date,</text>
+<text class="ts" x="536" y="213">prices, credit, question</text>
+<text class="te" x="536" y="236">no CLI: only filed</text>
+</g>
+<g class="k-teal"><rect x="274" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="176"><tspan class="num">5</tspan>  Applied</text>
+<text class="ts" x="286" y="197">date: eta. Prices: offers,</text>
+<text class="ts" x="286" y="213">not awarded. Credit: closes</text>
+<text class="te" x="286" y="236">question: alert</text>
+</g>
+<g class="k-purple"><rect x="24" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="176"><tspan class="num">6</tspan>  Silent order</text>
+<text class="ts" x="36" y="197">3 working days with no answer,</text>
+<text class="ts" x="36" y="213">or past its promised day</text>
+<text class="te" x="36" y="236">chased; 2 times then person</text>
+</g>
+<g class="k-purple"><rect x="24" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="316"><tspan class="num">7</tspan>  Owed lines</text>
+<text class="ts" x="36" y="337">owed 7 days or past promise:</text>
+<text class="ts" x="36" y="353">a reminder, once a week</text>
+</g>
+<g class="k-amber"><rect x="274" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="316"><tspan class="num">8</tspan>  Quote flow</text>
+<text class="ts" x="286" y="337">request, send, prices, compare</text>
+<text class="ts" x="286" y="353">side by side, then award</text>
+<text class="te" x="286" y="376">award = agreed price</text>
+</g>
+<g class="k-teal"><rect x="524" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="316"><tspan class="num">9</tspan>  Goods arrive</text>
+<text class="ts" x="536" y="337">delivery note stored</text>
+<text class="ts" x="536" y="353">lead time learned from it</text>
+<text class="te" x="536" y="376">goes to Receiving</text>
+</g>
+<line class="arr" x1="237" y1="64" x2="271" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="64" x2="521" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="629" y1="115" x2="629" y2="153" marker-end="url(#a)"/>
+<line class="arr" x1="521" y1="204" x2="487" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="271" y1="204" x2="237" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="129" y1="255" x2="129" y2="293" marker-end="url(#a)"/>
+<line class="arr" x1="237" y1="344" x2="271" y2="344" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="344" x2="521" y2="344" marker-end="url(#a)"/>
+</svg>
+<h2>6. Bills and payment</h2><p>A bill is checked against every delivery since the supplier's previous bill, at known prices.</p>
+<svg viewBox="0 0 760 416" role="img" aria-label="6. Bills and payment">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="k-gray"><rect x="24" y="16" width="210" height="96" rx="8" stroke-dasharray="5 4"/>
+<text class="th" x="36" y="36"><tspan class="num">1</tspan>  Bill in</text>
+<text class="ts" x="36" y="57">API only: Claude reads, then</text>
+<text class="ts" x="36" y="73">a person confirms; no screen</text>
+<text class="te" x="36" y="96">path today</text>
+</g>
+<g class="k-teal"><rect x="274" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="36"><tspan class="num">2</tspan>  Match</text>
+<text class="ts" x="286" y="57">deliveries since previous bill</text>
+<text class="ts" x="286" y="73">x prices the app has seen</text>
+</g>
+<g class="k-teal"><rect x="524" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="36"><tspan class="num">3</tspan>  Verdict</text>
+<text class="ts" x="536" y="57">matched, over, under, nothing</text>
+<text class="ts" x="536" y="73">delivered, unchecked (no price)</text>
+</g>
+<g class="k-purple"><rect x="524" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="176"><tspan class="num">4</tspan>  Dispute</text>
+<text class="ts" x="536" y="197">over / nothing delivered:</text>
+<text class="ts" x="536" y="213">Plutus mails it if &lt;= 2000</text>
+<text class="te" x="536" y="236">above: a person decides</text>
+</g>
+<g class="k-teal"><rect x="274" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="176"><tspan class="num">5</tspan>  Credit note</text>
+<text class="ts" x="286" y="197">supplier's reply is read;</text>
+<text class="ts" x="286" y="213">closed when credit covers claim</text>
+</g>
+<g class="k-purple"><rect x="24" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="176"><tspan class="num">6</tspan>  May it be paid?</text>
+<text class="ts" x="36" y="197">matched; within 2 days of due;</text>
+<text class="ts" x="36" y="213">bank details; &lt;= 5000; 10k/day</text>
+<text class="te" x="36" y="236">else: left, reason logged</text>
+</g>
+<g class="k-coral"><rect x="24" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="316"><tspan class="num">7</tspan>  Instruct</text>
+<text class="ts" x="36" y="337">wallet debited; payment goes</text>
+<text class="ts" x="36" y="353">in the open SEPA batch</text>
+</g>
+<g class="k-coral"><rect x="274" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="316"><tspan class="num">8</tspan>  Bank drop</text>
+<text class="ts" x="286" y="337">pain.001 uploaded by SFTP key;</text>
+<text class="ts" x="286" y="353">or downloaded by a person</text>
+<text class="te" x="286" y="376">upload refused: batch reopens</text>
+</g>
+<g class="k-coral"><rect x="524" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="316"><tspan class="num">9</tspan>  Bank report</text>
+<text class="ts" x="536" y="337">accepted: bills paid.</text>
+<text class="ts" x="536" y="353">Rejected: money back to wallet</text>
+<text class="te" x="536" y="376">pending: asked again</text>
+</g>
+<line class="arr" x1="237" y1="64" x2="271" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="64" x2="521" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="629" y1="115" x2="629" y2="153" marker-end="url(#a)"/>
+<line class="arr" x1="521" y1="204" x2="487" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="271" y1="204" x2="237" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="129" y1="255" x2="129" y2="293" marker-end="url(#a)"/>
+<line class="arr" x1="237" y1="344" x2="271" y2="344" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="344" x2="521" y2="344" marker-end="url(#a)"/>
+</svg>
+<h2>7. The hourly loop, in order</h2><p>One pass, nine steps, every hour. Each step is wrapped so one failure does not stop the next run.</p>
+<svg viewBox="0 0 760 416" role="img" aria-label="7. The hourly loop, in order">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="k-teal"><rect x="24" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="36"><tspan class="num">1</tspan>  Learn</text>
+<text class="ts" x="36" y="57">feedback factors from cuts,</text>
+<text class="ts" x="36" y="73">empty counts, refused baskets</text>
+</g>
+<g class="k-purple"><rect x="274" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="36"><tspan class="num">2</tspan>  Replenish</text>
+<text class="ts" x="286" y="57">cycle or urgent order, if the</text>
+<text class="ts" x="286" y="73">day and hour say so</text>
+<text class="te" x="286" y="96">off: skipped</text>
+</g>
+<g class="k-purple"><rect x="524" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="36"><tspan class="num">3</tspan>  Terminus</text>
+<text class="ts" x="536" y="57">decides the open baskets</text>
+<text class="ts" x="536" y="73">(approve or cancel)</text>
+<text class="te" x="536" y="96">off or dry: logs only</text>
+</g>
+<g class="k-teal"><rect x="524" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="176"><tspan class="num">4</tspan>  Receiving</text>
+<text class="ts" x="536" y="197">new delivery lines checked</text>
+<text class="ts" x="536" y="213">and given a suggested place</text>
+</g>
+<g class="k-teal"><rect x="274" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="176"><tspan class="num">5</tspan>  Count list</text>
+<text class="ts" x="286" y="197">5 articles, once a day;</text>
+<text class="ts" x="286" y="213">pushed to the alert channels</text>
+</g>
+<g class="k-teal"><rect x="24" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="176"><tspan class="num">6</tspan>  Requests</text>
+<text class="ts" x="36" y="197">each request's state refreshed;</text>
+<text class="ts" x="36" y="213">finished ones are pushed</text>
+</g>
+<g class="k-purple"><rect x="24" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="316"><tspan class="num">7</tspan>  Plutus</text>
+<text class="ts" x="36" y="337">the purchase round: send,</text>
+<text class="ts" x="36" y="353">approve, place, chase, pay</text>
+<text class="te" x="36" y="376">off: skipped</text>
+</g>
+<g class="k-teal"><rect x="274" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="316"><tspan class="num">8</tspan>  Policies</text>
+<text class="ts" x="286" y="337">older rules: send an order, a</text>
+<text class="ts" x="286" y="353">reminder, approve; kill switch</text>
+<text class="te" x="286" y="376">off by default</text>
+</g>
+<g class="k-teal"><rect x="524" y="296" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="316"><tspan class="num">9</tspan>  Notices</text>
+<text class="ts" x="536" y="337">scan the books for what needs</text>
+<text class="ts" x="536" y="353">a person; push what is new</text>
+<text class="te" x="536" y="376">daily digest at NOTIFY_HOUR</text>
+</g>
+<line class="arr" x1="237" y1="64" x2="271" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="64" x2="521" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="629" y1="115" x2="629" y2="153" marker-end="url(#a)"/>
+<line class="arr" x1="521" y1="204" x2="487" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="271" y1="204" x2="237" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="129" y1="255" x2="129" y2="293" marker-end="url(#a)"/>
+<line class="arr" x1="237" y1="344" x2="271" y2="344" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="344" x2="521" y2="344" marker-end="url(#a)"/>
+</svg>
+<p class="note">Beside it: mail check every 15 min, the to-order queue hourly, photo purge daily, Discord and Slack bots always on.</p>
+<h2>8. The safety rails</h2><p>What stops an agent doing more than it should, whatever the model answers.</p>
+<svg viewBox="0 0 760 276" role="img" aria-label="8. The safety rails">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="k-teal"><rect x="24" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="36"><tspan class="num">1</tspan>  Charters</text>
+<text class="ts" x="36" y="57">numbers a person sets, enforced</text>
+<text class="ts" x="36" y="73">again in code on every answer</text>
+</g>
+<g class="k-teal"><rect x="274" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="36"><tspan class="num">2</tspan>  Modes</text>
+<text class="ts" x="286" y="57">off, then dry run, live after</text>
+<text class="ts" x="286" y="73">3 days of dry run</text>
+<text class="te" x="286" y="96">per agent</text>
+</g>
+<g class="k-coral"><rect x="524" y="16" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="36"><tspan class="num">3</tspan>  Wallet</text>
+<text class="ts" x="536" y="57">a person funds it; Plutus</text>
+<text class="ts" x="536" y="73">spends only what is free</text>
+<text class="te" x="536" y="96">program ledger, not a bank</text>
+</g>
+<g class="k-amber"><rect x="524" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="536" y="176"><tspan class="num">4</tspan>  Held baskets</text>
+<text class="ts" x="536" y="197">reasons shown; approve or</text>
+<text class="ts" x="536" y="213">cancel on the landing page</text>
+<text class="te" x="536" y="236">no expiry</text>
+</g>
+<g class="k-teal"><rect x="274" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="286" y="176"><tspan class="num">5</tspan>  Sealed log</text>
+<text class="ts" x="286" y="197">every gate event in one hash</text>
+<text class="ts" x="286" y="213">chain; an edit shows its entry</text>
+<text class="te" x="286" y="236">no network, no coin</text>
+</g>
+<g class="k-teal"><rect x="24" y="156" width="210" height="96" rx="8"/>
+<text class="th" x="36" y="176"><tspan class="num">6</tspan>  Alerts</text>
+<text class="ts" x="36" y="197">dashboard, push (Slack, SMS,</text>
+<text class="ts" x="36" y="213">mail), daily digest, score</text>
+<text class="te" x="36" y="236">autonomy score out of 100</text>
+</g>
+<line class="arr" x1="237" y1="64" x2="271" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="487" y1="64" x2="521" y2="64" marker-end="url(#a)"/>
+<line class="arr" x1="629" y1="115" x2="629" y2="153" marker-end="url(#a)"/>
+<line class="arr" x1="521" y1="204" x2="487" y2="204" marker-end="url(#a)"/>
+<line class="arr" x1="271" y1="204" x2="237" y2="204" marker-end="url(#a)"/>
+</svg></main></html>
