@@ -12,8 +12,8 @@ import logging
 import os
 
 from . import baskets, chat, gate, quotes, verify
-from .chat import (MAX_SHOWN, allowed, basket_text, held_text, purchase_text, quote_text,
-                   show_number, stock_text)
+from .chat import (allowed, basket_text, held_text, purchase_text, quote_text,
+                   stock_text)
 from .config import load_config
 
 log = logging.getLogger(__name__)

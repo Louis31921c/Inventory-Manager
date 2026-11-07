@@ -24,8 +24,8 @@ from datetime import date, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import make_msgid
 
-from . import backorders, contacts, db, leadtimes, mailbox, pricing, quotes, units, workdays
-from .models import normalize_name, parse_date
+from . import backorders, db, leadtimes, mailbox, pricing, quotes, units, workdays
+from .models import parse_date
 
 CHASE_AFTER_DAYS = 3
 CHASE_EVERY_DAYS = 3
@@ -132,7 +132,7 @@ def _quantity(value):
 
 
 def _existing(db_path, kind, ref_kind, ref_id, supplier=None):
-    found = db.read(db_path, f"""
+    found = db.read(db_path, """
             SELECT mail_id FROM supplier_mail
             WHERE direction = 'out' AND kind = ? AND ref_kind = ? AND ref_id IS NOT DISTINCT FROM ?
               AND supplier IS NOT DISTINCT FROM ? AND state IN ('draft', 'failed')

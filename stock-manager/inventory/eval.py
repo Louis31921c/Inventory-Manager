@@ -31,7 +31,7 @@ def record_run(data_dir, summary):
 
 
 def _compare(expected, got, path=""):
-   
+
     if isinstance(expected, dict) and set(expected) == {"$or"}:
         if not any(not list(_compare(option, got, path)) for option in expected["$or"]):
             yield (path, " or ".join(repr(o) for o in expected["$or"]), got)

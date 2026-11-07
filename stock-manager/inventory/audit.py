@@ -109,7 +109,7 @@ def events(db_path, limit=100, user=None):
 
 
 def users(db_path):
-   
+
     with duckdb.connect(str(db_path)) as con:
         rows = con.execute(
             """

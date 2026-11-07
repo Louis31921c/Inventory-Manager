@@ -16,7 +16,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",
-    "pillow>=10",
+    "pillow>=13",
     "reportlab>=4.0",
     "cryptography>=43",
 ]
@@ -27,7 +27,7 @@ discord = ["discord.py>=2.3"]
 # Brotli is pinned up because some distributions ship a 1.1.0 whose Decompressor.process
 # takes only the data, while aiohttp calls it with a length as well: any brotli answer
 # from Slack then dies in the socket rather than in anything you can see.
-slack = ["slack-bolt>=1.18", "Brotli>=1.2"]
+slack = ["slack-bolt>=1.18", "Brotli>=1.2", "aiohttp>=3.9"]
 outlook = ["msal>=1.28"]
 # The sample documents: PDFs of the year's paperwork and the gate's proofs.
 documents = ["reportlab>=4.0"]
@@ -56,3 +56,35 @@ inventory = ["MANIFEST.json", "rules.md", "prompts/*.md", "web_ui/*.html", "web_
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+extend-exclude = ["build", "sample_data", "tests/corpus"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "S"]
+ignore = [
+    "E741",   # `l` in a short comprehension is a readable choice here
+    "S608",   # SQL built from fixed constants and table names only; every value goes through a `?` parameter
+    "S110", "S112",   # a failed optional step (a push, a thumbnail, a report) must not stop the run
+    "S603", "S607",   # subprocess is used with fixed argument lists (sftp, xdg-open, the claude command line), never a shell
+    "S310",   # every URL opened is checked to be https (or localhost) first
+    "S311",   # random is used for jitter and sample data, never for a secret
+    "S105",   # these are the names of settings, not secrets
+    "B008", "B904", "B905", "B007", "B006",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "S108", "S324", "B011", "B017", "E501", "E731", "F841"]
+"tools/*" = ["S101", "E501"]
+"inventory/simulation*.py" = ["S"]
+"inventory/documents.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+follow_imports = "silent"
+files = ["inventory/vault.py", "inventory/licensing.py", "inventory/integrity.py", "inventory/access.py"]

@@ -12,8 +12,6 @@ import mimetypes
 import os
 import re
 import secrets
-import socket
-import subprocess
 import tempfile
 import threading
 from datetime import date
@@ -27,12 +25,19 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, bankdrop, channels, counting, receiving, replies, requisitions, archive, audit, autonomy, charters, feedback, judge, payments, policies, purchasing, replenish, wallet, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
-               contacts, db, ddmrp, discord_bot,
-               forecast, gate, intake, leadtimes, llm,
-               mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
-               shortcuts, simulation, slack_bot, stock, stockctl, units, verify, vocabulary, watch,
-               workdays)
+from . import (
+    account, agents, alerts, archive, audit, autonomy,
+    backorders, backup, bankdrop, baskets, bills, catalog,
+    channels, charters, contacts, counting, dashboard, db,
+    ddmrp, discord_bot, disputes, documents, feedback, forecast,
+    gate, intake, judge, leadtimes, llm, mail_oauth,
+    mailbox, matching, models_info, outbound, outbox, payments,
+    pg, photos, policies, prices, pricing, purchasing,
+    quotes, receiving, reorder, replenish, replies, requisitions,
+    routing, sheets, shortcuts, simulation, slack_bot, stock,
+    stockctl, units, verify, vocabulary, wallet, watch,
+    workdays,
+)
 from . import access, integrity, licensing, vault
 from .config import config_dir, load_config, set_setting
 from .models import Note, parse_date
@@ -536,7 +541,7 @@ def landing():
 
 @app.get("/fonts/{name}")
 def font(name: str):
- 
+
     path = (WEB / "fonts" / name).resolve()
     if path.parent != (WEB / "fonts").resolve() or not path.is_file() or path.suffix != ".woff2":
         raise HTTPException(404, "Font not found.")
@@ -567,7 +572,7 @@ def vehicle_picture(name: str):
 
 @app.get("/api/data")
 def data(request: Request):
-   
+
     notes = db.read(config.db_path, """
             SELECT n.note_id, n.image_path, n.confirmed_by,
                    any_value(d.supplier), any_value(d.delivery_date), any_value(d.order_date),
@@ -635,7 +640,7 @@ async def extract(request: Request, photo: UploadFile):
         note = await get_backend().extract(raw, media_type, known)
     except llm.ExtractionError as e:
         raise HTTPException(502, str(e)) from e
-    except Exception as e: 
+    except Exception as e:
         log.exception("extraction failed")
         reported = await asyncio.to_thread(report, request, "extract",
                                            f"note reading failed: {e}", "/api/extract")
@@ -3036,7 +3041,8 @@ async def draft_order(request: Request, body: OrderDraft):
                             "top_of_yellow": b["top_of_yellow"], "top_of_green": b["top_of_green"],
                             "to_order": b["to_order"] if b["zone"] in ("red", "yellow") else 0}
     keep = ("article", "ddmrp", "designation", "reference", "supplier", "per_week", "on_hand", "on_order",
-            "lead_days", "lead_source", "qty_factor", "safety_factor", "lead_demand", "safety_stock", "reorder_point", "cover_days", "suggested", "state",
+            "lead_days", "lead_source", "qty_factor", "safety_factor", "lead_demand", "safety_stock",
+            "reorder_point", "cover_days", "suggested", "state",
             "risk", "backorders")
     planner = {
         "settings": plan["settings"],
@@ -3146,7 +3152,7 @@ async def force_backup(request: Request):
 
 @app.get("/export/backup/{name}.csv")
 def backup_csv(name: str, table: str = "inventory_lines"):
- 
+
     archive = (config.data_dir / "backups" / name).resolve()
     if archive.parent != (config.data_dir / "backups").resolve() or not archive.is_file():
         raise HTTPException(404, "Backup not found.")
@@ -3204,7 +3210,7 @@ def _to_xlsx(dataset, name):
         sheet.append([_cell(v) for v in row])
     sheet.freeze_panes = "A2"
     for i, column in enumerate(columns, 1):
-      
+
         width = max([len(column)] + [len(str(_cell(r[i - 1]))) for r in rows[:200]] or [10])
         sheet.column_dimensions[sheet.cell(row=1, column=i).column_letter].width = min(width + 2, 60)
     with tempfile.TemporaryDirectory() as tmp:
@@ -3318,7 +3324,7 @@ async def question(request: Request, body: Question):
         raise HTTPException(400, "Empty question.")
 
     previous = None
-    for _ in range(2):  
+    for _ in range(2):
         try:
             sql, note = await get_backend().to_sql(body.question, previous)
         except llm.ExtractionError as e:

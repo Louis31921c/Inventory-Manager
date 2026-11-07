@@ -954,7 +954,7 @@ def current_version(con):
 
 
 def apply(con):
-    
+
     con.execute(VERSION_TABLE)
     version = current_version(con)
     applied = []

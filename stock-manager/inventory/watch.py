@@ -222,7 +222,6 @@ def _sms(config, text):
 
 
 def _mail(config, text, subject):
-    import smtplib
     from email.message import EmailMessage
 
     mail = config.mail

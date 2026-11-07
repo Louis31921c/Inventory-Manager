@@ -18,7 +18,7 @@ import json
 import os
 import socket
 import uuid
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature

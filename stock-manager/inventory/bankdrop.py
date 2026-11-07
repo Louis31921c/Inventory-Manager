@@ -114,8 +114,10 @@ def upload(db_path, local_path, remote_name, run=subprocess.run):
 
 def parse_status(text):
     """'accepted', 'rejected' or 'pending' from the group status of a pain.002 report."""
+    if re.search(r"<!(DOCTYPE|ENTITY)", text or "", re.IGNORECASE):
+        return "pending"                       # a report has neither; refusing them closes the entity-expansion attacks
     try:
-        root = ET.fromstring(text)
+        root = ET.fromstring(text)  # noqa: S314 (no DOCTYPE or ENTITY got through the check above)
     except ET.ParseError:
         return "pending"
     for node in root.iter():

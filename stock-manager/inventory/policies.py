@@ -208,7 +208,8 @@ def _budget(db_path, policy, amount, now):
         reasons.append(f"over the absolute limit of {HARD_CEILING:g} EUR")
     if amount > policy["max_total"]:
         reasons.append(f"{amount:.2f} is over this policy's {policy['max_total']:g} EUR")
-    if policy["per_day"] and _spent(db_path, policy["policy_id"], datetime.combine(now.date(), datetime.min.time())) + amount > policy["per_day"]:
+    day_start = datetime.combine(now.date(), datetime.min.time())
+    if policy["per_day"] and _spent(db_path, policy["policy_id"], day_start) + amount > policy["per_day"]:
         reasons.append(f"it would pass the {policy['per_day']:g} EUR a day")
     if policy["per_month"] and _spent(db_path, policy["policy_id"], now - timedelta(days=30)) + amount > policy["per_month"]:
         reasons.append(f"it would pass the {policy['per_month']:g} EUR a month")

@@ -95,12 +95,12 @@ def find_by_image(db_path, sha256):
 
 
 def save_note(db_path, note, image_sha256, image_path, user=None):
- 
+
     rows = note.rows()
     with duckdb.connect(str(db_path)) as con:
         con.begin()
         try:
-         
+
             for row in rows:
                 row["article"] = vocabulary.resolve(con, row["article"])
 
@@ -124,14 +124,14 @@ def save_note(db_path, note, image_sha256, image_path, user=None):
 
 
 def describe_note(db_path, note_id):
-   
+
     supplier, lines = read(db_path, "SELECT any_value(supplier), count(*) FROM inventory_lines "
                                     "WHERE note_id = ?", [note_id])[0]
     return (supplier, lines) if lines else None
 
 
 def delete_note(db_path, note_id):
-   
+
     with duckdb.connect(str(db_path)) as con:
         con.begin()
         row = con.execute("DELETE FROM notes WHERE note_id = ? RETURNING image_path",
@@ -142,14 +142,14 @@ def delete_note(db_path, note_id):
 
 
 def update_work_item(db_path, note_id, line_no, work_item):
-   
+
     return write(db_path, "UPDATE inventory_lines SET work_item = ? WHERE note_id = ? AND line_no = ? "
                           "RETURNING line_no",
                  [normalize_name(work_item), note_id, line_no]) is not None
 
 
 def stock_by_article(db_path):
-    
+
     rows = read(db_path, """
             SELECT article,
                    sum(quantity)                     AS quantity,
@@ -226,7 +226,7 @@ def export_query(db_path, dataset):
 
 
 def export_to_file(db_path, dataset, out):
-    
+
     options = "(FORMAT parquet)" if out.suffix == ".parquet" else "(HEADER, DELIMITER ';')"
     with duckdb.connect(str(db_path)) as con:
         con.execute(f"COPY ({EXPORTS[dataset]}) TO '{out}' {options}")
@@ -330,7 +330,7 @@ def table_counts(db_path):
 
 
 def storage(db_path, data_dir, images_dir):
-  
+
     def size(path):
         if path.is_file():
             return path.stat().st_size
@@ -353,7 +353,7 @@ def storage(db_path, data_dir, images_dir):
 
 
 def record_reading(db_path, document, fields, corrected, lines):
-   
+
     if fields <= 0:
         return
     write(db_path, "INSERT INTO readings (document, fields, corrected, lines) VALUES (?, ?, ?, ?)",
@@ -361,7 +361,7 @@ def record_reading(db_path, document, fields, corrected, lines):
 
 
 def accuracy(db_path, days=90):
-   
+
     rows = read(db_path, f"""
             SELECT CAST(measured_at AS DATE) AS day, count(*), sum(fields), sum(corrected)
             FROM readings
@@ -390,7 +390,7 @@ def find_order_by_image(db_path, sha256):
 
 
 def save_purchase_order(db_path, data, image_sha256, image_path, user=None):
-    
+
     with duckdb.connect(str(db_path)) as con:
         con.begin()
         try:
@@ -427,7 +427,7 @@ def save_purchase_order(db_path, data, image_sha256, image_path, user=None):
 
 
 def purchase_orders(db_path):
-    
+
     rows = read(db_path, """
             SELECT h.list_id, h.list_date, h.site, h.work_item, h.drafter, h.image_path,
                    h.created_by, h.contact_id, h.incoterm, h.ship_by,
@@ -456,7 +456,7 @@ def purchase_orders(db_path):
 
 
 def set_in_stock(db_path, list_id, line_no, in_stock):
-   
+
     return write(db_path, "UPDATE purchase_order_lines SET in_stock = ? "
                           "WHERE list_id = ? AND line_no = ? RETURNING line_no",
                  [in_stock, list_id, line_no]) is not None
@@ -517,7 +517,7 @@ def _run_readonly(db_path, sql, max_rows):
                 raise QueryError("Only read queries (SELECT) are allowed.")
             con.execute(sql)
             columns = [d[0] for d in con.description]
-            rows = con.fetchmany(max_rows + 1)  
+            rows = con.fetchmany(max_rows + 1)
     except duckdb.Error as e:
         raise QueryError(str(e)) from e
     return QueryResult(columns, rows[:max_rows], len(rows) > max_rows)

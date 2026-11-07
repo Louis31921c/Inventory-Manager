@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import (alerts, audit, backup, catalog, db, llm, models_info, photos, simulation,
                vocabulary)
-from .models import Note, Line, parse_date
+from .models import Line, parse_date
 from .screen import BRIGHT, DIM, INVERT, KEY, NORMAL, TAB, TAB_ON, WARN, Screen, columns, pad, truncate
 
 TABS = ("NEW NOTE", "INVENTORY", "SQL", "PURCHASE ORDERS", "SETTINGS")

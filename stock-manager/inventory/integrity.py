@@ -16,6 +16,7 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 from . import licensing
 
@@ -26,7 +27,7 @@ SKIP_DIRS = {"__pycache__"}
 SKIP_FILES = {"MANIFEST.json"}
 RECHECK_SECONDS = 300
 
-_last = {"at": 0.0, "result": None}
+_last: dict[str, Any] = {"at": 0.0, "result": None}
 
 
 def enforced():

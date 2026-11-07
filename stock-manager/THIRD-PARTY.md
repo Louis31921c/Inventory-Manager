@@ -18,8 +18,8 @@ Stock Manager licence for the program's own code.
 | h11 | 0.16.0 | MIT |
 | idna | 3.20 | BSD-3-Clause |
 | openpyxl | 3.1.5 | MIT |
-| opentelemetry-api | 1.45.0 | Apache-2.0 |
-| pillow | 12.3.0 | MIT-CMU |
+| opentelemetry-api | 1.45.2 | Apache-2.0 |
+| pillow | 13.0.0 | MIT-CMU |
 | pycparser | 3.12 | BSD-3-Clause |
 | pydantic | 2.13.5 | MIT |
 | pydantic_core | 2.46.5 | MIT |

@@ -113,9 +113,9 @@ def shape(header, body, mapping, target="inventory"):
     for number, line in enumerate(body[:MAX_ROWS], 2):
         def cell(field):
             index = mapping.get(field)
-            if index is None or index >= len(line):
+            if index is None or index >= len(line):  # noqa: B023 (cell is called within the same pass of the loop)
                 return None
-            value = line[index]
+            value = line[index]  # noqa: B023 (cell is called within the same pass of the loop)
             return None if value in (None, "") else value
 
         article = normalize_name(str(cell("article") or ""))

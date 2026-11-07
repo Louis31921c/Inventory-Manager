@@ -304,7 +304,6 @@ def test_catalog_learns_and_applies(db_path):
 def test_catalog_backfill(tmp_path):
     import duckdb
 
-    from inventory import catalog
 
     path = tmp_path / "t.duckdb"
     db.init(path)
@@ -3710,6 +3709,7 @@ def test_a_write_is_never_refused_because_reads_are_going_on_around_it(tmp_path)
 
     path = tmp_path / "t.duckdb"
     db.init(path)
+    db.keep_open(path)                       # as the server does at start: the file is never shut under a request
     stop, errors = threading.Event(), []
 
     def reader():
@@ -4405,7 +4405,7 @@ def test_quote_answers_are_compared_and_the_winner_becomes_the_agreed_supplier(d
 
 def test_a_dispute_drafts_the_mail_and_runs_until_the_credit_note(db_path):
     from inventory import bills as bills_module
-    from inventory import disputes, matching, outbox, prices
+    from inventory import disputes, outbox, prices
 
     prices.remember(db_path, "BOLT", 2.0, supplier="ACME", seen_on=date(2026, 9, 1))
     db.save_note(db_path, make_note(supplier="ACME", delivery_date="2026-10-05",
@@ -4589,7 +4589,7 @@ def test_the_dashboard_names_what_is_short_why_and_what_to_do(db_path):
 
 
 def test_orders_to_come_lists_buffer_orders_the_queue_and_what_was_sent(db_path):
-    from inventory import dashboard, outbox, reorder
+    from inventory import dashboard, reorder
 
     today = date(2026, 11, 3)
     for number in range(1, 5):
@@ -4847,7 +4847,7 @@ class _Link:
 
 
 def test_a_policy_starts_in_dry_run_goes_live_only_after_three_days_and_stays_inside_its_limits(db_path):
-    from inventory import audit, outbox, policies
+    from inventory import outbox, policies
 
     _Link.sent = []
     config = make_config(db_path.parent, mail=_ready_mail())
@@ -4903,7 +4903,7 @@ def test_a_policy_starts_in_dry_run_goes_live_only_after_three_days_and_stays_in
 
 
 def test_a_policy_refuses_what_is_outside_its_limits(db_path):
-    from inventory import outbox, policies
+    from inventory import policies
 
     _Link.sent = []
     config = make_config(db_path.parent, mail=_ready_mail())
@@ -5395,7 +5395,7 @@ def policies_log(db_path):
 
 def test_plutus_approves_places_and_pays_inside_its_limits(db_path):
     from inventory import bills as bills_module
-    from inventory import charters, gate, outbox, payments, prices, purchasing, wallet
+    from inventory import gate, payments, purchasing, wallet
 
     _Link.sent = []
     config = make_config(db_path.parent, mail=_ready_mail())

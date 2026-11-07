@@ -14,12 +14,12 @@ log = logging.getLogger("inventory.alerts")
 PREFIX = "Stock manager"
 MAX_DESCRIPTION = 400
 MAX_SMS = 300
-DUPLICATE_MINUTES = 15   
+DUPLICATE_MINUTES = 15
 TIMEOUT = 10
 
 
 def report(config, kind, description, context=None, user=None):
-   
+
     text = " ".join(str(description).split())[:MAX_DESCRIPTION] or "unspecified error"
     try:
         with duckdb.connect(str(config.db_path)) as con:
@@ -37,7 +37,7 @@ def report(config, kind, description, context=None, user=None):
                 [kind, text, context, user],
             ).fetchone()[0]
     except duckdb.Error:
-    
+
         log.exception("could not store the error report: %s", text)
         status = send(config.sms, f"{PREFIX} error (unnumbered): {text}")
         return {"error_no": None, "kind": kind, "description": text, "sms_status": status}
@@ -63,7 +63,7 @@ def report(config, kind, description, context=None, user=None):
 
 
 def send(sms, text):
-    
+
     if not sms.enabled:
         return "disabled"
     body = text[:MAX_SMS]
@@ -77,7 +77,7 @@ def send(sms, text):
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:120] if hasattr(e, "read") else ""
         return f"failed: http {e.code} {detail}".strip()
-    except Exception as e:  
+    except Exception as e:
         return f"failed: {type(e).__name__} {e}"[:200]
     return "sent"
 
@@ -118,7 +118,7 @@ def recent(db_path, limit=50):
 
 
 def destination(sms):
-  
+
     number = sms.to
     masked = (number[:3] + "..." + number[-3:]) if len(number) > 6 else ("set" if number else "")
     return {"provider": sms.provider, "enabled": sms.enabled, "to": masked,

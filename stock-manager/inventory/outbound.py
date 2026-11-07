@@ -7,11 +7,10 @@ leaves it open to finish. The paper is the delivery note to print for the driver
 to sign, and one label per line to stick on the pallets.
 """
 
-import io
-from datetime import date, datetime
+from datetime import datetime
 
 from . import db
-from .models import normalize_name, parse_date
+from .models import parse_date
 
 STATES = ("planned", "loaded", "delivered", "part delivered", "failed")
 

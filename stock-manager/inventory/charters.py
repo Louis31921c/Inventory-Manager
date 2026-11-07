@@ -43,7 +43,8 @@ PLUTUS = {
     "send_disputes": (1, "open a dispute and mail it for a bill that does not match its deliveries (1 yes, 0 no)"),
     "dispute_max_claim": (2000.0, "EUR: it disputes no bill by itself for more than this; a person decides"),
     "bank_upload": (1, "hand a batch of payments to the bank by SFTP by itself (1 yes, 0 no: a person uploads it)"),
-    "count_tolerance_pct": (2.0, "a hand count within this percent of the books (at least one unit) is posted at once; a bigger gap needs a second count that agrees"),
+    "count_tolerance_pct": (2.0, "a hand count within this percent of the books (at least one unit) is posted at once; "
+                                 "a bigger gap needs a second count that agrees"),
     "pay_bills": (1, "pay supplier bills out of the wallet by itself (1 yes, 0 no)"),
     "pay_max_total": (5000.0, "EUR: the most one bill may be before a person has to pay it"),
     "pay_per_day": (10000.0, "EUR: the most it pays in a day"),
@@ -52,7 +53,8 @@ PLUTUS = {
     "cycle_days": (14, "days between two big orders: Plutus orders once per cycle, not every hour"),
     "order_weekday": (0, "the weekday the cycle order is written (0 Monday, 4 Friday); a holiday moves it on"),
     "max_cover_days": (90, "never order more than this many days of use in all, however the buffer is set"),
-    "min_supplier_order": (30.0, "EUR: a supplier's whole cycle order under this waits for the next sitting, unless a line is already in red"),
+    "min_supplier_order": (30.0, "EUR: a supplier's whole cycle order under this waits for the next sitting, "
+                                 "unless a line is already in red"),
     "urgent_max_lines": (10, "the most lines on an urgent order, written between cycles for an article already in red"),
     "urgent_max_value": (2000.0, "EUR an urgent order may come to"),
     "max_lines": (60, "the most lines on the cycle order"),

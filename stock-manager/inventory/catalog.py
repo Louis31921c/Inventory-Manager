@@ -49,7 +49,7 @@ def backfill(con):
 
 
 def apply(db_path, note):
-    
+
     note = note.model_copy(deep=True)
     supplier = _norm(note.supplier)
     with duckdb.connect(str(db_path)) as con:
@@ -62,7 +62,7 @@ def apply(db_path, note):
             ).fetchone()
             reference = reference_of(line.designation)
             if row is None and reference:
-            
+
                 row = con.execute(
                     "SELECT article FROM catalog WHERE supplier = ? AND reference = ? "
                     "ORDER BY updated_at DESC LIMIT 1",

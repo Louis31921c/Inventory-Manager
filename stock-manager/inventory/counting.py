@@ -16,7 +16,7 @@ is pushed to the alert channels. A count is blind: the screen never shows what t
 
 from datetime import date, datetime, timedelta
 
-from . import charters, db, prices, stock, stockctl
+from . import charters, db, stock, stockctl
 from .models import normalize_name
 
 PER_DAY_DEFAULT = 5

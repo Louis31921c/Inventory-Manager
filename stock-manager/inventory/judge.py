@@ -15,7 +15,6 @@ what it would have done, and goes live only after the same three days of that as
 decision is in the log and in the gate's sealed chain, signed TERMINUS.
 """
 
-import json
 from datetime import date, datetime, timedelta
 
 from . import audit, charters, db, feedback, gate

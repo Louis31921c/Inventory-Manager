@@ -33,7 +33,7 @@ def parse_date(text):
         year += 2000
     try:
         return date(year, month, day)
-    except ValueError:  
+    except ValueError:
         return None
 
 
@@ -42,11 +42,11 @@ class Line(BaseModel):
     quantity: float | None = None
     backorder: bool = False
     designation: str | None = None
-    known: bool = False  
+    known: bool = False
 
 
 class Note(BaseModel):
-   
+
 
     supplier: str | None = None
     delivery_date: str | None = None
@@ -54,10 +54,10 @@ class Note(BaseModel):
     site: str | None = None
     work_item: str | None = None
     lines: list[Line] = []
-    warnings: list[str] = []  
+    warnings: list[str] = []
 
     def problems(self):
-        
+
         out = []
         if not (self.supplier or "").strip():
             out.append("supplier missing")
@@ -75,7 +75,7 @@ class Note(BaseModel):
         return out
 
     def rows(self):
-      
+
         delivered = parse_date(self.delivery_date)
         ordered = parse_date(self.order_date) if self.order_date else None
         return [

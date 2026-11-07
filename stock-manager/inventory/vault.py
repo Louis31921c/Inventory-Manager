@@ -13,7 +13,6 @@ A value that is not encrypted is read as it is, so an old file keeps working, an
 `seal_database` encrypt it in place.
 """
 
-import base64
 import os
 from pathlib import Path
 
@@ -29,7 +28,7 @@ SECRET_KEYS = frozenset({
     "IMAP_PASSWORD", "GEMINI_API_KEY", "OPENAI_API_KEY", "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN",
     "DISCORD_BOT_TOKEN", "TWILIO_AUTH_TOKEN", "SMS_WEBHOOK_TOKEN", "HEALTH_TOKEN"})
 
-_cache = {}
+_cache: dict[Path, bytes] = {}
 
 
 def key_file():

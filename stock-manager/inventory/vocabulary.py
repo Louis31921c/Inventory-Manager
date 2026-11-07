@@ -10,7 +10,7 @@ class VocabularyError(Exception):
 
 
 def record(con, articles, source):
-  
+
     for raw in articles:
         article = normalize_name(raw)
         if not article:
@@ -34,7 +34,7 @@ def resolve(con, name):
 
 
 def known_articles(db_path, limit=PROMPT_LIMIT):
-   
+
     with duckdb.connect(str(db_path)) as con:
         rows = con.execute(
             "SELECT article FROM article_names ORDER BY seen DESC, article LIMIT ?", [limit]
@@ -132,7 +132,7 @@ def _rewrite(con, alias_name, target, user):
 
 
 def merge(db_path, alias, article, user=None):
-   
+
     alias_name, target = normalize_name(alias), normalize_name(article)
     if not alias_name or not target:
         raise VocabularyError("Both names are required.")
@@ -140,7 +140,7 @@ def merge(db_path, alias, article, user=None):
         raise VocabularyError("A name cannot be an alias of itself.")
 
     with duckdb.connect(str(db_path)) as con:
-        target = resolve(con, target) 
+        target = resolve(con, target)
         if target == alias_name:
             raise VocabularyError(f"{alias!r} is already the canonical name of {article!r}.")
         con.begin()

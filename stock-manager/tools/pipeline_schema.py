@@ -3,7 +3,8 @@
     python3 tools/pipeline_schema.py docs/pipeline.html
 
 The steps are the lists below. Each line is length-checked so no text leaves its box."""
-import html, sys
+import html
+import sys
 
 W, H_BOX, GAP_X, GAP_Y, X0, Y0 = 760, 96, 40, 44, 24, 16
 BW = 210
@@ -197,7 +198,7 @@ svg{width:100%;height:auto;display:block}
 def page():
     legend = "".join(f'<span><i style="background:var(--{KINDS[k]}-f);border-color:var(--{KINDS[k]}-s);'
                      f'{"border-style:dashed" if k=="gap" else ""}"></i>{esc(t)}</span>' for k, t in LEGEND)
-    body = [f"<h1>Stock Manager: the whole pipeline, step by step</h1>",
+    body = ["<h1>Stock Manager: the whole pipeline, step by step</h1>",
             "<p>Read each diagram as a snake: left to right, then down, then right to left. The red italic line under a step is what happens when it does not pass.</p>",
             f'<div class="legend">{legend}</div>']
     for d in D:

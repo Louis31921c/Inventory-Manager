@@ -53,7 +53,7 @@ def list_backups(data_dir):
 
 
 def open_backup(archive, passphrase, into):
-    
+
     into.mkdir(parents=True, exist_ok=True)
     source = archive
     if archive.suffix == ".enc":
@@ -73,7 +73,7 @@ def open_backup(archive, passphrase, into):
 
 
 def table_to_csv(export_dir, table, target):
-   
+
     scratch = target.parent / "read.duckdb"
     with duckdb.connect(str(scratch)) as con:
         con.execute(f"IMPORT DATABASE '{export_dir}'")

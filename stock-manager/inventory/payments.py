@@ -126,6 +126,7 @@ def batch_file(db_path, batch_id, payer_name, payer_iban, payer_bic=None, now=No
     now = now or datetime.now()
     total = round(sum(float(p[2]) for p in pays), 2)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S")
+    agent = f"<BIC>{escape(payer_bic.strip())}</BIC>" if payer_bic else "<Othr><Id>NOTPROVIDED</Id></Othr>"
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">',
@@ -138,7 +139,7 @@ def batch_file(db_path, batch_id, payer_name, payer_iban, payer_bic=None, now=No
         f'<ReqdExctnDt>{now.date().isoformat()}</ReqdExctnDt>'
         f'<Dbtr><Nm>{escape(payer_name.strip()[:70])}</Nm></Dbtr>'
         f'<DbtrAcct><Id><IBAN>{debtor}</IBAN></Id></DbtrAcct>'
-        f'<DbtrAgt><FinInstnId>{f"<BIC>{escape(payer_bic.strip())}</BIC>" if payer_bic else "<Othr><Id>NOTPROVIDED</Id></Othr>"}</FinInstnId></DbtrAgt>',
+        f"<DbtrAgt><FinInstnId>{agent}</FinInstnId></DbtrAgt>",
     ]
     for payment_id, supplier, amount, iban, reference in pays:
         lines.append(

@@ -21,7 +21,7 @@ PRIVATE_RULES_FILE = Path(os.environ.get("DATA_DIR", "./data")) / "private_rules
 
 
 def prompt_text(name):
-   
+
     return (HERE / "prompts" / name).read_text(encoding="utf-8").strip()
 
 
@@ -170,7 +170,7 @@ def extraction_prompt(known_articles=()):
 
 
 def list_prompt(known_articles=()):
-    
+
     return prompt_text("purchase_order.md") + _house_rules() + _vocabulary(known_articles)
 
 
@@ -195,7 +195,7 @@ def _to_note(result):
 
 
 class ClaudeCodeBackend:
-    
+
 
     SUFFIXES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
                 "image/gif": ".gif", "application/pdf": ".pdf"}
@@ -280,7 +280,7 @@ class ClaudeCodeBackend:
 
 class GeminiBackend:
     def __init__(self, api_key, model="gemini-3.8-flash"):
-        from google import genai  
+        from google import genai
 
         self.client = genai.Client(api_key=api_key)
         self.model = model
@@ -323,7 +323,7 @@ class GeminiBackend:
         try:
             interaction = await self.client.aio.interactions.create(
                 model=self.model, store=False, **kwargs)
-        except Exception as e: 
+        except Exception as e:
             msg = str(e)
             if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
                 raise ExtractionError(

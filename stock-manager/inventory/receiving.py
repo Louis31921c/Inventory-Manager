@@ -38,7 +38,7 @@ def home(db_path, article, site):
 def _check(db_path, article, site, supplier, quantity, day, note_id):
     """('as ordered' | 'more than ordered' | 'not on any order', words)."""
     since = day - timedelta(days=WINDOW_DAYS)
-    ordered = float(db.read(db_path, f"""
+    ordered = float(db.read(db_path, """
             SELECT coalesce(sum(l.quantity), 0) FROM purchase_order_lines l JOIN purchase_orders h USING (list_id)
             WHERE l.article = ? AND l.in_stock IS FALSE AND l.quantity > 0
               AND coalesce(h.site, '') = ? AND coalesce(h.list_date, CAST(h.created_at AS DATE)) BETWEEN ? AND ?""",
