@@ -929,6 +929,14 @@ MIGRATIONS = [
         DROP SEQUENCE IF EXISTS shipment_seq;
         """,
     ),
+    (
+        32,
+        "the audit log is chained: each event carries the keyed hash of itself and of the one before",
+        """
+        ALTER TABLE audit ADD COLUMN IF NOT EXISTS prev_hash VARCHAR;
+        ALTER TABLE audit ADD COLUMN IF NOT EXISTS row_hash VARCHAR;
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

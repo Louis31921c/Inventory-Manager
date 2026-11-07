@@ -2019,6 +2019,11 @@ class PasswordBody(BaseModel):
     new: str = ""
 
 
+@app.get("/api/audit/verify")
+def verify_audit():
+    return audit.verify(config.db_path)
+
+
 @app.get("/api/users")
 def read_users(request: Request):
     return {"users": account.users(), "roles": list(account.ROLES), "me": request.state.user}

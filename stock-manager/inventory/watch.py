@@ -20,7 +20,7 @@ What it looks at:
 import os
 from datetime import date, datetime, timedelta
 
-from . import counting, db, disputes, forecast, gate, matching, outbox, receiving, replies, requisitions, stockctl
+from . import audit, counting, db, disputes, forecast, gate, matching, outbox, receiving, replies, requisitions, stockctl
 
 SEVERITIES = ("critical", "high", "normal", "low")
 PRICE_JUMP = 0.25          # a new price this much above the usual one is a notice
@@ -61,6 +61,10 @@ def conditions(db_path, today=None):
                 "critical" if thread["days_waiting"] >= 10 else "normal",
                 f"{thread['supplier']}: {thread['why']} ({thread['kind']} #{thread['ref_id']})",
                 f"waiting {thread['days_waiting']} working day(s), expected {thread['expected_on']}")
+    chain = audit.verify(db_path, limit=20000)
+    if not chain["ok"]:
+        add("audit-chain", "security", "critical", f"The audit log was tampered with at event {chain['broken_at']}",
+            chain["why"])
     odd = [line for line in receiving.problems(db_path, today) if line["state"] == "to put away"]
     if odd:                                   # one notice, not one a line: a quiet week still has a few
         none = sum(1 for line in odd if line["check_word"] == "not on any order")

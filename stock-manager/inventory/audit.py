@@ -1,6 +1,9 @@
 
+import hashlib
+import hmac
 import logging
 import re
+import threading
 
 import duckdb
 
@@ -29,20 +32,57 @@ def seen(db_path, user):
         log.exception("could not record user activity")
 
 
+_chain_lock = threading.Lock()
+
+
+def _digest(prev, event_id, at, name, action, target, detail, address):
+    """The keyed hash of an event and of the one before it. Without the key, an edited event cannot be re-signed."""
+    from . import vault
+
+    parts = [prev or "", str(event_id), at.isoformat() if at else "", name, action, target or "", detail or "",
+             address or ""]
+    return hmac.new(vault._key(), "\x1f".join(parts).encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 def record(db_path, user, action, target=None, detail=None, address=None):
 
     name = clean_name(user) or UNKNOWN
     try:
-        with duckdb.connect(str(db_path)) as con:
-            con.execute(
+        with _chain_lock, duckdb.connect(str(db_path)) as con:
+            prev = con.execute("SELECT row_hash FROM audit WHERE row_hash IS NOT NULL "
+                               "ORDER BY event_id DESC LIMIT 1").fetchone()
+            prev = prev[0] if prev else None
+            event_id, at = con.execute(
                 "INSERT INTO audit (user_name, action, target, detail, address) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?) RETURNING event_id, happened_at",
                 [name, action, target, detail or None, address],
-            )
+            ).fetchone()
+            con.execute("UPDATE audit SET prev_hash = ?, row_hash = ? WHERE event_id = ?",
+                        [prev, _digest(prev, event_id, at, name, action, target, detail or None, address), event_id])
             if name != UNKNOWN:
                 _touch(con, name)
     except duckdb.Error:
         log.exception("could not write audit event %s", action)
+
+
+def verify(db_path, limit=None):
+    """Walk the chain. Gives back {ok, checked, broken_at, why}. Events from before the chain existed are skipped;
+    an edited event, or one taken out of the middle, shows as the first event that no longer fits."""
+    with duckdb.connect(str(db_path)) as con:
+        rows = con.execute(
+            "SELECT event_id, happened_at, user_name, action, target, detail, address, prev_hash, row_hash "
+            "FROM audit WHERE row_hash IS NOT NULL ORDER BY event_id").fetchall()
+    if limit:
+        rows = rows[-int(limit):]
+    last, first = None, True
+    for event_id, at, name, action, target, detail, address, prev, got in rows:
+        if not first and prev != last:
+            return {"ok": False, "checked": 0, "broken_at": event_id,
+                    "why": "an event before this one was changed or removed"}
+        if got != _digest(prev, event_id, at, name, action, target, detail, address):
+            return {"ok": False, "checked": 0, "broken_at": event_id, "why": "this event was edited"}
+        last, first = got, False
+    return {"ok": True, "checked": len(rows), "broken_at": None, "why": None}
 
 
 def _touch(con, name):

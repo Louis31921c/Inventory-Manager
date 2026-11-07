@@ -178,6 +178,11 @@ def cmd_vocab(config, args):
 
 
 def cmd_audit(config, args):
+    if args.verify:
+        done = audit.verify(config.db_path)
+        print(f"{done['checked']} chained event(s) checked: "
+              + ("the log is whole." if done["ok"] else f"BROKEN at event {done['broken_at']} ({done['why']})."))
+        return 0 if done["ok"] else 1
     if args.users:
         rows = [[u["user"], u["notes"], u["orders"], u["corrections"], u["events"], u["last_seen"]]
                 for u in audit.users(config.db_path)]
@@ -334,6 +339,7 @@ def build_parser():
 
     trail = sub.add_parser("audit", help="who did what")
     trail.add_argument("--users", action="store_true")
+    trail.add_argument("--verify", action="store_true", help="check that no event was edited or removed")
     trail.add_argument("--limit", type=int, default=20)
     trail.set_defaults(func=cmd_audit)
 

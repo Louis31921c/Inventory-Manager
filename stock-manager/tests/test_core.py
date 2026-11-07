@@ -2589,14 +2589,14 @@ def test_the_tool_row_keeps_nothing_but_remember_me_and_exit():
     assert 'id="lock-form"' in row and 'id="quit-form"' in row
 
 
-def test_the_inventory_name_rolls_its_three_cards_down():
+def test_the_inventory_name_rolls_its_cards_down():
     from inventory import server as server_module
 
     page = server_module.PAGE.read_text()
     bar = page[page.index('<nav class="menubar"'):page.index("</nav>")]
     assert 'id="inv-drop"' in bar
     screen = page[page.index('id="panel-inventory"'):page.index('id="panel-query"')]
-    for card in ["What the shelf holds", "Partly delivered", "Delivered lines"]:
+    for card in ["In stock", "Partly delivered", "Delivered lines", "To put away", "Count today"]:
         assert f"<h2>{card}</h2>" in screen
 
 
@@ -6096,3 +6096,33 @@ def test_a_role_limits_what_the_browser_may_do_and_the_pages_carry_security_head
                           headers=mine).status_code == 200
         assert buyer.post("/api/account/password", json={"old": "marie-password", "new": "marie-again-1"},
                           headers=mine).status_code == 422
+
+
+def test_the_audit_log_is_chained_and_an_edit_or_a_removal_shows(vault_home, db_path):
+    from inventory import audit, watch
+
+    assert audit.verify(db_path) == {"ok": True, "checked": 0, "broken_at": None, "why": None}
+    for number in range(5):
+        audit.record(db_path, "alex", "note.save", f"note #{number}", "x")
+    assert audit.verify(db_path)["ok"] is True and audit.verify(db_path)["checked"] == 5
+    assert audit.verify(db_path, limit=2)["checked"] == 2
+
+    rows = db.read(db_path, "SELECT event_id FROM audit WHERE row_hash IS NOT NULL ORDER BY event_id")
+    middle = rows[2][0]
+    db.write(db_path, "UPDATE audit SET detail = 'changed after the fact' WHERE event_id = ? RETURNING event_id", [middle])
+    broken = audit.verify(db_path)
+    assert broken["ok"] is False and broken["broken_at"] == middle and broken["why"] == "this event was edited"
+    watch.scan(db_path)
+    assert any(n["kind"] == "security" and "tampered" in n["title"] for n in watch.open_notices(db_path))
+
+    db.write(db_path, "UPDATE audit SET detail = 'x' WHERE event_id = ? RETURNING event_id", [middle])      # put it back
+    assert audit.verify(db_path)["ok"] is True
+    db.write(db_path, "DELETE FROM audit WHERE event_id = ? RETURNING event_id", [middle])                 # take one out
+    gone = audit.verify(db_path)
+    assert gone["ok"] is False and gone["broken_at"] == rows[3][0] and "changed or removed" in gone["why"]
+
+    # Without the key an edit cannot be re-signed, even by rewriting every later hash.
+    from inventory import vault
+    vault.key_file().unlink()
+    vault.forget_cached_key()
+    assert audit.verify(db_path)["ok"] is False
