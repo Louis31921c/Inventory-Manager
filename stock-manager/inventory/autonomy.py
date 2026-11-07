@@ -19,7 +19,7 @@ what would raise it. The lines are ranked by the points still to win.
 
 import importlib.util
 
-from . import agents, carriers, channels, gate, outbox, pricing, watch
+from . import agents, channels, gate, outbox, pricing, watch
 
 LEVELS = ("not built", "records only", "assisted", "supervised", "autonomous")
 
@@ -50,8 +50,7 @@ def _facts(config):
         "bank_drop": _built("bankdrop"),
         "counting": _built("counting"),
         "receiving": _built("receiving"),
-        "dispatching": _built("dispatching"),
-        "carriers": False,                      # set in measure(): it depends on a carrier being set up
+
         "order_step_walked": 7 not in getattr(gate, "UNBUILT", (7,)),
     }
 
@@ -122,14 +121,9 @@ def _capabilities(f):
          "confirms it" if f["receiving"] else "Records what arrived; nothing scans, locates or puts away",
          "Scan the pile on the dock instead of typing the place" if f["receiving"]
          else "Scan-in against the order, with a location for each pile"),
-        ("Execution", "Deliveries to sites", 4,
-         4 if f["dispatching"] and f["carriers"] else 3 if f["dispatching"] else 2,
-         "Plans the next working day's deliveries by site and van, books the overflow with a carrier, follows "
-         "it to the signature and raises the one that is missing" if f["dispatching"]
-         else "Plans the delivery, prints the note and labels, records the signature",
-         "Set up a carrier for what the vans cannot take" if f["dispatching"] and not f["carriers"]
-         else "Order the stops by road and chase by phone" if f["dispatching"]
-         else "Route and load it from the day's orders, and chase a delivery that was not signed"),
+        ("Execution", "Deliveries to sites", 4, 2,
+         "Plans the delivery, prints the note and labels, records the signature",
+         "Route and load it from the day's orders, and chase a delivery that was not signed"),
         ("Execution", "Quotes and awards", 4, 3 if hasattr(pricing, "from_reply") else 2,
          "Compares answers and awards one; the prices are typed in",
          "Send requests to several suppliers and read the prices out of the replies"),
@@ -171,10 +165,6 @@ def measure(db_path=None, today=None, config=None):
     pass them: nothing here depends on what was recorded."""
     facts = _facts(config)
     if db_path is not None:
-        try:
-            facts["carriers"] = bool(carriers.listing(db_path))
-        except Exception:
-            pass
         try:
             facts["webhooks"] = bool(channels.listing(db_path))
         except Exception:

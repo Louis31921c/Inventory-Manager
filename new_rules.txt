@@ -325,7 +325,6 @@ functionnalities to developp :
 - DONE: trustworthy stock (receiving.py, counting.py): every delivered line is checked against the orders and
         given a place that is learned; a blind daily count list, a second count before a big gap moves the books,
         and the likely cause of the gap named; disagreeing counts go to a person
-- DONE: closed-loop deliveries (dispatching.py): the next working day is planned each evening by site and van,
-        overflow goes to the default carrier, an unsigned delivery is an alert that grows each day
-- DONE: carriers only (carriers.py): booking and tracking over signed JSON, the signature recorded as proof of
-        delivery; no particular carrier's API is built in
+
+- REMOVED (changed mind): the dispatcher (planning the day's deliveries) and carriers (booking and tracking).
+        Their code, screens and tables are gone; the old Deliveries to sites paperwork is as it was

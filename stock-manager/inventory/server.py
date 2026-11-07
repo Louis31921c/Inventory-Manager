@@ -16,7 +16,7 @@ import socket
 import subprocess
 import tempfile
 import threading
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from dataclasses import replace
 
-from . import (account, agents, alerts, bankdrop, carriers, channels, counting, dispatching, receiving, replies, requisitions, archive, audit, autonomy, charters, feedback, judge, payments, policies, purchasing, replenish, wallet, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
+from . import (account, agents, alerts, bankdrop, channels, counting, receiving, replies, requisitions, archive, audit, autonomy, charters, feedback, judge, payments, policies, purchasing, replenish, wallet, dashboard, disputes, documents, backorders, backup, baskets, bills, catalog,
                contacts, db, ddmrp, discord_bot,
                forecast, gate, intake, leadtimes, llm,
                mail_oauth, mailbox, matching, models_info, outbound, outbox, pg, photos, pricing, prices, quotes, reorder, routing, sheets,
@@ -195,10 +195,6 @@ async def _watch_loop():
             counts = await asyncio.to_thread(counting.assign, config.db_path)
             if counts:
                 await asyncio.to_thread(watch.deliver, config, "To count today: " + ", ".join(counts), "Count list")
-            plan = await asyncio.to_thread(dispatching.run, config.db_path)
-            if plan["planned"] or plan["unplaced"]:
-                log.info("dispatcher: %d planned, %d without a van or carrier", len(plan["planned"]), len(plan["unplaced"]))
-            await asyncio.to_thread(carriers.track, config.db_path)
             for finished in await asyncio.to_thread(requisitions.refresh, config.db_path):
                 await asyncio.to_thread(watch.deliver, config, requisitions.text(finished),
                                         f"Request #{finished['req_id']} is complete")
@@ -1980,25 +1976,7 @@ def test_bank_drop(request: Request):
     return {"ok": True}
 
 
-# ---- carriers, the day's deliveries, receiving and counting -----------------------------
-
-class CarrierBody(BaseModel):
-    name: str
-    book_url: str
-    track_url: str = ""
-    token: str = ""
-    is_default: bool = False
-
-
-class BookBody(BaseModel):
-    carrier: str | None = None
-
-
-class DeliverySettings(BaseModel):
-    auto: bool | None = None
-    max_stops: int | None = None
-    cutoff_hour: int | None = None
-
+# ---- receiving and counting -----------------------------
 
 class PlaceBody(BaseModel):
     location: str | None = None
@@ -2011,68 +1989,6 @@ class CountBody(BaseModel):
 
 class QuantityBody(BaseModel):
     quantity: float
-
-
-@app.get("/api/carriers")
-def read_carriers():
-    return {"carriers": carriers.listing(config.db_path), "shipments": carriers.shipments(config.db_path)}
-
-
-@app.put("/api/carriers")
-def put_carrier(request: Request, body: CarrierBody):
-    _do(request, "carrier.set", body.name, lambda: carriers.save(
-        config.db_path, body.name, body.book_url, body.track_url, body.token, body.is_default))
-    return read_carriers()
-
-
-@app.delete("/api/carriers/{name}")
-def delete_carrier(request: Request, name: str):
-    _do(request, "carrier.remove", name, lambda: carriers.remove(config.db_path, name))
-    return read_carriers()
-
-
-@app.post("/api/carriers/{name}/test")
-def test_carrier(request: Request, name: str):
-    try:
-        done = carriers.test(config.db_path, name)
-    except ValueError as e:
-        raise HTTPException(422, str(e)) from e
-    event(request, "carrier.test", name)
-    return done
-
-
-@app.get("/api/deliveries")
-def read_deliveries():
-    return dispatching.board(config.db_path)
-
-
-@app.post("/api/deliveries/plan")
-def plan_deliveries(request: Request):
-    done = dispatching.run(config.db_path)
-    event(request, "dispatch.plan", dispatching.target_day(config.db_path, datetime.now()).isoformat(),
-          f"{len(done['planned'])} planned, {len(done['unplaced'])} without a van or carrier")
-    return {**done, **dispatching.board(config.db_path)}
-
-
-@app.put("/api/deliveries/settings")
-def put_delivery_settings(request: Request, body: DeliverySettings):
-    _do(request, "dispatch.settings", None, lambda: dispatching.save_settings(
-        config.db_path, body.auto, body.max_stops, body.cutoff_hour))
-    return dispatching.board(config.db_path)
-
-
-@app.post("/api/deliveries/track")
-def track_deliveries(request: Request):
-    changed = carriers.track(config.db_path)
-    event(request, "carrier.track", None, f"{len(changed)} changed")
-    return {"changed": changed, **dispatching.board(config.db_path)}
-
-
-@app.post("/api/dispatches/{dispatch_id}/book")
-def book_dispatch(request: Request, dispatch_id: int, body: BookBody):
-    _do(request, "carrier.book", f"dispatch #{dispatch_id}", lambda: carriers.book(
-        config.db_path, dispatch_id, body.carrier, who(request)[0]))
-    return dispatching.board(config.db_path)
 
 
 @app.get("/api/receiving")

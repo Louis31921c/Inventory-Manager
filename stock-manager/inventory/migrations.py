@@ -920,6 +920,15 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        31,
+        "carriers and shipments are dropped: the dispatcher and the carrier booking were taken out again",
+        """
+        DROP TABLE IF EXISTS shipments;
+        DROP TABLE IF EXISTS carriers;
+        DROP SEQUENCE IF EXISTS shipment_seq;
+        """,
+    ),
 ]
 
 VERSION_TABLE = """

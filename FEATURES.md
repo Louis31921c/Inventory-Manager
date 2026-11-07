@@ -81,12 +81,10 @@ Net flow is the counted shelf minus what open orders still ask for. It is placed
 
 A request for a site and work item (Site requests screen, `/request` in Discord and Slack) is checked against stock first (`requisitions.py`): what the site has free is held back for the work item, the rest goes through the purchase round as a basket. Each line shows where it is (held back, waiting, approved, ordered, delivered) from the real reservation, gate request and delivery notes; a request closes by itself when every line is in, a late one is an alert, and a finished one is pushed to the alert channels.
 
-## 4c. Receiving, counting, deliveries, carriers
+## 4c. Receiving and counting
 
 - **Receiving** (`receiving.py`, Inventory, *To put away*): every delivered line is checked against the orders (as ordered, more than ordered, on no order at all) and given a suggested place, the one that article was last put away at that site, else RECEIVING. A person confirms the place and it is learned. Lines not as ordered make one alert.
 - **Counting** (`counting.py`, Inventory, *Count today*): a few articles are put on a count list every day (the cycle of the stock control) and pushed to the alert channels. A count is blind. A count within the tolerance (`count_tolerance_pct`, 2%, at least one unit) is posted at once; a bigger gap is not posted: the article is asked to be counted again and the likely cause is looked for (a delivery noted twice, an owed line that arrived, a transfer nobody recorded, an order, an adjustment). When the second count agrees it is posted; when the two disagree nothing is posted and a person settles it.
-- **The dispatcher** (`dispatching.py`, Route wrangler, *Deliveries*): each evening it plans the next working day: every customer order whose ship-by day is due and has no dispatch becomes one, the lines on the shelf only, orders for the same site share a van and a stop, a van takes `dispatch_max_stops` stops, and what does not fit goes to the default carrier. A dispatch nobody signed for is an alert that grows each day. It plans only when `dispatch_auto` is on.
-- **Carriers** (`carriers.py`, System, Connections): a carrier is a booking address, a tracking address with `{tracking}` and a token. Booking posts the delivery as signed JSON (the same signature as the order webhooks) and reads back a tracking number; tracking is polled hourly with a bearer token. A delivered status records the proof of delivery with the signer the carrier names; an exception or a missed eta is an alert. The app is not reachable from outside, so nothing is pushed in. No carrier's real API is built in: a carrier that speaks this JSON works, others need an adapter.
 
 ## 5. Money: bills
 
@@ -181,7 +179,6 @@ Exports: inventory, purchase orders, bills and quotes as CSV, XLSX or Parquet (`
 
 | To | When |
 |---|---|
-| A carrier's booking and tracking addresses | A delivery no van can take, booked; then hourly, asking where it is |
 | A supplier's order webhook | An order for that supplier, once it has cleared the gate, the wallet and the limits |
 | The bank's SFTP folder | A batch of payments, once Plutus is live and `bank_upload` is on; the bank's report is read back |
 | Model provider (Claude, Gemini or OpenAI) | Reading a document, drafting an order, checking names. The photo or text is sent to that provider |
