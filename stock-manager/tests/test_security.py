@@ -573,3 +573,37 @@ def test_the_doctor_reports_each_check_and_fails_on_a_loose_permission(vault_hom
     again = {c["name"]: c for c in health.report(config)["checks"]}
     assert again["permissions"]["ok"] is False and "settings.env" in again["permissions"]["detail"]
     assert again["secrets"]["ok"] is False and "IMAP_PASSWORD" in again["secrets"]["detail"]
+
+
+def test_the_split_api_answers_the_routes_the_screens_call(tmp_path, monkeypatch):
+    """Each area of the API lives in its own module; this walks one route from each over HTTP."""
+    import importlib
+
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("STOCK_USER", raising=False)
+    from inventory import config as config_module
+    from inventory import server as server_module
+
+    importlib.reload(config_module)
+    server = importlib.reload(server_module)
+    mine = {"origin": "http://testserver"}
+    with TestClient(server.app) as client:
+        client.post("/unlock", data={"user": "alex", "password": "correct horse", "again": "correct horse"},
+                    headers=mine, follow_redirects=False)
+        for path in ("/api/data", "/api/stock", "/api/ddmrp", "/api/wallet", "/api/receiving", "/api/counting",
+                     "/api/requisitions", "/api/users", "/api/health", "/api/audit/verify", "/api/connections",
+                     "/api/route", "/api/bills", "/api/quotes", "/api/gate"):
+            assert client.get(path).status_code == 200, path
+        health = client.get("/api/health").json()
+        assert "checks" in health and health["checks"][0]["name"] == "version"
+        assert client.get("/api/health/not-the-token").status_code == 404           # the monitor route is a different one
+        made = client.post("/api/requisitions", json={"site": "nord", "work_item": "w1", "text": "3 vis"}, headers=mine)
+        assert made.status_code == 200
+        rows = client.get("/api/receiving").json()["to_put_away"]
+        assert rows == []                                                             # nothing delivered yet
+        placed = client.post("/api/route/places", json={"address": "1 rue de la Paix, Paris"}, headers=mine)
+        assert placed.status_code in (200, 422)                                       # the route model, not the put-away one
+        assert client.post("/api/receiving/99/put-away", json={"location": "rack 1"}, headers=mine).status_code == 422

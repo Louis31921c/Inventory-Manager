@@ -98,7 +98,7 @@ def test_planner_routes(tmp_path, monkeypatch):
         assert client.put("/api/stock-count", json={"article": "  ", "quantity": 1},
                           headers=mine).status_code == 422
 
-        assert "Predictions" in client.get("/").text
+        assert "Predictions" in server.page_source()
         page = client.get("/").text
         assert 'id="ask-agent"' in page and 'id="table-movements"' in page
         assert "/export/safety-stock.sql" in page

@@ -15,6 +15,7 @@ PACKAGE = ROOT / "inventory"
 
 DOMAINS = {
     "Entry points": ["cli", "desktop", "tui", "server", "screen", "windows", "shortcuts"],
+    "API routes": ["api/admin", "api/buying", "api/delivery", "api/intake", "api/money", "api/stock"],
     "Documents in": ["intake", "mailbox", "mail_oauth", "extract_cli", "llm", "models", "models_info", "catalog",
                      "vocabulary", "photos", "archive", "sheets", "documents", "units", "prompts"],
     "Stock": ["stock", "stockctl", "receiving", "counting", "backorders", "requisitions", "reorder"],
@@ -30,7 +31,8 @@ DOMAINS = {
 
 
 def modules():
-    return sorted(p.stem for p in PACKAGE.glob("*.py") if p.stem != "__init__")
+    top = sorted(p.stem for p in PACKAGE.glob("*.py") if p.stem != "__init__")
+    return top + sorted(f"api/{p.stem}" for p in (PACKAGE / "api").glob("*.py") if p.stem != "__init__")
 
 
 def unlisted():

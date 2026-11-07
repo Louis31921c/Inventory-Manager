@@ -8,7 +8,11 @@ ruff check inventory tools tests && mypy                                       #
 pip-audit -r requirements.lock --no-deps --disable-pip
 ```
 
-- **Tests**: `tests/`, one file per area. A test that needs a database uses the `db_path` fixture.
+- **Tests**: `tests/`, one file per area (`test_buying.py`, `test_stock.py`, ...), shared builders in `tests/helpers.py`,
+  fixtures in `tests/conftest.py`. A test that needs a database uses the `db_path` fixture.
+- **Routes**: a new route goes in the `inventory/api/` module of its area, as `@router.get(...)`. It reaches the server's
+  config and helpers as `s.config`, `s.event(...)`: `s` is the server module, read at call time.
+- **Scripts**: the page's JavaScript is `inventory/web_ui/js/NN-name.js`, loaded in order; top-level names are shared.
 - **Migrations**: append a numbered entry to `inventory/migrations.py`; never edit one that has shipped.
 - **Permissions**: a new write route is a buyer's by default (a delete an approver's); put it in `inventory/access.py`
   if it should need more. `tests` fails if a write is left to a viewer.
