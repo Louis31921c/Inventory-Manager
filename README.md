@@ -479,6 +479,19 @@ the next start should be blank.
 database of its own to run a simulation on; the year itself is written in
 `inventory/simulation.py`.
 
+`sample_data/make_big_data.py` makes a much bigger one: fifteen years of a large firm (about
+9,400 articles, 41 suppliers, 180 sites, 300,000 orders, 100,000 scanned pages, audit chain and
+all) in a database of about 5 GB, to prove the screens stay quick on real volume:
+
+```bash
+python sample_data/make_big_data.py --out ~/Stock-Manager-5GB   # about 20 minutes
+DATA_DIR=~/Stock-Manager-5GB stock-manager
+```
+
+Every name in it, and in the small sample, is invented. The csv files the small one writes
+are made on demand and are not kept in the repository. The life cycles the app runs on
+(orders, notes, bills, disputes, dispatches...) are listed in one place, [STATES.md](stock-manager/STATES.md).
+
 ## Photos, the mailbox and the order queue
 
 - **Photos are kept small.** A photo is read by the model as it was taken, then stored
