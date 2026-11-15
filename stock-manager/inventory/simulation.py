@@ -3,11 +3,9 @@
 The firm is a metalwork and glazing shop around Bordeaux, written the way the real paperwork
 reads. Nothing in it belongs to a real company: every price, person and number is invented.
 
-Two things use it. `init` is what the app opens its database with: when the file does not
-exist yet it is built, and filled with this year rather than left blank, so there is
-something to look at on the first screen. SAMPLE_DATA=0 in the settings turns that off. And
-sample_data/make_sample_data.py writes the same year out as csv files and as a database
-to run a simulation on.
+`init` is what the app opens its database with: when the file does not exist yet it is
+built, and filled with this year rather than left blank, so there is something to look at on
+the first screen. SAMPLE_DATA=0 in the settings turns that off.
 
 The same seed gives the same year every time. The year ends on the day it is asked for, so
 a database built today ends today.

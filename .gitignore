@@ -14,3 +14,5 @@ __pycache__/
 supplier-contacts.csv
 *.ods
 stock-manager-chat-context.md
+.env
+**/.env
