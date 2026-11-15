@@ -604,6 +604,7 @@
     <div id="zone-strip"></div>
     <p class="eyebrow">Furthest below the top of their buffer &mdash; hover a bar for the numbers</p>
     <div id="buffer-chart"></div>
+    <div id="zone-detail"></div>
   </div>
 
   <div class="card">
@@ -3246,6 +3247,16 @@ function zonePill(zone) {
 }
 
 const BUFFER_SHOWN = 10;
+const ZONE_PAGE = 100;
+let landingZone = null;       // which zone the landing page lists in full, or null for none
+let landingShown = ZONE_PAGE;
+
+function pickZone(zone) {
+  // Click a figure or a stretch of the strip to list its articles; click again to close.
+  landingZone = landingZone === zone ? null : zone;
+  landingShown = ZONE_PAGE;
+  drawBufferCharts();
+}
 
 function tip(node, text) {
   node.append(svg("title", {}, [text]));
@@ -3266,8 +3277,9 @@ function zoneStrip(counts) {
   let x = 0;
   const parts = zones.map(([zone, many]) => {
     const wide = (many / whole) * width;
-    const block = tip(svg("rect", { class: `zone-${zone}`, x, y: 0, width: wide, height: 11 }),
-                      `${many} ${ZONE_WORDS[zone]}`);
+    const block = tip(svg("rect", { class: `zone-${zone} pick`, x, y: 0, width: wide, height: 11 }),
+                      `${many} ${ZONE_WORDS[zone]} \u2014 click to list them`);
+    block.addEventListener("click", () => pickZone(zone));
     x += wide;
     return block;
   });
@@ -3309,15 +3321,17 @@ function drawBufferCharts() {
   const rows = (buffers.articles ?? []).slice(0, BUFFER_SHOWN);
   const counts = buffers.counts ?? {};
   const tiles = [
-    ["articles", showNum(counts.articles ?? 0)],
-    ["red", showNum(counts.red ?? 0)],
-    ["yellow", showNum(counts.yellow ?? 0)],
-    ["green", showNum(counts.green ?? 0)],
-    ["over the top", showNum(counts.over ?? 0)],
-    ["not counted", showNum(counts.uncounted ?? 0)],
+    ["articles", showNum(counts.articles ?? 0), "all"],
+    ["red", showNum(counts.red ?? 0), "red"],
+    ["yellow", showNum(counts.yellow ?? 0), "yellow"],
+    ["green", showNum(counts.green ?? 0), "green"],
+    ["over the top", showNum(counts.over ?? 0), "over"],
+    ["not counted", showNum(counts.uncounted ?? 0), "uncounted"],
   ];
-  $("ddmrp-stats").replaceChildren(...tiles.map(([name, value]) =>
-    el("span", { className: "stat" }, [
+  $("ddmrp-stats").replaceChildren(...tiles.map(([name, value, zone]) =>
+    el("button", { className: "stat pick", type: "button", title: "click to list these articles",
+                   "aria-pressed": String(landingZone === zone),
+                   onclick: () => pickZone(zone) }, [
       el("span", { className: "stat-name", textContent: name }),
       el("strong", { textContent: value }),
     ])));
@@ -3326,6 +3340,38 @@ function drawBufferCharts() {
   $("zone-strip").replaceChildren(zoneStrip(counts));
   $("buffer-chart").replaceChildren(rows.length
     ? bufferBars(rows) : empty("Nothing to size a buffer from yet."));
+  drawZoneDetail();
+}
+
+function drawZoneDetail() {
+  // Every article in the chosen zone, worst first, a hundred at a time.
+  const box = $("zone-detail");
+  if (!landingZone || !buffers) { box.replaceChildren(); return; }
+  const all = buffers.articles ?? [];
+  const rows = landingZone === "all" ? all : all.filter((row) => row.zone === landingZone);
+  const name = landingZone === "all" ? "All articles" : `In the ${ZONE_WORDS[landingZone]}`;
+  const table = el("table");
+  renderTable(table, [
+    { label: "Article", cell: (row) => el("span", {}, [
+        el("strong", { textContent: row.article }),
+        el("div", { className: "desig muted", textContent: row.supplier ?? "" })]) },
+    { label: "On hand", numeric: true, cell: (row) => countCell(row) },
+    { label: "Top", numeric: true, cell: (row) => showNum(row.top_of_green) },
+    { label: "Net flow", numeric: true, cell: (row) => showNum(row.net_flow) },
+    { label: "Buffer", numeric: true, cell: (row) => `${showNum(row.buffer_share)}%` },
+    { label: "Zone", cell: (row) => zonePill(row.zone) },
+    { label: "To order", numeric: true, cell: (row) => (row.to_order ? showNum(row.to_order) : "\u2014") },
+  ], rows.slice(0, landingShown), "No article here.");
+  const parts = [
+    el("h3", { textContent: `${name}: ${showNum(rows.length)} article(s)` }),
+    el("div", { className: "scroll-x short-box" }, [table]),
+  ];
+  if (rows.length > landingShown) {
+    parts.push(el("button", { className: "mini", type: "button",
+      textContent: `show ${Math.min(ZONE_PAGE, rows.length - landingShown)} more`,
+      onclick: () => { landingShown += ZONE_PAGE; drawZoneDetail(); } }));
+  }
+  box.replaceChildren(...parts);
 }
 
 function drawBuffers() {

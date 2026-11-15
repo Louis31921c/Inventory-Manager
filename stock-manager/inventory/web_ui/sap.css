@@ -746,6 +746,11 @@ input.cell.bad { border-color: var(--red); color: var(--red); }
   text-transform: uppercase;
 }
 .stat strong { font-size: 14px; }
+button.stat { cursor: pointer; font: inherit; text-align: left; }
+button.stat:hover, button.stat[aria-pressed="true"] { background: #fff3c4; border-color: #8a7a2e; }
+svg rect.pick { cursor: pointer; }
+svg rect.pick:hover { opacity: .8; }
+#zone-detail h3 { font-size: 12px; margin: 10px 0 4px; }
 
 /* ---- status lamps and pills ---------------------------------------- */
 
