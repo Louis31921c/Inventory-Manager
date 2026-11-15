@@ -1379,6 +1379,27 @@ const SCREEN_TITLES = {
 };
 const screenTrail = [];
 
+// The title shows the name of the entry that was clicked ("Partly delivered"), not the
+// screen's SAP name. A fresh click is remembered for a moment, so a screen that opens a
+// little later (after the server answers) still gets it.
+let pickedTitle = null;
+
+function entryName(node) {
+  const copy = node.cloneNode(true);
+  copy.querySelectorAll(".count").forEach((count) => count.remove());
+  return copy.textContent.replace(/\s*[\u2014-]\s*\d[\d,.\s]*$/, "")
+    .replace(/\s*\(\d[\d,.\s]*\)\s*$/, "").replace(/\s+/g, " ").trim();
+}
+
+document.addEventListener("click", (event) => {
+  const node = event.target.closest?.(".tree button, [role=menuitem]");
+  if (!node || node.hasAttribute("aria-expanded") || node.classList.contains("sub-head")) return;
+  const name = entryName(node);
+  if (!name) return;
+  pickedTitle = { name, at: Date.now() };
+  setTimeout(() => { $("screen-title").textContent = name; }, 0);
+}, true);
+
 function openTab(name) {
   for (const other of TABS) {
     $(`panel-${other}`).hidden = other !== name;
@@ -1394,7 +1415,8 @@ function openTab(name) {
   for (const node of document.querySelectorAll(".tree button[data-goes]")) {
     node.setAttribute("aria-current", String(node.dataset.goes === name));
   }
-  $("screen-title").textContent = SCREEN_TITLES[name] || "Stock Manager";
+  const fresh = pickedTitle && Date.now() - pickedTitle.at < 4000 ? pickedTitle.name : null;
+  $("screen-title").textContent = fresh || SCREEN_TITLES[name] || "Stock Manager";
   if (screenTrail[screenTrail.length - 1] !== name) screenTrail.push(name);
   if (screenTrail.length > 30) screenTrail.shift();
   try {
