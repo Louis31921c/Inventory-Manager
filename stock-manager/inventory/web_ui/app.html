@@ -602,8 +602,6 @@
     <h2>Buffers</h2>
     <div class="row" id="ddmrp-stats"></div>
     <div id="zone-strip"></div>
-    <p class="eyebrow">Furthest below the top of their buffer &mdash; hover a bar for the numbers</p>
-    <div id="buffer-chart"></div>
     <div id="zone-detail"></div>
   </div>
 
@@ -3246,7 +3244,6 @@ function zonePill(zone) {
   return el("span", { className: `pill ${zone}`, textContent: words[zone] ?? zone });
 }
 
-const BUFFER_SHOWN = 10;
 const ZONE_PAGE = 100;
 let landingZone = null;       // which zone the landing page lists in full, or null for none
 let landingShown = ZONE_PAGE;
@@ -3287,38 +3284,8 @@ function zoneStrip(counts) {
   return svg("svg", { viewBox: `0 0 ${width} ${height}`, class: "strip", role: "img" }, parts);
 }
 
-function bufferBars(rows) {
-  // A slim line an article: the share of its own buffer it is holding, so a buffer of
-  // ten and a buffer of ten thousand sit on the same scale. The numbers are on hover.
-  const width = 640;
-  const rowHeight = 15;
-  const pad = { left: 150, right: 44, top: 4 };
-  const height = pad.top + rows.length * rowHeight + 4;
-  const plotWidth = width - pad.left - pad.right;
-  const parts = [];
-
-  rows.forEach((row, index) => {
-    const y = pad.top + index * rowHeight;
-    const share = Math.max(Math.min(row.buffer_share, 100), 0);
-    const zone = row.zone === "uncounted" ? "uncounted" : row.zone;
-    parts.push(svg("text", { x: 0, y: y + 9 }, [short(row.article, 24)]));
-    parts.push(svg("rect", { class: "track", x: pad.left, y: y + 1, width: plotWidth, height: 9 }));
-    parts.push(tip(svg("rect", {
-      class: `zone-${zone}`, x: pad.left, y: y + 1,
-      width: Math.max((share / 100) * plotWidth, 1.5), height: 9,
-    }), `${row.article}\n${showNum(row.net_flow)} against a top of green of `
-       + `${showNum(row.top_of_green)} · ${ZONE_WORDS[zone]}`
-       + (row.to_order ? `\norder ${showNum(row.to_order)}` : "")));
-    parts.push(svg("text", { class: "value", x: width - pad.right + 4, y: y + 9 },
-                   [`${showNum(row.buffer_share)}%`]));
-  });
-
-  return svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, parts);
-}
-
 function drawBufferCharts() {
   if (!buffers) return;
-  const rows = (buffers.articles ?? []).slice(0, BUFFER_SHOWN);
   const counts = buffers.counts ?? {};
   const tiles = [
     ["articles", showNum(counts.articles ?? 0), "all"],
@@ -3336,10 +3303,7 @@ function drawBufferCharts() {
       el("strong", { textContent: value }),
     ])));
 
-  const empty = (text) => el("p", { className: "muted", textContent: text });
   $("zone-strip").replaceChildren(zoneStrip(counts));
-  $("buffer-chart").replaceChildren(rows.length
-    ? bufferBars(rows) : empty("Nothing to size a buffer from yet."));
   drawZoneDetail();
 }
 
