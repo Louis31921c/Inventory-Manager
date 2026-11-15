@@ -1,0 +1,85 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licence - Stock Manager</title>
+<link rel="icon" href="/icon.png">
+<style>
+  @import url("/sap.css");
+
+  body { padding: 0; }
+  .sheet-area { padding: 10px 12px 24px; }
+  pre {
+    background: #fff;
+    border: 1px solid var(--line-soft);
+    font-family: "Liberation Mono", Consolas, monospace;
+    font-size: 11.5px;
+    margin: 0;
+    max-width: 90ch;
+    min-height: 50vh;
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  pre.typing::after { animation: blink 1s steps(1) infinite; content: "\2588"; }
+  @keyframes blink { 50% { opacity: 0; } }
+  footer { display: flex; gap: 10px; margin-top: 10px; max-width: 90ch; }
+  .skip { color: var(--ink-soft); cursor: pointer; font-size: 11px; }
+</style>
+
+<div class="titlebar">
+  <span class="mark">SM</span>
+  <span>Stock Manager &mdash; Help &mdash; Licence</span>
+  <span class="spacer"></span>
+  <span class="who">Proprietary</span>
+</div>
+
+<div class="toolbar">
+  <a class="mini" href="/">Back to the main screen</a>
+  <span class="toolbar-gap"></span>
+  <span class="skip" id="skip">show it all</span>
+</div>
+
+<div class="screen-title">Licence and warranty</div>
+
+<div class="sheet-area">
+  <pre id="text" class="typing"></pre>
+  <footer><a class="mini" href="/">&lt; back</a></footer>
+</div>
+
+<script>
+const LICENCE = LICENCE_JSON;
+const out = document.getElementById("text");
+const skip = document.getElementById("skip");
+let shown = 0;
+let follow = true;
+
+function showEverything() {
+  out.textContent = LICENCE;
+  out.classList.remove("typing");
+  skip.textContent = "";
+}
+
+addEventListener("click", showEverything);
+addEventListener("keydown", showEverything);
+addEventListener("wheel", () => { follow = false; });
+addEventListener("touchmove", () => { follow = false; });
+
+function step() {
+  if (shown >= LICENCE.length) return showEverything();
+
+  let printed = 0;
+  let newline = false;
+  while (printed < 10 && shown < LICENCE.length) {
+    newline = LICENCE[shown++] === "\n";
+    printed += 1;
+    if (newline) break;
+  }
+
+  out.textContent = LICENCE.slice(0, shown);
+  if (follow && out.scrollHeight > innerHeight) scrollTo(0, document.body.scrollHeight);
+  if (newline) setTimeout(() => requestAnimationFrame(step), 45);
+  else requestAnimationFrame(step);
+}
+
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) showEverything();
+else requestAnimationFrame(step);
+</script>

@@ -1,0 +1,1198 @@
+/* The SAP GUI look, Signature theme: pale blue window, menu bar, standard toolbar with the
+   command field, a bold screen title, application toolbar, group boxes, ALV grids, status bar. */
+:root {
+  --window: #dfe9f5;
+  --paper: #ffffff;
+  --panel: #eaf0f8;
+  --ink: #000000;
+  --ink-soft: #3c4a5c;
+  --ink-label: #000000;
+  --title-ink: #1c3e6e;
+  --line: #8ea4c0;
+  --line-soft: #b4c5da;
+  --bar: #e8eff8;
+  --bar-dark: #cfdcec;
+  --group-head: #d3e0ef;
+  --accent: #2f6fb6;
+  --accent-soft: #d6e4f4;
+  --row-alt: #f4f7fb;
+  --row-hover: #e6eef8;
+  --row-pick: #fbe39a;
+  --head-cell: #dfe7f1;
+  --readonly: #e6ebf1;
+  --button-from: #fbfcfe;
+  --button-to: #d7e1ee;
+  --button-line: #7d93b2;
+  --green: #0b7a31;
+  --amber: #c87800;
+  --red: #b00020;
+  --font: Tahoma, Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--window);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font);
+  font-size: 12px;
+  height: 100vh;
+  line-height: 1.3;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.menubar, .stdbar, .titlebar, .toolbar, .fkeys, .statusbar { flex: 0 0 auto; }
+
+a { color: var(--accent); }
+
+/* ---- menu bar ------------------------------------------------------ */
+
+.menubar {
+  align-items: center;
+  background: var(--bar);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  gap: 0;
+  padding: 1px 4px;
+}
+/* The little window glyph SAP puts before the first menu. */
+.menubar .sap-mark {
+  background:
+    linear-gradient(#fff, #fff) 3px 5px / 10px 7px no-repeat,
+    linear-gradient(180deg, #6f97c9, #2f5f9c);
+  border: 1px solid #284f80;
+  display: inline-block;
+  height: 14px;
+  margin: 0 6px 0 2px;
+  width: 16px;
+}
+.menubar button {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 2px 7px;
+}
+/* The access key under the first letter, as every SAP menu shows it. */
+.menubar > button::first-letter, .menubar .menu > button::first-letter { text-decoration: underline; }
+.menubar button:hover, .menubar .menu.open > button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.menubar .menubar-gap { flex: 1 1 auto; }
+
+/* ---- standard toolbar: Enter, command field, round buttons --------- */
+
+.stdbar {
+  align-items: center;
+  background: linear-gradient(180deg, #f1f5fb, #dde7f3);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  gap: 2px;
+  padding: 3px 6px;
+}
+.stdbar .sep {
+  border-left: 1px solid #a8b8cc;
+  border-right: 1px solid #fff;
+  height: 18px;
+  margin: 0 5px;
+}
+.okcode { display: inline-flex; position: relative; }
+.okcode input {
+  border: 1px solid var(--button-line);
+  font-size: 12px;
+  height: 20px;
+  padding: 1px 22px 1px 4px;
+  text-transform: uppercase;
+  width: 180px;
+}
+.okcode .okcode-drop {
+  background: linear-gradient(180deg, #fbfcfe, #d7e1ee);
+  border-left: 1px solid var(--button-line);
+  bottom: 1px;
+  pointer-events: none;
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 16px;
+}
+.okcode .okcode-drop::after {
+  border: 4px solid transparent;
+  border-top: 5px solid #1d2f4a;
+  content: "";
+  left: 4px;
+  position: absolute;
+  top: 6px;
+}
+
+button.ico {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  height: 22px;
+  padding: 0;
+  position: relative;
+  width: 22px;
+}
+button.ico:hover:not([disabled]) { background: #fff; border-color: var(--button-line); }
+button.ico[disabled] { cursor: default; opacity: .4; }
+button.ico::before {
+  align-items: center;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  font: 700 10px/1 Arial, sans-serif;
+  height: 16px;
+  justify-content: center;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  width: 16px;
+}
+button.ico.ok::before { background: none; color: var(--green); content: "\2714"; font-size: 15px; }
+button.ico.back::before { background: radial-gradient(circle at 35% 30%, #7fd27f, #1d8a2c); border: 1px solid #136a20; content: "\25C0"; font-size: 8px; }
+button.ico.exit::before { background: radial-gradient(circle at 35% 30%, #ffe27a, #d79a00); border: 1px solid #a26f00; content: "\25B2"; font-size: 8px; }
+button.ico.cancel::before { background: radial-gradient(circle at 35% 30%, #ff8a7a, #c4231a); border: 1px solid #8f160f; content: "\2715"; font-size: 9px; }
+button.ico.save::before { background: linear-gradient(180deg, #7ea6d6, #2c5e9f); border-radius: 2px; content: ""; box-shadow: inset 3px 2px 0 -1px #fff; }
+
+/* ---- screen title -------------------------------------------------- */
+
+.titlebar {
+  background: linear-gradient(180deg, #edf3fa, #d9e5f2);
+  border-bottom: 1px solid var(--line-soft);
+  padding: 5px 10px 6px;
+}
+.titlebar { align-items: center; display: flex; justify-content: space-between; }
+.titlebar h1 {
+  color: var(--title-ink);
+  font-family: Arial, var(--font);
+  font-size: 17px;
+  font-style: italic;
+  font-weight: 700;
+  margin: 0;
+}
+
+/* ---- application toolbar ------------------------------------------- */
+
+.toolbar {
+  align-items: center;
+  background: var(--bar-dark);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px 6px;
+}
+.toolbar .toolbar-gap { flex: 1 1 auto; }
+
+button.tool {
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid var(--button-line);
+  border-radius: 2px;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  height: 21px;
+  min-width: 24px;
+  padding: 1px 8px;
+}
+button.tool:hover { background: linear-gradient(180deg, #fff, #c9daf0); border-color: var(--accent); }
+button.tool:active { background: #bcd0ea; }
+button.tool[disabled] { color: #9a9a9a; cursor: not-allowed; opacity: .7; }
+button.tool.go { font-weight: 700; }
+button.tool.go::before { color: var(--green); content: "\2714 "; }
+button.tool.stop::before { color: var(--red); content: "\2715 "; }
+
+/* ---- screen layout ------------------------------------------------- */
+
+.workspace { display: flex; align-items: stretch; flex: 1 1 auto; min-height: 0; }
+
+/* The SAP Easy Access tree: open folder at the head, a folder per entry, the transaction
+   code before the name, the chosen line in yellow. */
+.tree {
+  background: #fff;
+  border-right: 1px solid var(--line);
+  flex: 0 0 250px;
+  overflow: auto;
+  padding: 3px 0;
+}
+.tree button {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--ink);
+  cursor: pointer;
+  display: block;
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 1px 8px 1px 46px;
+  position: relative;
+  text-align: left;
+  white-space: nowrap;
+  width: 100%;
+}
+.tree button.tree-head {
+  font-weight: 400;
+  padding-left: 30px;
+}
+.tree button.tree-head::before {
+  border: 4px solid transparent;
+  border-top: 6px solid #2a3d58;
+  content: "";
+  left: 5px;
+  position: absolute;
+  top: 6px;
+}
+.tree button.tree-head[aria-expanded="false"]::before {
+  border: 4px solid transparent;
+  border-left: 6px solid #2a3d58;
+  left: 7px;
+  top: 4px;
+}
+/* A folder, drawn: a tab and a body in SAP's yellow. */
+.tree button::after {
+  background:
+    linear-gradient(#f6d77b, #e3b23c) 0 3px / 14px 9px no-repeat,
+    linear-gradient(#f6d77b, #e3b23c) 0 1px / 6px 3px no-repeat;
+  content: "";
+  height: 12px;
+  left: 28px;
+  outline: 0;
+  position: absolute;
+  top: 3px;
+  width: 14px;
+}
+.tree button.tree-head::after { left: 13px; }
+/* The bullet SAP puts before a leaf. */
+.tree #tree-list button::before {
+  background: #2a3d58;
+  border-radius: 50%;
+  content: "";
+  height: 3px;
+  left: 20px;
+  position: absolute;
+  top: 8px;
+  width: 3px;
+}
+.tree button:hover { background: var(--row-hover); }
+.tree button[aria-current="true"] { background: var(--row-pick); border-color: #c9a227; }
+.tree .count { color: var(--ink-soft); font-weight: 400; }
+
+.work { background: var(--window); flex: 1 1 auto; min-width: 0; overflow: auto; padding: 8px 10px; }
+
+/* ---- tabstrip ------------------------------------------------------ */
+
+nav.tabs {
+  border-bottom: 2px solid var(--accent);
+  display: flex;
+  gap: 1px;
+  padding: 4px 0 0;
+}
+.tab {
+  background: linear-gradient(180deg, #f4f8fc, #d4e1f0);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 4px 10px 0 0;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 3px 14px 3px 10px;
+  white-space: nowrap;
+}
+.tab:hover { background: linear-gradient(180deg, #fff, #e3edf8); }
+.tab[aria-selected="true"] {
+  background: linear-gradient(180deg, #5d8fcb, var(--accent));
+  border-color: #24578f;
+  color: #fff;
+}
+
+section.panel {
+  background: transparent;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+}
+
+/* ---- landing screen ------------------------------------------------ */
+
+/* The logo and the doors fill the screen behind everything, the logo in the
+   middle. What waits for approval sits over them and takes its own height, so a
+   long list of baskets covers the logo rather than pushing it out or running into it. */
+#panel-home { display: flex; flex-direction: column; height: 100%; position: relative; }
+/* Stops short of the shortcut column on the right, the same 240 the logo keeps clear of it,
+   so a tall list of baskets never runs under Slack, Discord and the others. */
+#gate-card { background: transparent; flex: 0 1 auto; margin-bottom: 8px; margin-right: 240px;
+             overflow-y: auto; z-index: 1; }
+.home {
+  align-items: stretch;
+  bottom: 10px;
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  left: 10px;
+  min-height: 0;
+  right: 10px;
+  top: 10px;
+  z-index: 0;
+  /* The column is out of the flow, so the logo is kept clear of it by hand: the 180 it
+     is wide, plus the 54 it stands off the border, plus a little air. */
+  padding-right: 240px;
+  position: absolute;
+}
+.home-logo {
+  background: url("/landing.png") center / contain no-repeat;
+  align-self: center;
+  flex: 0 1 760px;
+  height: 100%;
+  max-height: 420px;
+  min-width: 0;
+  opacity: .65;
+}
+
+/* The five doors beside the logo: Slack, Discord, the two mailboxes, the contact sheet.
+   No box is drawn around any of them: the mark itself is the button. Every one is the
+   same 180 by 48 box, drawn flush right, and each lockup inside it is scaled to cover
+   the same share of that box, so a long name and a short one weigh the same on the
+   screen rather than just sharing a height. */
+.home-doors {
+  /* The five sit together in the middle of the screen rather than spread down it. */
+  align-content: center;
+  bottom: 0;
+  display: grid;
+  gap: 14px;
+  grid-template-rows: repeat(5, auto);
+  justify-items: end;
+  /* Out of the flow, so the marks keep to the right edge rather than drifting towards
+     the middle of a wide screen. They stand three tenths of the column's own width off
+     the border: 54px of the 180px, less the 10px of padding the panel already has. */
+  position: absolute;
+  right: 44px;
+  top: 0;
+  width: 180px;
+}
+/* The first and the last stand off the top and the bottom of the screen. */
+.home-doors .door[data-door="slack"] { margin-top: 18px; }
+.home-doors .door[data-door="contacts"] { margin-bottom: 18px; }
+.home-doors .door {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  display: block;
+  height: 48px;
+  padding: 0;
+  width: 180px;
+}
+/* Sat back at half strength until the pointer is on it. */
+.door-mark {
+  display: block;
+  height: 48px;
+  opacity: .5;
+  transition: opacity .12s, transform .12s;
+  transform-origin: right center;
+  width: 180px;
+}
+.home-doors .door:hover .door-mark { opacity: 1; transform: scale(1.08); }
+/* The names of the two drawn doors. The general svg text rule further down would win over
+   attributes on the element, so their size and colour are set here, at the size that
+   makes Arial's ink stand as high as the names inside the pictures. */
+.door-mark text { font-weight: 700; }
+.door[data-door="outlook"] .door-mark text { fill: #0f6cbd; font-size: 36.3px; }
+.door[data-door="contacts"] .door-mark text { fill: #0a7a2f; font-size: 27.9px; }
+/* A door that is busy says so by not moving rather than by fading. */
+.home-doors .door[disabled] { cursor: progress; }
+.home-doors .door[disabled]:hover .door-mark { opacity: .5; transform: none; }
+
+/* ---- group boxes --------------------------------------------------- */
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  padding: 8px 10px 10px;
+  position: relative;
+}
+.card > * + * { margin-top: 8px; }
+h1, h2 { margin: 0; }
+h1 { font-size: 14px; font-weight: 700; }
+h2 {
+  border-bottom: 1px solid var(--accent-soft);
+  color: var(--ink-label);
+  font-size: 12px;
+  font-weight: 700;
+  padding-bottom: 3px;
+  text-transform: uppercase;
+}
+/* Two or more buttons that open something: the look of the other buttons, in the heading's
+   size and colour, no tick; the open one stays pressed. */
+.heading-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+button.heading-tab {
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid #8d9196;
+  border-radius: 2px;
+  color: var(--ink-label);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  text-transform: uppercase;
+}
+button.heading-tab:hover { background: linear-gradient(180deg, #fff, #cfe0f2); border-color: var(--accent); }
+button.heading-tab[aria-expanded="true"] { background: var(--row-pick); border-color: var(--accent); }
+p { margin: 0; }
+.muted, .legend, .desig { color: var(--ink-soft); }
+/* What the verification agent made of a held basket, and a seal that does not hold. */
+.legend.ok { color: var(--green); }
+.legend.warn { color: var(--amber); }
+p.bad { color: var(--red); font-weight: 700; }
+/* A seal is only ever shown by its head: enough to tell two apart, no more. */
+code.seal { color: var(--ink-soft); font-size: 11px; }
+
+/* ---- the round the gate walks -------------------------------------- */
+
+/* A ring of wedges, the way a process circle is drawn on a slide. Colour is the state:
+   green for what is behind, red for where we are, yellow for what is ahead, and a pale
+   dashed grey for the two steps that are not built. */
+svg.round { margin: 0 auto; max-width: 620px; }
+svg.round .wedge { stroke: var(--paper); stroke-width: 1.5; }
+svg.round .wedge.done { fill: #57b894; }
+svg.round .wedge.pending { fill: #edc14a; }
+svg.round .wedge.fault { fill: #d9534f; }
+svg.round .wedge.ahead { fill: #dfe3e7; }
+svg.round .wedge.unbuilt {
+  fill: #f1f2f3;
+  stroke: var(--line-soft);
+  stroke-dasharray: 5 4;
+}
+svg.round .wedge-icon {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+svg.round .wedge-icon.unbuilt, svg.round .wedge-icon.ahead { stroke: var(--ink-soft); }
+svg.round .wedge-number { fill: #fff; font-size: 13px; font-weight: 700; }
+svg.round .wedge-number.unbuilt, svg.round .wedge-number.ahead { fill: var(--ink-soft); }
+svg.round .wedge-label { fill: var(--ink-soft); font-size: 14px; font-weight: 700; }
+svg.round .wedge-label.pending { fill: var(--amber); font-weight: 700; }
+svg.round .wedge-label.fault { fill: var(--red); font-weight: 700; }
+svg.round .wedge-label.unbuilt { font-style: italic; }
+
+/* A wedge is a button: the hand says so, and the band lifts a little under the pointer. */
+svg.round .step { cursor: pointer; outline: none; }
+svg.round .step:hover .wedge, svg.round .step:focus-visible .wedge { filter: brightness(1.08); }
+svg.round .step:focus-visible .wedge { stroke: var(--accent); stroke-width: 2.5; }
+
+/* The small window a wedge opens: what has happened in that step. */
+.pop-back {
+  align-items: center;
+  background: rgba(0, 0, 0, .28);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 60;
+}
+.pop-back[hidden] { display: none; }
+.pop {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
+  max-height: 72vh;
+  max-width: 94vw;
+  overflow: auto;
+  padding: 8px;
+  width: 520px;
+}
+
+svg.round .hub-ring { fill: var(--paper); stroke: var(--line-soft); stroke-width: 1.5; }
+svg.round .hub-dot { fill: #3b4147; }
+svg.round .hub-glyph {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+svg.round .hub-word.fault { fill: var(--red); }
+svg.round .hub-word {
+  fill: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+.legend.here { color: var(--red); font-weight: 700; }
+/* The code Microsoft gives out loud, for typing into a browser on another screen. */
+.device-code {
+  font-family: monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  margin: 4px 0;
+}
+.legend, .desig { font-size: 11px; }
+.eyebrow { color: var(--ink-soft); font-size: 11px; text-transform: uppercase; }
+
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.row.tight { gap: 4px; }
+.grow { flex: 1 1 180px; min-width: 0; }
+.side-by-side { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 900px) { .side-by-side { grid-template-columns: 1fr; } }
+
+/* ---- fields -------------------------------------------------------- */
+
+label.field { display: flex; flex-direction: column; gap: 2px; }
+label.field > span { color: var(--ink-label); font-size: 11px; }
+label.field.narrow { max-width: 170px; }
+
+input, select, textarea {
+  background: #fff;
+  border: 1px solid #7f9db9;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 3px 5px;
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: 1px solid var(--accent-soft); }
+input:not([type]), input[type="text"], input[type="search"], textarea { text-transform: uppercase; }
+input[type="checkbox"] { accent-color: var(--accent); width: auto; }
+textarea { min-height: 64px; resize: vertical; }
+
+button.action {
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid #8d9196;
+  border-radius: 2px;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+}
+button.action::before { color: var(--green); content: "\2713 "; }
+button.action:hover { background: linear-gradient(180deg, #fff, #cfe0f2); border-color: var(--accent); }
+button.action[disabled] { color: #9a9a9a; cursor: not-allowed; }
+button.action.ghost { font-weight: 400; }
+button.action.ghost::before { color: var(--ink-soft); content: "\25A0 "; }
+
+.mini {
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid #8d9196;
+  border-radius: 2px;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 2px 7px;
+}
+.mini:hover { background: linear-gradient(180deg, #fff, #cfe0f2); border-color: var(--accent); }
+.mini[aria-pressed="true"] { background: var(--row-pick); border-color: var(--accent); font-weight: 700; }
+a.mini { display: inline-block; text-decoration: none; }
+:focus-visible { outline: 1px dotted var(--ink); outline-offset: 1px; }
+
+.file-drop {
+  align-items: center;
+  background: #fbfbfc;
+  border: 1px dashed #7f9db9;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+}
+.file-drop:hover { border-color: var(--accent); }
+.file-drop input[type="file"] { display: none; }
+.thumb { border: 1px solid var(--line); max-height: 70px; }
+
+/* ---- ALV grids ----------------------------------------------------- */
+
+table { border-collapse: collapse; font-size: 12px; width: 100%; }
+.scroll-x { overflow-x: auto; }
+.short-box { max-height: 230px; overflow-y: auto; }
+.short-box thead th { position: sticky; top: 0; z-index: 1; }
+
+th {
+  background: linear-gradient(180deg, #eaf0f8, #cfdcec);
+  border: 1px solid var(--line);
+  color: var(--ink-label);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+td {
+  border: 1px solid #dfe3e7;
+  padding: 2px 8px;
+  vertical-align: middle;
+}
+td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+tbody tr:nth-child(even) { background: var(--row-alt); }
+tbody tr:hover { background: var(--row-hover); }
+tbody strong { font-weight: 700; }
+tfoot th { background: var(--panel); color: var(--ink); }
+
+input.cell {
+  background: #fff;
+  border: 1px solid transparent;
+  color: var(--ink);
+  font: inherit;
+  padding: 1px 3px;
+  text-align: right;
+  width: 84px;
+}
+input.cell:hover { border-color: #7f9db9; }
+input.cell:focus { border-color: var(--accent); outline: none; }
+
+/* ---- a menu that drops from the menu bar --------------------------- */
+
+.menubar .menu { position: relative; }
+.menubar .menu.right > .menu-drop { left: auto; right: 0; }
+.menu-drop {
+  background: var(--paper);
+  border: 1px solid #8d9196;
+  box-shadow: 2px 3px 8px rgba(0, 0, 0, .25);
+  display: none;
+  left: 0;
+  min-width: 190px;
+  padding: 2px;
+  position: absolute;
+  top: 100%;
+  z-index: 40;
+}
+.menu.open > .menu-drop { display: block; }
+
+/* a second level: a site opens its work items beside it */
+.menu-drop .sub { display: block; position: relative; }
+.menu-drop .sub > button::after { content: " \25B8"; float: right; padding-left: 10px; }
+.menu-drop .sub > .menu-drop { left: 100%; top: -3px; }
+.menu-drop .sub:hover > .menu-drop,
+.menu-drop .sub:focus-within > .menu-drop { display: block; }
+.menu-drop hr { border: 0; border-top: 1px solid var(--line-soft); margin: 3px 2px; }
+.menu-drop button {
+  background: none;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  display: block;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 3px 18px 3px 8px;
+  text-align: left;
+  white-space: nowrap;
+  width: 100%;
+}
+.menu-drop button:hover, .menu-drop button:focus-visible {
+  background: var(--accent);
+  color: #fff;
+  outline: none;
+}
+.menu-drop button[aria-current="true"]::after { content: " \2022"; }
+
+/* ---- the vans ------------------------------------------------------- */
+
+.vans { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.van {
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  padding: 6px 8px 8px;
+}
+.van > * + * { margin-top: 4px; }
+.van-shape { display: block; height: 56px; object-fit: contain; width: 100%; }
+.van-load { display: grid; gap: 2px; grid-template-columns: 1fr; }
+.van-stops { font-size: 11px; list-style: none; margin: 0; padding: 0; }
+.van-stops li { color: var(--ink-soft); padding: 2px 0; }
+.stop-where { color: var(--ink-soft); font-size: 10px; line-height: 1.3; }
+.van-route:not(:empty) { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
+.van-run { font-size: 11px; margin: 0; padding-left: 18px; }
+.van-run li { padding: 1px 0; }
+.contact-line { display: grid; gap: 2px 10px; grid-template-columns: 90px 1fr; margin: 4px 0 0; }
+.contact-line dt { color: var(--ink-soft); font-size: 11px; text-transform: uppercase; }
+.contact-line dd { margin: 0; }
+.stock-word { font-weight: 700; }
+.stock-word.ok { color: var(--good, #1a7f37); }
+.stock-word.short { color: var(--bad, #b42318); }
+.meter { background: var(--panel); border: 1px solid var(--line-soft); display: block; height: 7px; }
+.meter .fill { background: var(--accent); display: block; height: 100%; }
+.meter.over .fill { background: var(--red); }
+.sheet .ship { align-items: center; padding: 2px 0 4px; }
+.sheet .ship select.cell, .sheet .ship input.cell { max-width: 190px; width: auto; }
+input.cell.bad { border-color: var(--red); color: var(--red); }
+
+/* ---- figures on a screen ------------------------------------------- */
+
+.stat {
+  background: var(--head-wash, #eef1f5);
+  border: 1px solid #b9bec4;
+  flex: 1 1 130px;
+  min-width: 120px;
+  padding: 4px 8px 5px;
+}
+.stat .stat-name {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.stat strong { font-size: 14px; }
+
+/* ---- status lamps and pills ---------------------------------------- */
+
+.pill {
+  border: 1px solid currentColor;
+  display: inline-block;
+  font-size: 10px;
+  padding: 0 4px;
+  text-transform: uppercase;
+}
+.pill.backorder, .pill.red { color: var(--red); }
+.pill.yellow { color: var(--amber); }
+.pill.green, .pill.shared { color: var(--green); }
+.pill.over, .pill.uncounted { color: var(--ink-soft); }
+
+.dot {
+  border: 1px solid #70757a;
+  border-radius: 50%;
+  display: inline-block;
+  height: 10px;
+  margin-right: 8px;
+  width: 10px;
+}
+.dot.ready { background: var(--green); }
+.dot.configured { background: var(--amber); }
+.dot.missing, .dot.unsupported { background: #d6d8da; }
+
+.model { align-items: baseline; display: flex; gap: 8px; padding: 2px 0; }
+.model .detail { color: var(--ink-soft); font-size: 11px; }
+.model .spacer { flex: 1 1 auto; }
+
+.notice {
+  background: #fdfdfd;
+  border: 1px solid var(--line-soft);
+  border-left: 4px solid var(--accent);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.notice.warn { border-left-color: var(--amber); }
+.notice.bad { border-left-color: var(--red); color: var(--red); }
+.notice.ok { border-left-color: var(--green); }
+
+.sql {
+  background: #fbfbfc;
+  border: 1px solid var(--line-soft);
+  font-family: "Liberation Mono", Consolas, monospace;
+  font-size: 11.5px;
+  overflow-x: auto;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+}
+
+.sheet { border-top: 1px solid var(--line-soft); margin-top: 10px; padding-top: 8px; }
+.sheet-title { align-items: baseline; display: flex; flex-wrap: wrap; gap: 4px 10px; font-weight: 700; }
+.sheet-body { align-items: flex-start; display: flex; gap: 10px; }
+.sheet-body .scroll-x { flex: 1 1 auto; min-width: 0; }
+.stock-rail { display: flex; flex: 0 0 auto; flex-direction: column; }
+.stock-rail .rail-head, .stock-rail .rail-row { align-items: center; display: flex; }
+.stock-choice { display: flex; gap: 3px; }
+.stock-choice button {
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid #8d9196;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.stock-choice button[aria-pressed="true"] { background: var(--row-pick); border-color: var(--accent); font-weight: 700; }
+
+.lines { display: flex; flex-direction: column; gap: 4px; }
+.line {
+  align-items: center;
+  background: var(--row-alt);
+  border: 1px solid var(--line-soft);
+  display: grid;
+  gap: 3px 8px;
+  grid-template-columns: 26px minmax(0, 1fr) 92px auto auto;
+  padding: 5px 8px;
+}
+.line .num { color: var(--ink-soft); font-size: 11px; }
+.line .desig { grid-column: 2 / -1; overflow-wrap: anywhere; }
+.rel { align-items: center; color: var(--ink-soft); display: flex; font-size: 11px; gap: 4px; white-space: nowrap; }
+@media (max-width: 560px) {
+  .line { grid-template-columns: 26px minmax(0, 1fr) auto; }
+  .line .qty-wrap { grid-column: 2; }
+  .line .rel { grid-column: 3; }
+}
+
+.graph { align-items: flex-end; display: flex; gap: 2px; height: 48px; margin: 4px 0; }
+.graph .bar { background: var(--accent); flex: 1 1 auto; max-width: 18px; min-height: 1px; }
+.graph .bar.bad { background: var(--amber); }
+.graph-legend { color: var(--ink-soft); font-size: 11px; }
+
+/* The charts are drawn in a 640 wide box and stretch to the card. Left uncapped on a
+   wide screen that blows every label and every row up with it, which is how a slim
+   chart ends up shouting; 820 keeps them near their own size. */
+svg { display: block; max-width: 820px; width: 100%; }
+svg text { fill: var(--ink-soft); font-family: var(--font); font-size: 10px; }
+svg text.value { fill: var(--ink-label); }
+svg .axis { stroke: var(--line); stroke-width: 1; }
+svg rect.bar { fill: var(--accent); }
+svg rect.track { fill: var(--panel); stroke: var(--line-soft); }
+svg rect.zone-red { fill: #d4504e; }
+svg rect.zone-yellow { fill: #e8c45a; }
+svg rect.zone-green { fill: #5aa469; }
+svg rect.zone-over { fill: #9fb3c8; }
+svg line.flow { stroke: #11324f; stroke-width: 2; }
+svg line.guide { stroke: var(--line); stroke-dasharray: 3 3; }
+svg rect.zone-uncounted { fill: var(--line); }
+svg.strip { margin: 6px 0 2px; }
+svg rect[class^="zone-"], svg rect.bar { cursor: default; }
+.card .menu { position: relative; }
+
+/* ---- dropdown ------------------------------------------------------ */
+
+select.replaced { display: none; }
+.dropdown { position: relative; }
+.dd-toggle {
+  background: #fff;
+  border: 1px solid #7f9db9;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 3px 24px 3px 5px;
+  text-align: left;
+  width: 100%;
+}
+.dd-toggle::after { content: "\25BC"; font-size: 9px; position: absolute; right: 6px; top: 5px; }
+.dd-list {
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 1px 2px 4px rgba(0, 0, 0, .25);
+  left: 0;
+  list-style: none;
+  margin: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+}
+.dd-list li { cursor: pointer; overflow: hidden; padding: 3px 7px; text-overflow: ellipsis; white-space: nowrap; }
+.dd-list li:hover, .dd-list li.active, .dd-list li[aria-selected="true"] { background: var(--row-pick); }
+
+/* ---- function key bar ---------------------------------------------- */
+
+.fkeys {
+  align-items: center;
+  background: #e4e6e8;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px 6px;
+}
+.fkey {
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid #8d9196;
+  border-radius: 2px;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.fkey:hover { background: linear-gradient(180deg, #fff, #cfe0f2); border-color: var(--accent); }
+.fkey b { color: var(--accent); font-weight: 700; margin-right: 3px; }
+.fkey span { color: var(--ink); }
+
+.spin { animation: spin 1s steps(8) infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+[hidden] { display: none !important; }
+
+/* A verdict in a table cell. */
+td span.ok { color: var(--green); }
+td span.bad { color: var(--red); font-weight: 700; }
+td span.muted { color: var(--ink-soft); }
+
+/* The landing dashboard: stands over the logo like the baskets card, and stops short of the doors. */
+#dash-card { background: rgba(255, 255, 255, .88); flex: 0 1 auto; margin-bottom: 8px;
+             margin-right: 240px; overflow-y: auto; z-index: 1; }
+.autonomy { align-items: baseline; display: flex; flex-wrap: wrap; gap: 8px; }
+.autonomy-name { color: var(--ink-soft); font-weight: 700; text-transform: uppercase; }
+#autonomy-score { font-size: 28px; font-variant-numeric: tabular-nums; }
+.autonomy-of { color: var(--ink-soft); }
+.status-down { color: var(--red); font-weight: 700; }
+.status-critical { color: #b45309; font-weight: 700; }
+
+/* The dashboard: twice as wide as the compact strip (1200 px), with its small type unchanged. */
+#dash-card { align-self: flex-start; font-size: 11px; max-width: 1200px; padding: 5px 8px 7px; width: 100%; }
+#dash-card .row { flex-wrap: nowrap; gap: 4px; }
+#dash-card .stat { flex: 1 1 0; min-width: 0; padding: 2px 5px 3px; }
+#dash-card .stat .stat-name { font-size: 9px; white-space: nowrap; }
+#dash-card .stat strong { font-size: 12px; }
+#dash-card table { font-size: 13px; }
+#dash-card th, #dash-card td { padding: 1px 4px; }
+#dash-card .short-box { max-height: 160px; }
+#dash-card .eyebrow { margin: 4px 0 2px; }
+#autonomy-score { font-size: 20px; }
+#dash-card td { white-space: normal; }
+#dash-card td.num { white-space: nowrap; }
+
+/* ==== SAP GUI Signature theme: the screen body ======================= */
+
+/* Group boxes: a thin blue frame, the title on a pale strip across the top. */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 0 10px 8px;
+}
+.card > h2:first-child, .card > .heading-tabs:first-child {
+  background: linear-gradient(180deg, #e3ecf6, var(--group-head));
+  border-bottom: 1px solid var(--line);
+  margin: 0 -10px 8px;
+  padding: 3px 8px;
+}
+.card > * + * { margin-top: 6px; }
+h2 {
+  border-bottom: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 400;
+  padding-bottom: 0;
+  text-transform: none;
+}
+h2::first-letter { text-transform: uppercase; }
+.card .card { background: #fff; }
+
+/* Fields: white boxes with a blue-grey frame, the field with the cursor in yellow,
+   labels in plain black on the left as SAP writes them. */
+label.field > span { color: var(--ink); font-size: 12px; }
+input, select, textarea, .dd-toggle {
+  background: #fff;
+  border: 1px solid var(--button-line);
+  border-radius: 0;
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 2px 4px;
+}
+input:focus, select:focus, textarea:focus {
+  background: #fff7c2;
+  border-color: #c09a1a;
+  outline: 1px solid #e2c045;
+}
+input[readonly], input[disabled], textarea[readonly] { background: var(--readonly); color: #333; }
+input:not([type]), input[type="text"], input[type="search"], textarea { text-transform: none; }
+.dd-toggle::after { color: #1d2f4a; }
+.dd-list { border-color: var(--button-line); }
+.dd-list li:hover, .dd-list li.active, .dd-list li[aria-selected="true"] { background: var(--accent); color: #fff; }
+
+/* Push buttons: SAP's raised blue-grey buttons, no rounded corners to speak of. */
+button.action, .mini, button.heading-tab, .stock-choice button, .fkey {
+  background: linear-gradient(180deg, var(--button-from), var(--button-to));
+  border: 1px solid var(--button-line);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 0 #fff;
+  color: var(--ink);
+  font-family: var(--font);
+}
+button.action { font-weight: 400; padding: 2px 10px; }
+button.action::before { color: var(--green); content: "\2714 "; font-weight: 700; }
+button.action.ghost::before { color: var(--red); content: "\2715 "; }
+button.action:hover, .mini:hover, button.heading-tab:hover, .stock-choice button:hover, .fkey:hover {
+  background: linear-gradient(180deg, #fff, #c9daf0);
+  border-color: var(--accent);
+}
+button.heading-tab { color: var(--ink); font-weight: 400; padding: 2px 12px; text-transform: none; }
+button.heading-tab[aria-expanded="true"], .mini[aria-pressed="true"], .stock-choice button[aria-pressed="true"] {
+  background: linear-gradient(180deg, #5d8fcb, var(--accent));
+  border-color: #24578f;
+  color: #fff;
+}
+
+/* ALV grids: grey-blue column heads with a frame on every cell, white rows, the picked
+   row in yellow, figures right-aligned. */
+table { background: #fff; border: 1px solid var(--line); }
+th {
+  background: linear-gradient(180deg, #edf2f8, var(--head-cell));
+  border: 1px solid #a9bacf;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 400;
+  padding: 2px 6px;
+  text-transform: none;
+}
+td { border: 1px solid #d3dce8; padding: 1px 6px; }
+tbody tr:nth-child(even) { background: var(--row-alt); }
+tbody tr:hover { background: #fdf3c6; }
+tfoot th { background: var(--readonly); font-weight: 700; }
+.short-box, .scroll-x { background: #fff; }
+
+/* Figures in a row of boxes: each a small group box of its own. */
+.stat { background: #fff; border: 1px solid var(--line); }
+.stat .stat-name { color: var(--ink-soft); font-size: 11px; text-transform: none; }
+
+.notice { background: #fff; border: 1px solid var(--line-soft); border-left-width: 4px; }
+.eyebrow { color: var(--ink); font-size: 12px; text-transform: none; }
+.pill { border-radius: 0; }
+
+/* Menus that drop from the bar: white, a thin frame, the line under the pointer in blue. */
+.menu-drop { border-color: var(--button-line); box-shadow: 2px 2px 4px rgba(0, 0, 0, .3); }
+.menu-drop button:hover, .menu-drop button:focus-visible { background: var(--accent); }
+
+/* The landing screen keeps its logo, quieter, on the window's blue. */
+.home-logo { opacity: .35; }
+#dash-card { background: rgba(234, 240, 248, .94); }
+
+/* ---- function keys and status bar ---------------------------------- */
+
+.fkeys { background: var(--bar-dark); border-top: 1px solid var(--line); gap: 2px; padding: 2px 6px; }
+.fkey { font-size: 11px; padding: 1px 6px; }
+.fkey b { color: var(--title-ink); }
+
+.statusbar {
+  align-items: stretch;
+  background: linear-gradient(180deg, #e9eff7, #d3deeb);
+  border-top: 1px solid var(--line);
+  display: flex;
+  font-size: 11px;
+  gap: 3px;
+  height: 22px;
+  padding: 2px 4px;
+}
+.statusbar .status-msg {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.statusbar .status-msg::before {
+  background: radial-gradient(circle at 35% 30%, #7fd27f, #1d8a2c);
+  border-radius: 2px;
+  content: "";
+  flex: 0 0 auto;
+  height: 10px;
+  width: 10px;
+}
+.statusbar .sys {
+  align-items: center;
+  background: #f4f7fb;
+  border: 1px solid #a9bacf;
+  border-radius: 1px;
+  box-shadow: inset 1px 1px 0 #c7d3e2;
+  display: flex;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.statusbar .sys:empty, .statusbar .sys[hidden] { display: none; }
+/* Easy Access keeps its picture in the background, in grey; the shortcuts too until pointed at. */
+.home-logo { filter: grayscale(1) contrast(.9); opacity: .22; }
+.door-mark { filter: grayscale(1); }
+.home-doors .door:hover .door-mark { filter: none; }
+/* SAP writes a label with a capital: the source keeps them lower case for the old look. */
+.stat .stat-name::first-letter, p.eyebrow::first-letter, label.field > span::first-letter,
+.contact-line dt::first-letter { text-transform: uppercase; }
+.contact-line dt { text-transform: none; font-size: 12px; }
+/* Label to the left, field to the right, as every SAP screen lays a field out. */
+label.field { align-items: center; flex-direction: row; gap: 8px; }
+label.field > span { flex: 0 0 auto; min-width: 110px; white-space: nowrap; }
+label.field > :not(span) { flex: 1 1 auto; min-width: 60px; }
+label.field.narrow { max-width: 300px; }
+
+/* The five shortcuts in one row along the bottom of the landing screen, just above the
+   function keys; the logo and the cards above use the full width. */
+.home { padding-right: 0; padding-bottom: 68px; }
+#gate-card, #dash-card { margin-right: 0; margin-bottom: 86px; }
+.home-doors {
+  align-content: end;
+  bottom: 0;
+  display: flex;
+  gap: 18px;
+  padding: 0 12px;
+  justify-content: center;
+  left: 0;
+  right: 0;
+  top: auto;
+  width: auto;
+}
+.home-doors .door[data-door="slack"], .home-doors .door[data-door="contacts"] { margin: 0; }
+.home-doors .door { flex: 0 1 200px; height: auto; min-width: 0; width: auto; }
+.door-mark { aspect-ratio: 360 / 96; height: auto; width: 100%; }
+.door-mark { transform-origin: center center; }
+
+/* Bugs dashboard lives in the Monitor menu now; its toolbar button stays in the page, unseen. */
+.toolbar #dash-toggle { display: none; }
+
+/* The left panel in folders: a folder per menu with its triangle, the entries under it. */
+.tree #tree-list .tree-folder { padding-left: 46px; }
+.tree #tree-list .tree-folder::before {
+  background: none;
+  border: 4px solid transparent;
+  border-radius: 0;
+  border-top: 6px solid #2a3d58;
+  height: 0;
+  left: 16px;
+  top: 6px;
+  width: 0;
+}
+.tree #tree-list .tree-folder[aria-expanded="false"]::before {
+  border: 4px solid transparent;
+  border-left: 6px solid #2a3d58;
+  left: 18px;
+  top: 4px;
+}
+.tree #tree-list .tree-kids button { padding-left: 64px; }
+.tree #tree-list .tree-kids button::before { left: 38px; }
+/* An entry is a document, not a folder: a small white page in place of the yellow folder. */
+.tree #tree-list .tree-kids button::after {
+  background: linear-gradient(#fff, #fff) padding-box;
+  border: 1px solid #6b7c92;
+  height: 11px;
+  left: 46px;
+  top: 3px;
+  width: 9px;
+}
+.tree #tree-list .tree-leaf[aria-current="true"], .tree #tree-list .tree-top[aria-current="true"] {
+  background: var(--row-pick);
+  border-color: #c9a227;
+}
+
+/* The baskets waiting for approval keep to a quarter of the screen, on the left. */
+#gate-card { align-self: flex-start; min-width: 360px; width: 25%; }
+#gate-card > h2 { font-size: 18px; font-weight: 700; }
+
+/* In stock is the screen's main table: it runs down to the function keys, not a short box. */
+#stock-box { max-height: calc(100vh - 330px); }
+
+/* Guardrails: a bot by rights and limits */
+.guard-table { border-collapse: collapse; width: 100%; }
+.guard-table th, .guard-table td { border: 1px solid var(--line-soft); padding: 4px 6px; vertical-align: top; }
+.guard-table thead th { background: linear-gradient(180deg, #edf3fa, #d9e5f2); text-align: left; }
+.guard-table tbody th { text-align: left; white-space: nowrap; width: 1%; }
+.guard-table textarea { box-sizing: border-box; min-width: 220px; width: 100%; }
+
+.loading-ring { position: fixed; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px;
+  border: 4px solid rgba(0, 70, 140, .25); border-top-color: #0a5aa8; border-radius: 50%;
+  animation: spin .8s linear infinite; z-index: 9999; pointer-events: none; }
+.loading-ring[hidden] { display: none; }

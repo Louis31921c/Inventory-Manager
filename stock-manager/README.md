@@ -1,0 +1,472 @@
+# Stock manager
+
+A software ERP for Inventory management. Photograph each Delivery note you receive and it is transcripted ,by duckdb, to a database*. You can then check the data under "Inventory", sort it, export it or query it with SQL.
+Same for Purchase orders. The goal is to report a company's inventory without having to manually audit it. The two bottlenecks will narrow down stocks: hardware input and outputs. 
+Custom built to answer a real company's needs on inventory tracking. 
+
+each article stored in [inventory] database has its own line with indicators such as : name, quantity, supplier name, delivery date, order date, order reference and additional information.
+
+for those stored in [Purchase order] nothing is ticked by hand: each line says "in stock" or
+"to order" on its own, counted from the delivery notes. A note names the site and the work item
+the goods went to, so a line is answered with the pile delivered for that place, less what other
+orders have already taken from it. Nothing is borrowed from another site.
+
+
+
+*computer vision is used, you must synchronize your AI model for recognition. More models compatibility to come.
+
+
+
+![Search](docs/app-search.png)
+
+![Purchase orders](docs/app-wanted.png)
+
+## Install
+
+Python 3.11
+
+```bash
+pipx install git+https://github.com/Louis31921c/Inventory-Manager.git#subdirectory=stock-manager
+```
+
+
+
+Once in, plug your model ;
+
+Computer vision is used, you must synchronize your AI model for recognition. As of now, two models are compatible. More models to come.
+
+- **Claude Code CLI** (default): install it, run `claude` once and `/login`. No API key.
+- **Gemini API**: `pip install "stock-manager[gemini]"`, then put `LLM_BACKEND=gemini` and
+  `GEMINI_API_KEY=...` in the settings file.
+
+Except snapping photos, Everything else works with no model at all.
+
+## The password
+
+The first time the window opens it asks for a name and a password. After that the
+app is locked on every start for quick acess: the right password opens your data. You still can disconnect after each session but five wrong tries pause it for five minutes.
+
+the session expires on its own after 12 hours.
+
+## Keys the window itself answers
+
+`F11` fills the screen. `ctrl-R` reads the page again, which is enough to see a change made
+to `app.html` or `sap.css` without closing the app; `ctrl-shift-R` does the same and throws
+the cache away. A change to the Python needs the app started again.
+
+## What protects the data
+
+| Guard | What it stops |
+|---|---|
+| Loopback only, random port | nothing on the network can reach it |
+| Password on open, scrypt hash, five tries per five minutes | someone sitting down at your machine |
+| Signed session cookie, `SameSite=strict`, twelve hours | another site reusing your session |
+| Origin check on every write | a page in your browser posting to the app |
+| Read-only SQL, filesystem access off, one statement | a question turning into a delete |
+| `0600` on the database, settings and account file, `0700` on the data folder | other accounts on the machine |
+| 30 MB cap on uploads, photos purged after six weeks | the disk filling up quietly |
+| Encrypted snapshots when `BACKUP_PASSPHRASE` is set | a stolen backup |
+
+For a laptop that leaves the workshop, turn on full disk encryption.
+
+### The five tabs
+
+Press `1` to `5` to navigate between tables.
+
+| Tab | What you do |
+|---|---|
+| New note | `R` snaps a photo. Correct the fields and lines, then save. |
+| Search | `/` filters, `B` shows backorders only, `E` edits the work item of a line. |
+| SQL | `Enter` query it yourself. You can export it as csv, parquet or xslx for more options. |
+| Purchase orders | `R` reads a sheet. `S` in stock, `O` to order, `C` clears, `D` deletes. |
+| Settings | `B` backup, `T` test message, `M` merge two names, `E` export, `P` purge photos. |
+
+### Keys everywhere
+
+| Key | Does |
+|---|---|
+| F1 | SQL tab |
+| F2 | ask a question |
+| F3 | search |
+| F4 | purchase orders |
+| F5 / F6 | export |
+| F7 | quit |
+| F9 | predictions |
+| Ctrl-U | clear the line you are typing |
+| Esc | cancel |
+
+
+
+## Data in
+
+Four ways in, all landing in the same queue on the first screen.
+
+| Way in | What it takes |
+|---|---|
+| Take a picture | a delivery note or a purchase order, read on the spot |
+| Import files | PDF, JPG, PNG, WEBP read like a photo; CSV and XLSX mapped column by column |
+| Mailbox | attachments on unread mail, fetched on a timer or by hand |
+| Terminal | `stock read`, as before |
+
+The queue keeps one copy of each file: the same bytes twice, from a mail and from a folder,
+stay one row. A scan waits for `read`, a spreadsheet for `map columns`.
+
+### Spreadsheets
+
+The column mapping is guessed from the header, in English or French (`article`, `quantite`,
+`fournisseur`, `date livraison`, `chantier`), and you correct it before anything is written.
+`Check` says what would be imported and what would be skipped, with the reason and the row
+number; `Import` writes the lines as one note of their own, so an import can be found again
+later. Pick `Supplier catalogue` as the target and the same file fills the catalog instead.
+
+### Mailbox
+
+Plain IMAP, set in `~/.config/stock-manager/settings.env`:
+
+```
+IMAP_HOST=127.0.0.1
+IMAP_PORT=1143
+IMAP_USER=you@proton.me
+IMAP_PASSWORD=the-bridge-password
+IMAP_FOLDER=INBOX
+IMAP_SECURITY=starttls
+IMAP_INSECURE=1
+MAIL_EVERY_MINUTES=15
+```
+
+Those values are for **Proton Mail Bridge**, which runs on your machine and offers Proton over
+IMAP on `127.0.0.1:1143` with a certificate of its own, hence `IMAP_INSECURE=1` for that host
+only. It needs a paid Proton plan.
+
+**Outlook.com and Microsoft 365 no longer accept IMAP passwords**: Microsoft retired Basic
+authentication there and app passwords are not a way around it. Either use a corporate account
+whose tenant still allows IMAP, or set an Outlook rule that forwards supplier mail to an
+address this can read.
+
+Only attachments are taken, and only the kinds this app can read. The message is marked read so
+it is not picked up twice (`IMAP_MARK_READ=0` to leave it alone), and the poll runs every
+`MAIL_EVERY_MINUTES` while the app is open. `Fetch now` and `Test the connection` are on the
+first screen.
+
+## Downloads
+
+The tables come out of the app the same way everywhere: the Settings tab, the buffers card in the
+DDMRP window, and each screen's own card.
+
+| Download | What is in it | Key |
+|---|---|---|
+| Inventory lines | every line of every delivery note | `id`, with `note_id` and `line_no` as they were read |
+| Purchase order lines | every line of every stored purchase order, with its sheet | `id`, with `list_id` and `line_no` |
+| Supplier bills | one row per bill, with its month | `bill_id` |
+| Quote requests | every line of every quote request, with its unit | `quote_id`, `line_no` |
+| Safety stock watch | one row per article: rate, lead time, zones, net flow, what to order | `article` |
+
+Each one comes as `csv`, `xlsx` or `sql`.
+
+### Querying them in psql
+
+The `sql` files are plain PostgreSQL. Every one of them creates the `stock` schema if it is
+missing, creates its own table if it is missing, empties that table and fills it again, so a
+file can be loaded as often as you like without piling rows up.
+
+```
+createdb workshop
+psql -d workshop -f inventory_lines.sql
+psql -d workshop -f purchase_order_lines.sql
+psql -d workshop -f safety_stock.sql
+```
+
+The three relate through `stock.articles`, a one column table every file tops up and every line
+points at, so the tables can be loaded in any order and joined straight away:
+
+```sql
+SELECT a.article,
+       sum(i.quantity)     AS received,
+       sum(p.quantity)     AS asked_for,
+       max(s.top_of_green) AS buffer_top,
+       max(s.zone)         AS zone
+FROM stock.articles a
+LEFT JOIN stock.inventory_lines i      ON i.article = a.article
+LEFT JOIN stock.purchase_order_lines p ON p.article = a.article
+LEFT JOIN stock.safety_stock s         ON s.article = a.article
+GROUP BY a.article
+ORDER BY received DESC NULLS LAST;
+```
+
+## What the shelf holds
+
+Inventory counts itself. Supplier delivery notes bring articles in, customer purchase orders take
+them out, and an order counts as gone one day after it was taken, because a package is picked and
+shipped within 24 hours. The Inventory screen shows in, out, still being picked and what is left,
+and a hand count (Safety stock watch) still wins for the article it was made on. The buffers read
+the same number, so nothing has to be counted by hand to be watched.
+
+## Who the order goes to
+
+Purchase orders are what a customer asks of you, so each one carries a contact: company, person,
+phone, e-mail, delivery address, and the incoterm the goods travel on (EXW, FCA, CPT, CIP, DAP,
+DPU, DDP), plus the day it has to ship. Contacts are kept in a book on the Purchase orders
+screen; picking one fills the terms in, and its address can be dropped straight into Route
+wrangler as a stop.
+
+The book can also come off the disk. Keep a `supplier-contacts.csv` with the columns `company`,
+`person`, `phone`, `email`, `address`, `incoterm`, `site`, `note` (the French headings `societe`,
+`contact`, `tel`, `mail`, `adresse`, `chantier`, `remarque` are understood too, and a comma or a
+semicolon both work), and LOAD FILE reads it in: new companies are added, known ones are brought
+up to date by company and person, lines without a company name are skipped. The file is looked
+for in the app folder, in `~/.local/share/stock-manager`, and in Documents, Desktop and Downloads;
+`STOCK_CONTACTS_FILE` points at it anywhere else. Reading it twice does not double the book.
+
+The book is not listed as a table. The Contacts card has two boxes, name and company, and asks
+the file itself the way a query asks a table: the lines that answer to both come back with every
+column on them. The book inside the database fills itself from the same file the first time it is
+asked for, so the picker on an order is never empty.
+
+## Partly delivered
+
+A delivery note read with a backorder mark owes you something. The Inventory screen lists what
+is still missing in three columns: supplier, article, and the site with its work item.
+"arrived" takes a line off the list.
+
+## Quotes
+
+Purchase orders, Quotes and Bills sit under the one menu: hover **Purchase orders** and pick.
+
+A quote is a request, not a price. Name the article, how much of it and in what unit — `ml` linear
+metre, `m2`, `m3`, `kg`, `t`, `l`, `h` or `piece` — with the supplier and the site, and the app
+writes the request you send out:
+
+```
+120 ml skirting board; 3 m3 gravel; 250 kg sand
+```
+
+Mark it sent, then answered, then closed as the supplier replies. Downloads: CSV, XLSX and a
+PostgreSQL script keyed on `quote_id, line_no`. In the chat: `/quote supplier:northgate items:...`.
+
+## Route wrangler
+
+Save the yard the truck leaves from and type the day's delivery addresses. Pick which lorry the
+round is for, press FIND THE SHORTEST RUN, and the app orders the addresses (nearest neighbour,
+then 2-opt) and draws them in order, each with its street, under that lorry's shape. Nowhere
+else: there is no table of the run and no kilometre count on the screen.
+
+Three lorries are drawn: two Renault Partner and an Iveco Daily.
+
+Addresses are placed on the map by **Nominatim** and measured by road by **OSRM**, both run by
+OpenStreetMap. No account, no key, no cost; one lookup a second. That call is the only thing the
+app ever tells the internet about a place, and it only happens when you add an address or ask for
+a route. If the road service is quiet the ordering falls back to straight-line distance and says
+so. Tick a stop off when it is delivered; clear the list at the end of the day.
+
+## Bills
+
+The Bills screen is a month at a time: what each month came to, what is still to pay, what is
+late. Neither the bills themselves nor the spend per supplier is listed on it. A bill is read the
+same way as a delivery note (photo, PDF or a scan that arrived by mail), checked by a person, then
+stored, and the months are counted from what is stored. Downloads: CSV, XLSX and a PostgreSQL
+script, keyed on `bill_id`.
+
+## Mailbox
+
+Settings, then Mailbox. Pick the provider and the server details fill themselves in:
+
+| Provider | What it needs |
+|---|---|
+| Proton Mail | Proton Bridge running on this machine, the Bridge's own user and password |
+| Gmail | two-step verification, then an app password |
+| Outlook / Microsoft 365 | an app password from whoever runs the tenant; a plain password is refused by Microsoft |
+| Yahoo, iCloud | an app password |
+| Another mailbox | the IMAP server, port and security by hand |
+
+Attachments from unread mail land in the reading queue every few minutes. The password is kept in
+the settings file on this machine, never shown again and never sent to the screen.
+
+## Chat bot (Discord)
+
+```bash
+pip install "stock-manager[discord]"
+```
+
+Paste the bot token in Settings, then restart. In the channel:
+
+- `/basket shop:northgate.fr items:12 hex bolt m6x25, rondelle m8 x100` fills the channel's basket
+- `/basket_show`, `/basket_clear`
+- `/purchase` writes the basket into Purchase orders
+- `/stock rondelle m8` answers what is on the shelf
+- `/quote supplier:northgate items:120 ml skirting board; 3 m3 gravel` writes a quote request
+
+`/purchase` does not buy anything: it writes the order, and a person places it on the supplier's
+site. Baskets also show up in the app, on the Purchase orders screen.
+
+## Buffers
+
+The DDMRP window sizes a buffer for every article, the demand driven way, out of what the
+delivery notes already say.
+
+| Zone | What it covers | How it is worked out |
+|---|---|---|
+| Red | the lead time and its surprises | `per day x lead days x lead factor`, plus that again times a variability factor |
+| Yellow | the demand while the supplier works | `per day x lead days` |
+| Green | how often you want to place an order | the larger of `per day x lead days x lead factor` and `per day x order cycle` |
+
+Lead days are measured, not guessed: the median of `delivery date - order date` for that
+article, falling back to the supplier's median, then to everybody's. A short lead gets a bigger
+factor than a long one, and an erratic article a bigger safety than a steady one, which is why
+two articles moving at the same rate can end up with very different red zones.
+
+Net flow is what is on the shelf minus what is still to leave it. On hand is already the notes
+in minus the orders that have gone out (or a hand count, which wins), so the demand side counts
+only the orders placed too recently to have shipped — counting all of them again would take the
+same quantity off twice and put healthy articles deep in the red. Against the top of each zone
+the flow lands in the red, the yellow, the green, or over the top, and the table is sorted so
+the red comes first. Articles nobody counted are marked `not counted` rather than assumed empty.
+
+The landing card is counts first: the six tiles, then one strip showing how the articles
+split across the zones, then a slim line per article for the ten furthest below the top of
+their buffer. Each of those is the share of its own buffer the article is holding, so a buffer
+of ten and a buffer of ten thousand sit on the same scale. No chart prints its numbers any
+more — point at a bar, anywhere on the screen, and the figures come up on it.
+
+### Where the demand goes next
+
+Every week of every article is labelled `quiet`, `light`, `usual` or `spike` against a week when
+that article actually moved. Those labels make a Markov chain: one pooled transition matrix for
+the whole workshop, since no single article moves often enough to fill one of its own. The table
+under the buffers reads row by row: given this week, the chance of each kind of week next.
+
+From it come two numbers. `spike` in the article's row is the chance of at least one
+bigger-than-usual week inside the horizon, which is what a buffer has to survive. The long run
+share under the table is where the weeks settle if nothing changes. Both are smoothed, so a
+pair of states never seen together still gets a small chance rather than zero, and both are
+honest about thin history: with a few weeks of notes the chain says more about the shape of the
+work than about next month.
+
+`export csv`, `export xlsx` and `export sql` take the whole table out, zones, factors and all.
+
+## Predictions
+
+`DDMRP` on the menu bar, the `DDMRP` button at the right of the tabs, or `F9`, opens a window
+of its own; the menu bar name also drops down the cards under the buffers.
+
+| Cell | What it gives you |
+|---|---|
+| What left the stores | quantity booked in, week by week |
+| Where it went | lines per site over the same window |
+| In and out | quantities in against quantities out, per week, per month or per 6 months, with the net, and the table out as csv or xlsx |
+| Buffers | the demand driven zones above, and the chain behind them |
+| Dots orders for you | an OpenAI drafted purchase order to check and save |
+
+In is what the delivery notes brought in. Out is what the purchase orders asked for over the
+same stretch. Net is what the shelves kept.
+
+`safety stock xlsx`, next to those exports, opens the safety stock sheet in Excel: a row per
+article with its weekly rate, the swing around it, what is on hand, the safety stock and the
+reorder point. Safety stock is the service factor times the week to week swing over the lead
+time, and the reorder point is the lead time demand on top of it; the sheet is worked out over
+a 7 day lead time at 95% service, or pass your own with
+`/export/safety-stock.xlsx?lead=14&service=99`.
+
+### Dots orders for you
+
+With `OPENAI_API_KEY` in `~/.config/stock-manager/settings.env`, `ask dots` hands the planner's
+numbers to Dots, which writes a purchase order back: article, quantity rounded to how the trade
+buys, supplier, and one line saying why. Check it, change any quantity, then
+`save as purchase order` and it lands in the Purchase orders tab like any other sheet.
+
+Nothing is sent to a supplier. Dots drafts, you sign, and the order stays in the app.
+
+## The five doors on the landing page
+
+Down the right of the logo, a fifth of its height each, with an icon and a name:
+
+| Door | Opens |
+|---|---|
+| Slack | `app.slack.com/client` |
+| Discord | `discord.com/channels/@me` |
+| Outlook | `outlook.office.com/mail/` |
+| Proton Mail | `mail.proton.me` |
+| Supplier contacts | the contact sheet, in whatever opens a csv here |
+
+The window is WebKit and not a browser, so none of them is a link: following one would walk
+the app off its own page. The page asks the server by the door's name and the server hands
+the target to the desktop, which opens the browser for the four and the spreadsheet for the
+csv. The five names are fixed in `inventory/shortcuts.py`; the page never sends a url or a
+path of its own, so there is nothing here to point at a file somebody else chose.
+
+The contact sheet is `CONTACTS_CSV` in the settings file, and `supplier-contacts.csv` beside
+the database when that is empty. A door whose file is not there says so rather than opening
+nothing.
+
+## Where things are stored
+
+| What | Path |
+|---|---|
+| Database and photos | `~/.local/share/stock-manager/` |
+| Settings | `~/.config/stock-manager/settings.env` |
+| Exports | `~/.local/share/stock-manager/exports/` |
+| Backups | `~/.local/share/stock-manager/backups/` |
+
+Override the data folder with `--data /some/path` or `DATA_DIR`. Copy `.env.example` to the
+settings file to see every key.
+
+## what it does that a spreadsheet does not
+
+Article name memory : if you corrected/ tweaked a input after snapping a photo, the algortihm remembers it and wont (at least very not likely) do the same mistake twice : 
+
+Audit trail : Every save, correction, tick, merge, backup and export is written down with the
+user name, which is your login name.
+
+**Errors that reach you.** Any failure is referenced with a "#", a row in the database and, with
+`SMS_PROVIDER` set, a text message: `Stock manager error #14: backup failed - no space left on
+device` to the Admin. Repeats are muted.
+
+
+## Settings
+
+![Settings](docs/app-settings.png)
+
+- space used gives an indicator on what is used and the space left : snapshots are deleted after 6 weeks not to skyrocket your cloud/disk usage
+- checks on last backup, functionement state and its last check, and more...
+- synchronize AI to pick your Model. can be plugged to Open AI dots for reordering automation. More models/ suppliers to come.
+- Errors where tickets are directly sent to a phone number. you can see the lastest tickets sent
+- backups
+- Model accuracy, or how many time on average have you corrected what the model input after snapping a note
+- activity audit, where you can openly track each users activity on the software. can be hidden, for admin only, as a json file.
+- export/ download each tables, under different formats
+- stored notes tracking
+
+
+## Files roles
+
+| File | Role |
+|---|---|
+| `inventory/tui.py` | the full screen program: screens, keys, curses loop |
+| `inventory/cli.py` | the commands |
+| `inventory/screen.py` | the character grid both the terminal and the screenshots draw into |
+| `inventory/db.py` | DuckDB storage and exports |
+| `inventory/intake.py` | the queue of files waiting to be read |
+| `inventory/mailbox.py` | IMAP: attachments out of unread mail |
+| `inventory/sheets.py` | CSV and XLSX into lines or the catalogue |
+| `inventory/pg.py` | the PostgreSQL dumps |
+| `inventory/llm.py` | the model backends, Dots among them |
+| `inventory/forecast.py` | rates, safety stock, reorder points, shortage risk |
+| `inventory/ddmrp.py` | buffer zones, lead times, the demand chain |
+| `inventory/stock.py` | what is on the shelf: notes in, orders out |
+| `inventory/quotes.py` | quote requests and their units |
+| `inventory/routing.py` | the yard, the stops, and the shortest run |
+| `inventory/vocabulary.py` | shared article names, aliases, merges |
+| `inventory/shortcuts.py` | the five doors on the landing page |
+| `inventory/audit.py`, `alerts.py` | who did what, and what broke |
+
+## Contributions / Updates
+- built in indicators
+- encryption, safe share, global security
+- more compatibility to different tools, models...
+- storage space optimization
+- overall growth
+## Licence
+
+Proprietary: see [LICENSE](LICENSE). Copyright Louis31921c, all rights reserved. Not open source.
+
+What comes back from a photo is a draft. Models misread quantities, references and dates, which is
+why the correction step exists. This is not a system of record.

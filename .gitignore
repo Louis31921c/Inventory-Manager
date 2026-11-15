@@ -1,0 +1,16 @@
+brag-output/
+brag-output/brag-music-only.mp4
+brag-output/build/
+brag-output/shots/site/
+brag-output/*.wav
+*.pyc
+__pycache__/
+.venv/
+
+# Kate leaves a swap file beside whatever is open.
+.*.kate-swp
+
+# real contact lists and generated sample csv files never go in the repo
+supplier-contacts.csv
+*.ods
+stock-manager-chat-context.md

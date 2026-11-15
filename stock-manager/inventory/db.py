@@ -1,0 +1,585 @@
+import contextlib
+import shutil
+import tempfile
+import threading
+from dataclasses import dataclass
+from pathlib import Path
+
+import duckdb
+
+from . import catalog, migrations, vocabulary
+from .models import normalize_name
+
+ROW_COLUMNS = ("article", "quantity", "supplier", "delivery_date", "order_date", "site",
+               "work_item", "backorder", "designation")
+EXPORT_COLUMNS = ("note_id", "line_no", "article", "quantity", "supplier", "delivery_date",
+                  "weekday", "order_date", "site", "work_item", "backorder", "designation")
+LIST_COLUMNS = ("list_date", "site", "work_item", "drafter", "image_sha256", "image_path",
+                "created_by")
+LIST_LINE_COLUMNS = ("list_id", "line_no", "article", "designation", "reference", "quantity",
+                     "stock", "in_stock")
+COUNTED_TABLES = ("notes", "inventory_lines", "purchase_orders", "purchase_order_lines", "catalog",
+                  "article_names", "audit", "stock_counts", "bills", "quotes", "quote_lines",
+                  "places", "contacts", "vehicles")
+
+
+class QueryError(Exception):
+    pass
+
+
+# Opening a DuckDB file costs a few milliseconds a time, and filling a new database with a
+# year of paperwork opens it thousands of times. `held` keeps one connection open for the
+# duration, so every other open in this process joins it instead of starting over.
+@contextlib.contextmanager
+def held(db_path):
+    with duckdb.connect(str(db_path)):
+        yield
+
+
+# A DuckDB file that every connection has closed is shut, and one opened again while it is
+# being shut is refused ("already attached"). The server answers a dozen requests at once
+# and the heavier screens read a hundred times each, so that window is hit. One connection
+# held for as long as the server runs means the file is never shut underneath anybody.
+_anchors = {}
+_anchor_lock = threading.Lock()
+
+
+def keep_open(db_path):
+    """Hold one connection to the database for the life of the process. Safe to repeat."""
+    key = str(db_path)
+    with _anchor_lock:
+        if key not in _anchors:
+            _anchors[key] = duckdb.connect(key)
+    return key
+
+
+def read(db_path, sql, args=()):
+    # Opened the same way a write is. DuckDB refuses a read-write open while a read-only one
+    # is live in the same process, and the screens fire a dozen reads at once: a read-only
+    # read made every write that landed among them fail, the contact book's first fill
+    # included. The one read-only door left is the SQL screen, which needs it to be safe.
+    with duckdb.connect(str(db_path)) as con:
+        return con.execute(sql, list(args)).fetchall()
+
+
+def write(db_path, sql, args=()):
+    with duckdb.connect(str(db_path)) as con:
+        return con.execute(sql, list(args)).fetchone()
+
+
+@dataclass
+class QueryResult:
+    columns: list
+    rows: list
+    truncated: bool
+
+
+def init(db_path):
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with duckdb.connect(str(db_path)) as con:
+        applied = migrations.apply(con)
+        catalog.backfill(con)
+        vocabulary.backfill(con)
+    for path in (db_path, db_path.with_suffix(db_path.suffix + ".wal")):
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+    return applied
+
+
+def find_by_image(db_path, sha256):
+    rows = read(db_path, "SELECT note_id FROM notes WHERE image_sha256 = ?", [sha256])
+    return rows[0][0] if rows else None
+
+
+def save_note(db_path, note, image_sha256, image_path, user=None):
+ 
+    rows = note.rows()
+    with duckdb.connect(str(db_path)) as con:
+        con.begin()
+        try:
+         
+            for row in rows:
+                row["article"] = vocabulary.resolve(con, row["article"])
+
+            note_id = con.execute(
+                "INSERT INTO notes (image_sha256, image_path, confirmed_by) VALUES (?, ?, ?) "
+                "RETURNING note_id", [image_sha256, image_path, user],
+            ).fetchone()[0]
+            placeholders = ", ".join("?" * (len(ROW_COLUMNS) + 2))
+            con.executemany(
+                f"INSERT INTO inventory_lines ({', '.join(ROW_COLUMNS)}, note_id, line_no) "
+                f"VALUES ({placeholders})",
+                [[r[c] for c in ROW_COLUMNS] + [note_id, n] for n, r in enumerate(rows, 1)],
+            )
+            catalog.learn(con, note)
+            vocabulary.record(con, (r["article"] for r in rows), "delivery")
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return note_id
+
+
+def describe_note(db_path, note_id):
+   
+    supplier, lines = read(db_path, "SELECT any_value(supplier), count(*) FROM inventory_lines "
+                                    "WHERE note_id = ?", [note_id])[0]
+    return (supplier, lines) if lines else None
+
+
+def delete_note(db_path, note_id):
+   
+    with duckdb.connect(str(db_path)) as con:
+        con.begin()
+        row = con.execute("DELETE FROM notes WHERE note_id = ? RETURNING image_path",
+                          [note_id]).fetchone()
+        con.execute("DELETE FROM inventory_lines WHERE note_id = ?", [note_id])
+        con.commit()
+    return row[0] if row else None
+
+
+def update_work_item(db_path, note_id, line_no, work_item):
+   
+    return write(db_path, "UPDATE inventory_lines SET work_item = ? WHERE note_id = ? AND line_no = ? "
+                          "RETURNING line_no",
+                 [normalize_name(work_item), note_id, line_no]) is not None
+
+
+def stock_by_article(db_path):
+    
+    rows = read(db_path, """
+            SELECT article,
+                   sum(quantity)                     AS quantity,
+                   max(delivery_date)                AS last_delivery,
+                   arg_max(supplier, delivery_date)  AS supplier,
+                   arg_max(site, delivery_date)      AS site,
+                   arg_max(work_item, delivery_date) AS work_item,
+                   count(*)                          AS lines,
+                   count(*) FILTER (backorder)       AS backorders
+            FROM inventory_lines
+            GROUP BY article
+            ORDER BY article
+            """)
+    return [{"article": article, "quantity": quantity,
+             "delivery_date": last.isoformat() if last else None,
+             "supplier": supplier, "site": site, "work_item": work_item,
+             "lines": lines, "backorders": backorders}
+            for article, quantity, last, supplier, site, work_item, lines, backorders in rows]
+
+
+def stock_counts(db_path):
+    rows = read(db_path, """
+            SELECT article, quantity, counted_on, counted_by
+            FROM stock_counts
+            ORDER BY article
+            """)
+    return [{"article": article, "quantity": quantity,
+             "counted_on": counted_on.isoformat() if counted_on else None,
+             "counted_by": counted_by}
+            for article, quantity, counted_on, counted_by in rows]
+
+
+def save_stock_count(db_path, article, quantity, user=None):
+    """One count per article: a new one replaces the old."""
+    article = normalize_name(article)
+    if not article:
+        raise ValueError("no article")
+    if quantity is None:
+        write(db_path, "DELETE FROM stock_counts WHERE article = ?", (article,))
+        return None
+    write(db_path, """
+            INSERT INTO stock_counts (article, quantity, counted_on, counted_by)
+            VALUES (?, ?, current_date, ?)
+            ON CONFLICT (article) DO UPDATE SET quantity = excluded.quantity,
+                                                counted_on = excluded.counted_on,
+                                                counted_by = excluded.counted_by,
+                                                noted_at = now()
+            """, (article, float(quantity), user))
+    return article
+
+
+EXPORTS = {
+    "inventory": "SELECT " + ", ".join(EXPORT_COLUMNS)
+                  + " FROM inventory_lines ORDER BY note_id, line_no",
+    "purchase_orders": """SELECT h.list_id, l.line_no, l.article, h.list_date, h.site,
+                                 h.work_item, h.drafter, l.designation, l.reference, l.quantity,
+                                 l.stock, l.in_stock
+                   FROM purchase_orders h JOIN purchase_order_lines l USING (list_id)
+                   ORDER BY h.list_id, l.line_no""",
+    "bills": """SELECT bill_id, supplier, number, bill_date, month, due_date, currency,
+                       net, tax, total, site, order_ref, state, paid_on, source, sender
+                FROM bills ORDER BY bill_date DESC, bill_id DESC""",
+    "quotes": """SELECT q.quote_id, l.line_no, l.article, l.quantity, l.unit, l.designation,
+                        q.supplier, q.site, q.work_item, q.needed_by, q.state
+                 FROM quotes q JOIN quote_lines l USING (quote_id)
+                 ORDER BY q.quote_id, l.line_no""",
+}
+
+
+def export_query(db_path, dataset):
+    with duckdb.connect(str(db_path)) as con:
+        con.execute(EXPORTS[dataset])
+        return [column[0] for column in con.description], con.fetchall()
+
+
+def export_to_file(db_path, dataset, out):
+    
+    options = "(FORMAT parquet)" if out.suffix == ".parquet" else "(HEADER, DELIMITER ';')"
+    with duckdb.connect(str(db_path)) as con:
+        con.execute(f"COPY ({EXPORTS[dataset]}) TO '{out}' {options}")
+
+
+def export(db_path, out_dir):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = [out_dir / "inventory.csv", out_dir / "inventory.parquet"]
+    for path in paths:
+        export_to_file(db_path, "inventory", path)
+    return paths
+
+
+def purge_photos(db_path, images_dir, days=42):
+    """After `days`, a photo is packed into a small array in the database and the file goes.
+    A PDF is kept as the file it is, being small, until the retention years are up."""
+    from . import archive
+
+    removed, freed = 0, 0
+    if not images_dir.exists():
+        return {"files": 0, "bytes": 0, "notes": 0, "lists": 0}
+
+    def unlink(path_str, sha=None):
+        """True when the file is gone, so the row can stop pointing at it."""
+        nonlocal removed, freed
+        if not path_str:
+            return True
+        path = Path(path_str)
+        if not path.is_file():
+            return True
+        if path.suffix.lower() == ".pdf" and sha is not None:
+            return False
+        if sha:
+            raw = path.read_bytes()
+            packed = archive.store(db_path, sha, raw)
+            freed += max(len(raw) - (packed or 0), 0)
+        else:
+            freed += path.stat().st_size
+        path.unlink(missing_ok=True)
+        removed += 1
+        return True
+
+    with duckdb.connect(str(db_path)) as con:
+        old_notes = con.execute(
+            "SELECT note_id, image_path, image_sha256 FROM notes WHERE image_path IS NOT NULL "
+            f"AND confirmed_at < now() - INTERVAL {int(days)} DAY"
+        ).fetchall()
+        for note_id, path_str, sha in old_notes:
+            if unlink(path_str, sha):
+                con.execute("UPDATE notes SET image_path = NULL WHERE note_id = ?", [note_id])
+
+        old_lists = con.execute(
+            "SELECT list_id, image_path, image_sha256 FROM purchase_orders "
+            f"WHERE image_path IS NOT NULL AND created_at < now() - INTERVAL {int(days)} DAY"
+        ).fetchall()
+        for list_id, path_str, sha in old_lists:
+            if unlink(path_str, sha):
+                con.execute("UPDATE purchase_orders SET image_path = NULL WHERE list_id = ?", [list_id])
+
+        old_bills = con.execute(
+            "SELECT bill_id, image_path, image_sha256 FROM bills WHERE image_path IS NOT NULL "
+            f"AND added_at < now() - INTERVAL {int(days)} DAY"
+        ).fetchall()
+        for bill_id, path_str, sha in old_bills:
+            if unlink(path_str, sha):
+                con.execute("UPDATE bills SET image_path = NULL WHERE bill_id = ?", [bill_id])
+
+        kept = {row[0] for row in con.execute(
+            "SELECT image_path FROM notes WHERE image_path IS NOT NULL "
+            "UNION SELECT image_path FROM purchase_orders WHERE image_path IS NOT NULL "
+            "UNION SELECT image_path FROM bills WHERE image_path IS NOT NULL"
+        ).fetchall()}
+
+    for orphan in images_dir.glob("*"):
+        if orphan.is_file() and str(orphan) not in kept:
+            unlink(str(orphan))
+
+    archive.forget_old(db_path)
+    return {"files": removed, "bytes": freed, "notes": len(old_notes), "lists": len(old_lists)}
+
+
+def table_counts(db_path):
+    """Every table a question can be asked about, with how full it is."""
+    with duckdb.connect(str(db_path)) as con:
+        names = [row[0] for row in con.execute("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'main' ORDER BY table_name
+                """).fetchall()]
+        out = []
+        for name in names:
+            if name == "schema_migrations":
+                continue
+            rows = con.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
+            columns = [line[0] for line in con.execute(f"""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_schema = 'main' AND table_name = '{name}'
+                    ORDER BY ordinal_position
+                    """).fetchall()]
+            out.append({"table": name, "rows": rows, "columns": columns})
+    return out
+
+
+def storage(db_path, data_dir, images_dir):
+  
+    def size(path):
+        if path.is_file():
+            return path.stat().st_size
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+    usage = shutil.disk_usage(data_dir if data_dir.exists() else Path("/"))
+    photos = list(images_dir.glob("*")) if images_dir.exists() else []
+    counts = {table: read(db_path, f"SELECT count(*) FROM {table}")[0][0]
+              for table in COUNTED_TABLES}
+    return {
+        "database_bytes": size(db_path) if db_path.exists() else 0,
+        "photo_bytes": size(images_dir) if images_dir.exists() else 0,
+        "photo_count": len(photos),
+        "data_bytes": size(data_dir) if data_dir.exists() else 0,
+        "disk_total_bytes": usage.total,
+        "disk_used_bytes": usage.used,
+        "disk_free_bytes": usage.free,
+        "rows": counts,
+    }
+
+
+def record_reading(db_path, document, fields, corrected, lines):
+   
+    if fields <= 0:
+        return
+    write(db_path, "INSERT INTO readings (document, fields, corrected, lines) VALUES (?, ?, ?, ?)",
+          [document, int(fields), max(0, int(corrected)), int(lines)])
+
+
+def accuracy(db_path, days=90):
+   
+    rows = read(db_path, f"""
+            SELECT CAST(measured_at AS DATE) AS day, count(*), sum(fields), sum(corrected)
+            FROM readings
+            WHERE measured_at >= now() - INTERVAL {int(days)} DAY
+            GROUP BY day ORDER BY day
+            """)
+    documents, fields, corrected = read(
+        db_path, "SELECT count(*), coalesce(sum(fields), 0), coalesce(sum(corrected), 0) "
+                 "FROM readings")[0]
+
+    series = [{"day": day.isoformat(), "documents": docs, "fields": seen, "corrected": fixed,
+               "accuracy": round(100 * (seen - fixed) / seen, 1) if seen else None}
+              for day, docs, seen, fixed in rows]
+    return {
+        "series": series,
+        "documents": documents,
+        "fields": fields,
+        "corrected": corrected,
+        "accuracy": round(100 * (fields - corrected) / fields, 1) if fields else None,
+    }
+
+
+def find_order_by_image(db_path, sha256):
+    rows = read(db_path, "SELECT list_id FROM purchase_orders WHERE image_sha256 = ?", [sha256])
+    return rows[0][0] if rows else None
+
+
+def save_purchase_order(db_path, data, image_sha256, image_path, user=None):
+    
+    with duckdb.connect(str(db_path)) as con:
+        con.begin()
+        try:
+            list_id = con.execute(
+                f"INSERT INTO purchase_orders ({', '.join(LIST_COLUMNS)}) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING list_id",
+                [data.get("list_date"), normalize_name(data.get("site")),
+                 normalize_name(data.get("work_item")), normalize_name(data.get("drafter")),
+                 image_sha256, image_path, user],
+            ).fetchone()[0]
+
+            bill = [(data.get("bill_company") or "").strip() or None,
+                    (data.get("bill_contact") or "").strip() or None,
+                    (data.get("bill_address") or "").strip() or None]
+            if any(bill):
+                con.execute("UPDATE purchase_orders SET bill_company = ?, bill_contact = ?, "
+                            "bill_address = ? WHERE list_id = ?", bill + [list_id])
+
+            lines = data.get("lines", [])
+            articles = [vocabulary.resolve(con, line["article"]) for line in lines]
+            con.executemany(
+                f"INSERT INTO purchase_order_lines ({', '.join(LIST_LINE_COLUMNS)}) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [[list_id, n, article, line.get("designation"), line.get("reference"),
+                  line.get("quantity"), line.get("stock"), line.get("in_stock")]
+                 for n, (line, article) in enumerate(zip(lines, articles), 1)],
+            )
+            vocabulary.record(con, articles, "list")
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return list_id
+
+
+def purchase_orders(db_path, limit=None):
+    
+    rows = read(db_path, """
+            SELECT h.list_id, h.list_date, h.site, h.work_item, h.drafter, h.image_path,
+                   h.created_by, h.contact_id, h.incoterm, h.ship_by,
+                   c.company, c.person, c.phone, c.email, c.address,
+                   list({'line_no': l.line_no, 'article': l.article, 'designation': l.designation,
+                         'reference': l.reference, 'quantity': l.quantity, 'stock': l.stock,
+                         'in_stock': l.in_stock} ORDER BY l.line_no) AS lines
+            FROM purchase_orders h
+            LEFT JOIN purchase_order_lines l USING (list_id)
+            LEFT JOIN contacts c USING (contact_id)
+            WHERE ? IS NULL OR h.list_id IN (SELECT list_id FROM purchase_orders ORDER BY list_id DESC LIMIT ?)
+            GROUP BY h.list_id, h.list_date, h.site, h.work_item, h.drafter, h.image_path,
+                     h.created_by, h.contact_id, h.incoterm, h.ship_by,
+                     c.company, c.person, c.phone, c.email, c.address
+            ORDER BY h.list_date DESC NULLS LAST, h.list_id DESC
+            """, [limit, limit])
+    return [{"id": list_id, "list_date": day.isoformat() if day else None,
+             "site": site, "work_item": work_item, "drafter": drafter,
+             "photo": bool(image_path), "created_by": created_by,
+             "contact_id": contact_id, "incoterm": incoterm,
+             "ship_by": ship_by.isoformat() if ship_by else None,
+             "contact": ({"company": company, "person": person, "phone": phone,
+                          "email": email, "address": address} if contact_id else None),
+             "lines": [l for l in (lines or []) if l.get("article") is not None]}
+            for (list_id, day, site, work_item, drafter, image_path, created_by, contact_id,
+                 incoterm, ship_by, company, person, phone, email, address, lines) in rows]
+
+
+def set_in_stock(db_path, list_id, line_no, in_stock):
+   
+    return write(db_path, "UPDATE purchase_order_lines SET in_stock = ? "
+                          "WHERE list_id = ? AND line_no = ? RETURNING line_no",
+                 [in_stock, list_id, line_no]) is not None
+
+
+def delete_purchase_order(db_path, list_id):
+    with duckdb.connect(str(db_path)) as con:
+        con.begin()
+        row = con.execute("DELETE FROM purchase_orders WHERE list_id = ? RETURNING image_path",
+                          [list_id]).fetchone()
+        con.execute("DELETE FROM purchase_order_lines WHERE list_id = ?", [list_id])
+        con.commit()
+    return row[0] if row else None
+
+
+def order_photo_path(db_path, list_id):
+    rows = read(db_path, "SELECT image_path FROM purchase_orders WHERE list_id = ?", [list_id])
+    return rows[0][0] if rows else None
+
+
+SNAPSHOT_LIMIT = 300 * 1024 * 1024
+
+
+def _snapshot(db_path):
+    """A copy of the database to ask questions of while a connection is held open on the
+    original, which would refuse a read-only open of the same file."""
+    with _anchor_lock:
+        anchor = _anchors[str(db_path)]
+        anchor.execute("CHECKPOINT")
+        folder = tempfile.mkdtemp(prefix="stock-ask-")
+        copy = Path(folder) / "ask.duckdb"
+        shutil.copyfile(str(db_path), copy)
+    return copy
+
+
+def run_readonly(db_path, sql, max_rows=500):
+    """One SELECT, on a database opened read-only with no access to files."""
+    copy = None
+    target = db_path
+    if str(db_path) in _anchors and Path(db_path).stat().st_size <= SNAPSHOT_LIMIT:
+        copy = _snapshot(db_path)
+        target = copy
+    try:
+        return _run_readonly(target, sql, max_rows)
+    finally:
+        if copy is not None:
+            shutil.rmtree(copy.parent, ignore_errors=True)
+
+
+def _run_readonly(db_path, sql, max_rows):
+    try:
+        with duckdb.connect(str(db_path), read_only=True,
+                            config={"enable_external_access": False}) as con:
+            statements = con.extract_statements(sql)
+            if len(statements) != 1:
+                raise QueryError("One query at a time.")
+            if statements[0].type != duckdb.StatementType.SELECT:
+                raise QueryError("Only read queries (SELECT) are allowed.")
+            con.execute(sql)
+            columns = [d[0] for d in con.description]
+            rows = con.fetchmany(max_rows + 1)  
+    except duckdb.Error as e:
+        raise QueryError(str(e)) from e
+    return QueryResult(columns, rows[:max_rows], len(rows) > max_rows)
+
+
+def notes_with_lines(db_path):
+    """Every stored note with its lines, newest first."""
+    rows = read(db_path, """
+        SELECT n.note_id, n.image_path, n.confirmed_by, n.confirmed_at,
+               any_value(d.supplier), any_value(d.delivery_date), any_value(d.order_date),
+               any_value(d.site), any_value(d.work_item),
+               list({'line_no': d.line_no, 'article': d.article, 'quantity': d.quantity,
+                     'backorder': d.backorder, 'designation': d.designation,
+                     'work_item': d.work_item} ORDER BY d.line_no)
+        FROM notes n JOIN inventory_lines d USING (note_id)
+        GROUP BY n.note_id, n.image_path, n.confirmed_by, n.confirmed_at
+        ORDER BY any_value(d.delivery_date) DESC, n.note_id DESC
+        """)
+    return [{"id": note_id, "photo": bool(image), "confirmed_by": by,
+             "confirmed_at": at.isoformat(timespec="minutes") if at else None,
+             "supplier": supplier,
+             "delivery_date": delivered.isoformat() if delivered else None,
+             "order_date": ordered.isoformat() if ordered else None,
+             "site": site, "work_item": work_item, "lines": lines}
+            for note_id, image, by, at, supplier, delivered, ordered, site, work_item, lines in rows]
+
+
+def inventory_rows(db_path):
+    """One flat row per article line, for the search screen."""
+    rows = read(db_path, "SELECT " + ", ".join(EXPORT_COLUMNS) + ", line_no "
+                         "FROM inventory_lines ORDER BY delivery_date DESC, note_id DESC, line_no")
+    keys = list(EXPORT_COLUMNS) + ["line_no"]
+    out = []
+    for row in rows:
+        item = dict(zip(keys, row))
+        item["delivery_date"] = item["delivery_date"].isoformat() if item["delivery_date"] else None
+        item["order_date"] = item["order_date"].isoformat() if item["order_date"] else None
+        out.append(item)
+    return out
+
+
+def export_all_tables(db_path, fmt):
+    """Every table of the database in one zip: one file per table, CSV (`;`) or Parquet.
+
+    Gives back the zip's bytes and the table names, in the order they were written."""
+    import io
+    import tempfile
+    import zipfile
+
+    if fmt not in ("csv", "parquet"):
+        raise ValueError(f"Unknown format: {fmt}.")
+    options = "(FORMAT parquet)" if fmt == "parquet" else "(HEADER, DELIMITER ';')"
+    body = io.BytesIO()
+    with tempfile.TemporaryDirectory() as folder, duckdb.connect(str(db_path)) as con:
+        tables = [row[0] for row in con.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'main' AND table_type = 'BASE TABLE' ORDER BY table_name").fetchall()]
+        with zipfile.ZipFile(body, "w", zipfile.ZIP_DEFLATED) as bundle:
+            for table in tables:
+                out = Path(folder) / f"{table}.{fmt}"
+                quoted = '"' + table.replace('"', '""') + '"'
+                con.execute(f"COPY {quoted} TO '{out}' {options}")
+                bundle.write(out, out.name)
+    return body.getvalue(), tables

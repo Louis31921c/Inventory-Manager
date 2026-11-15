@@ -1,0 +1,188 @@
+import getpass
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+APP = "stock-manager"
+
+
+def config_dir():
+    base = os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config"
+    return Path(base) / APP
+
+
+def default_data_dir():
+    base = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
+    return Path(base) / APP
+
+
+def settings_file():
+    return config_dir() / "settings.env"
+
+
+@dataclass(frozen=True)
+class SmsConfig:
+    provider: str
+    to: str
+    sender: str
+    account_sid: str
+    auth_token: str
+    webhook_url: str
+    webhook_token: str
+    max_per_hour: int
+
+    @property
+    def enabled(self):
+        if not self.to or self.provider == "none":
+            return False
+        if self.provider == "twilio":
+            return bool(self.account_sid and self.auth_token and self.sender)
+        if self.provider == "webhook":
+            return bool(self.webhook_url)
+        return False
+
+
+@dataclass(frozen=True)
+class MailConfig:
+    host: str
+    port: int
+    user: str
+    password: str
+    folder: str
+    security: str
+    insecure: bool
+    mark_read: bool
+    every_minutes: int
+    auto_read: bool = True
+    provider: str = ""
+    oauth: bool = False
+    client_id: str = ""
+    tenant: str = ""
+
+    @property
+    def enabled(self):
+        # Microsoft takes a token where everyone else still takes a password.
+        return bool(self.host and self.user and (self.password or self.oauth))
+
+
+@dataclass(frozen=True)
+class Config:
+    backend: str
+    gemini_api_key: str
+    openai_api_key: str
+    photo_retention_days: int
+    data_dir: Path
+    model: str
+    user: str
+    sms: SmsConfig
+    mail: MailConfig
+
+    @property
+    def db_path(self):
+        return self.data_dir / "inventory.duckdb"
+
+    @property
+    def images_dir(self):
+        return self.data_dir / "images"
+
+
+def _sms():
+    return SmsConfig(
+        provider=os.environ.get("SMS_PROVIDER", "none").strip().lower(),
+        to=os.environ.get("SMS_TO", "").strip(),
+        sender=os.environ.get("SMS_FROM", "").strip(),
+        account_sid=os.environ.get("TWILIO_ACCOUNT_SID", "").strip(),
+        auth_token=os.environ.get("TWILIO_AUTH_TOKEN", "").strip(),
+        webhook_url=os.environ.get("SMS_WEBHOOK_URL", "").strip(),
+        webhook_token=os.environ.get("SMS_WEBHOOK_TOKEN", "").strip(),
+        max_per_hour=int(os.environ.get("SMS_MAX_PER_HOUR", "6")),
+    )
+
+
+def _mail():
+    """A named provider fills in the server details; anything set by hand still wins."""
+    from .mailbox import preset
+
+    provider = os.environ.get("MAIL_PROVIDER", "").strip().lower()
+    known = preset(provider)
+    host = os.environ.get("IMAP_HOST", "").strip() or (known["host"] if provider else "")
+
+    security = os.environ.get("IMAP_SECURITY", "").strip().lower()
+    if security not in ("ssl", "starttls"):
+        security = known["security"] if provider else (
+            "starttls" if host in ("127.0.0.1", "localhost") else "ssl")
+
+    port = os.environ.get("IMAP_PORT", "").strip()
+    if not port:
+        port = known["port"] if provider else (1143 if security == "starttls" else 993)
+
+    insecure = os.environ.get("IMAP_INSECURE", "").strip().lower() in ("1", "true", "yes")
+    return MailConfig(
+        provider=provider,
+        host=host,
+        port=int(port),
+        user=os.environ.get("IMAP_USER", "").strip(),
+        password=os.environ.get("IMAP_PASSWORD", ""),
+        folder=os.environ.get("IMAP_FOLDER", "INBOX").strip() or "INBOX",
+        security=security,
+        insecure=insecure or (known["insecure"] if provider else False),
+        mark_read=os.environ.get("IMAP_MARK_READ", "1").strip().lower() not in ("0", "false", "no"),
+        every_minutes=int(os.environ.get("MAIL_EVERY_MINUTES", "15")),
+        auto_read=os.environ.get("IMAP_AUTO_READ", "1").strip().lower() not in ("0", "false", "no"),
+        oauth=os.environ.get("IMAP_OAUTH", "").strip().lower() in ("1", "true", "yes"),
+        client_id=os.environ.get("AZURE_CLIENT_ID", "").strip(),
+        tenant=os.environ.get("AZURE_TENANT", "").strip() or "common",
+    )
+
+
+def _who():
+    name = os.environ.get("STOCK_USER", "").strip()
+    if name:
+        return name
+    try:
+        return getpass.getuser()
+    except Exception:
+        return "?"
+
+
+def set_setting(key, value, path=None):
+    """Write one KEY=value into the settings file, replacing any line that set it."""
+    path = Path(path or settings_file())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    lines = [line for line in lines if not line.startswith(f"{key}=")]
+    from . import vault
+
+    # A secret is written encrypted; the running program keeps it in the clear, in memory only.
+    lines.append(f"{key}={vault.seal(str(value)) if key in vault.SECRET_KEYS else value}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+    os.environ[key] = str(value)
+    return path
+
+
+def load_config(data_dir=None, user=None):
+    from . import vault
+
+    kept = settings_file()
+    for path in (kept, kept.with_name(kept.name + ".bak")):
+        vault.seal_file(path)                   # an older file with a secret in the clear is encrypted now
+    load_dotenv(kept)
+    vault.unseal_environment()
+    here = Path.cwd() / ".env"
+    if here.is_file():
+        load_dotenv(here)
+    chosen = data_dir or os.environ.get("DATA_DIR") or default_data_dir()
+    return Config(
+        backend=os.environ.get("LLM_BACKEND", "claude").strip().lower(),
+        gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
+        openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
+        photo_retention_days=int(os.environ.get("PHOTO_RETENTION_DAYS", "42")),
+        data_dir=Path(chosen).expanduser(),
+        model=os.environ.get("LLM_MODEL", ""),
+        user=user or _who(),
+        sms=_sms(),
+        mail=_mail(),
+    )

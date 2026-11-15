@@ -1,0 +1,484 @@
+functionnalities to developp : 
+
+- more modules = the goal is to offer an app that manages inventory and centralizes procurement, smartly
+      [ still open: say which module you want next ]
+
+- DONE: a chatbot for discord companies groupchats: /basket-"website" + items, /purchase, /quote
+       quote = request only: article, quantity, unit (ml, m2, m3, kg, t, l, h, piece), supplier, site
+       (and the same bot on Slack, socket mode, two tokens; the words both doors say are
+        written once in chat.py. Either, both or neither runs, on what Settings holds)
+
+- DONE: connecting to outlook, gmail, proton, yahoo mail, apple email
+        (and Outlook without a password: Microsoft refuses one now, so the mailbox opens on
+         a token. Device code flow, your own Azure app id, the refresh token kept 0600 and
+         never shown back)
+
+- DONE: a new section : bills, tracked from the mailbox, with a cost per month indicator
+        (the cost per supplier and the list of stored bills were taken off again)
+
+- DONE: a rolling menu for purchase order = hover gives PO, quotes and bills
+
+- DONE: inventory counts itself from the input (supplier delivery notes) and the output
+        (customer purchase orders, shipped within 24h)
+
+- DONE: ddmrp landing page with 2 buffer graphs, then a roll-down for flow, safety stock watch, dots
+        (net flow no longer takes the shipped orders off twice; the left graph scales each
+        article to its own top of green, the right one runs either side of nought so a
+        shortage draws; DDMRP is named on the menu bar and that name carries the roll-down;
+        then the graphs were cut down to a zone strip and one slim line an article, and no
+        chart prints its numbers: point at a bar and they come up on it)
+
+- DONE: the sql screen lists every table name with its row count; click one to query it
+
+- DONE: route wrangler: save the yard, type the delivery addresses, shortest run by road
+        (Nominatim + OSRM, OpenStreetMap)
+
+- DONE: the PO part is the outbound/order to ship: a contact book (company, person, phone,
+        mail, address, incoterm, site), picked per order, with the ship-by day
+        
+- DONE: "Partly delivered" on the Inventory screen: every note with a backorder mark, the
+        missing articles, supplier, site and work item, with the expected day you type in
+
+- DONE: route wrangler: 2 Renault Partner + 1 Iveco Daily, each drawn as a shape, each with
+        its stops, its load against its capacity, the delivery windows and its own route
+
+- DONE: the purchase gate (the sealed log, not a blockchain: one local hash chain, no
+        network and no coin). A basket is free; buying is held by first article, new
+        supplier, a basket over 500 EUR, a line over twice the usual price, or a line with
+        no price at all. Claude reads the names and answers same / new / unsure with its
+        reason and approves nothing; you answer on the Waiting for you card on the landing
+        page. No expiry, a cancel instead, and a 10% price drift asks again. Prices come in
+        on the basket line: /basket "12 vis th 6x25 @ 0.11"
+
+- DONE: PO > contacts = type a company or a person, the whole line appears; no table
+
+- DONE: the Purchase orders name on the bar only opens the menu, it walks nowhere
+
+- DONE: Partly delivered = supplier, article, site / work item
+
+- DONE: each truck's own route is drawn under its shape
+
+- DONE: no distances, no load bars, no "its route", no table: the round is drawn under the
+        chosen truck and nowhere else
+
+- DONE: no load and no window column on the destination table
+
+- DONE: Scan a purchase order, Contacts and Stored PO each have their own line on the
+        Purchase orders menu, and each opens that card by itself
+
+- DONE: nothing to click: every order line is answered from the delivery notes, matched on
+        the site and the work item the note names
+
+- DONE: contacts = name and company, asked straight of supplier-contacts.csv, answered like
+        a query
+
+- DONE: the purchase orders card asks three things and nothing else: site, work item,
+        everything / in stock / to order. Nothing is listed until one of them is picked
+        (Stored PO was dropped from the menu: it held the same orders)
+
+- DONE: the left bar folds on its Stock Manager head; Sites is gone (the sites still roll
+        out of the Purchase orders menu) and New quote and Dots order took its place
+
+- DONE: the tool row carries nothing but Remember me and Exit, on the right
+        (the /n command field went with it; the F keys underneath still do the exports)
+
+- DONE: the landing logo is whole: the picture itself was a crop with the L and the S
+        running off its edges, and it now carries the same art the lock screen does.
+        The page is the window too, so no screen hangs under the function keys
+
+- DONE: Inventory rolls down to its three cards and shows one at a time; delivered lines
+        got the partly delivered shape: stat tiles, then a table that stays short
+
+- DONE: System and Help sit at the far end of the menu bar, over Remember me and Exit
+
+- DONE: two Claude agents instead of Dots: Plutus drafts the purchase order from the
+        planner's numbers, Terminus reads the names on the gate. One door, no API key, the
+        Claude command line this machine is signed in to. The ask button had been calling
+        /api/forecast/dotsDraft, which is no route, so it had only ever answered 404
+
+- DONE, as specified below: dots purchase gate
+                      [ still open: a spend ceiling per day or per week as a backstop, and
+                        what "place the order" is — a checkout Dots drives on the shop site,
+                        or a mail to the supplier. Until that is settled the approved order
+                        is built in the app and placed by hand, as before ]
+                      - gate fires when it's the first time and article is bought and when the supplier changes
+                      - for differences between inventory lines and purchase order lines, use the second AI to decide wether it's the same or not. ie : dots wants to order “CHEVILLE SPIT FIX 10x100” , but we know “343546 - CHEVILLE SPIT FIX 3 10X100” : a claude verification agent communicates with dots to confirm it can go on. Ideally it would work like a 2 factors authentification, my manual approval comes after.
+                      - so we have to create a verifcation agent within the software
+                      - basket over €500, or a line over 2× what that article normally costs fires the gate
+                      - create a small window on the landing page for me to approve
+                      - no expiry on the approval, but a cancel button
+                      - an approved gate let the bot place the order
+
+- DONE: a Blockchain screen on the bar: the two bots and what each has done, the sealed
+        log with the head of every seal, and the drafts Plutus wrote. It says at which
+        entry the chain stops holding when one is edited behind its back
+
+- DONE: Plutus takes an article as well as a site and a work item. Empty and it picks what
+        is thin; named and it reads those, part of a name being enough. An article you
+        typed is ordered unless there is a reason not to, and then the note says which and
+        why. Site and work item are the header of the order, not a filter
+
+- DONE: the blockchain icon shows the round, not the log. The sealed log table is gone;
+        the seven steps are drawn on a circle, the live one in red, redrawn every few
+        seconds while the screen is open. Step 2 names an article the shelf already holds
+        more than twice over, and Approve and Cancel sit on the step itself.
+        Numbered the way it is walked: read, check the shelf, Terminus, the decision,
+        waiting for you, the wallet, place the order. Drawn as a ring of wedges, and the
+        colour says one thing each: green is done, yellow is the one pending, red is a
+        fault (the seal not holding, or Terminus with no command line), pale is not
+        reached yet.
+        [ 6 (the wallet) and 7 (placing the order) are drawn dashed: nothing here holds
+          money or places an order with a supplier, so they are shown as part of the round
+          without being pretended. Step 5's "send me a message" is the message the chat
+          already gets when a basket is held; say the word for a DM instead ] 
+
+- DONE: a Waiting on you cell in blockchain: the held baskets with why each is held, what
+        Terminus made of it, and an Approve and a Cancel on the row; under them the baskets
+        /basket filled that /purchase never took (a basket is emptied when it becomes an
+        order, so whatever is still in one is whatever nobody bought)
+
+- DONE: the Blockchain name rolls down, the round staying as the screen itself: the menu
+        lists Waiting on you and What Plutus drafted
+
+- DONE: five shortcuts on the landing page, down the right of the logo, a fifth of its
+        height each, icon and name: Slack, Discord, Outlook, Proton Mail and the supplier
+        contact sheet. The window is WebKit, so none of them is a link: the page asks the
+        server by name and the server hands the target to the desktop (xdg-open), which
+        opens the browser for the four and LibreOffice for the csv. The names are fixed
+        server side, so the page never sends a url or a path of its own. The sheet's path
+        is CONTACTS_CSV in the settings, and beside the database when that is empty
+
+- DONE: a click on any of the seven wedges opens a small window with the audit of that
+        step: reading input (what waits in a basket, every basket read for /purchase),
+        the inventory check, Terminus's verdicts, the decisions to hold, the approvals and
+        cancels by a person, and for placing order the baskets that became purchase
+        orders. Each row is when, who, what and the detail, newest first. It is built from
+        what is really written down, so the two unbuilt steps say so rather than invent a
+        past. The wheel is redrawn only when it changed, so a click is never lost to the
+        refresh that runs every few seconds
+
+- DONE: a database that does not exist yet is filled, not left blank: half a year of
+        made-up paperwork ending today (notes, orders, quotes, bills, counts, a contact a
+        supplier, baskets and held requests for the Blockchain screen), in about twenty
+        seconds, once. A database that exists is never touched, and SAMPLE_DATA=0 starts
+        empty. The generator moved into the package (inventory/simulation.py) so a pipx
+        install has it; sample_data/make_sample_data.py is now a wrapper around it. The
+        pour holds one connection open, which took it from 91 seconds to 15
+        
+- DONE: for contacts , when I leave the fiels blank and click enter, "200 line(s) found, the first 50 are shown.". I don't want any response when no field is filled. Instead, add a little "show all" button
+
+- DONE (run `stock sample` with the app closed): make up 5 quotes to see if "quotes request" is working fine. also make up some data for "partly delivered" and "bills" and "blockchain"
+
+- DONE: photos are kept small (inventory/photos.py): turned upright, cut to 1600 px on the
+        long side, recompressed, metadata dropped, so a 2 MB phone photo is about 250 KB; the
+        41 photos here went from 67 MB to 4 MB. A raw pixel array would be bigger than the
+        file (a 12 MP photo is 36 MB of numbers), the saving is in the cutting down and the
+        compression, and none of it needs a cloud. The model still reads the photo as it was
+        taken. `stock shrink` does the same to the photos already stored, in place
+- idea to developp : for images storage (delivery note snap), can't we store them as an array ? like I'd do in machine learning . It would take less space and probably not need a cloud service
+
+- DONE: the mailbox reads the delivery notes by itself (Settings, Mailbox, "Store notes by
+        itself", on by default). Every check, each attached pdf or photo is read by the model
+        and, when it reads clean, stored as a note signed MAIL. A note with anything to fix,
+        a spreadsheet, or a file or subject that says facture, invoice, bill, avoir, devis or
+        quote stays in the queue with the reason beside it. The mailbox was already
+        connected (IMAP, Proton Bridge, Gmail, Outlook...); what was missing was the reading
+- for files importation, I'd like it to be directly connected to the mail provider : it reads delivery notes attached files
+
+- DONE: Purchase orders screen, new card "To order, waiting" (inventory/reorder.py, table
+        order_queue). Every hour, and on the "read what is to order" button, Plutus reads
+        every line ticked "to order" into the queue with its due day, fifteen days on. A
+        line ticked back to in stock leaves the queue. Once due, the lines become one
+        purchase order a site and work item, drafted by Plutus (same article merged),
+        or at once with "order what is due". It writes a list, nothing is bought from it
+- in purchase orders>purchase orders , I'd want plutus to read everything that's "to order" and store it in a database, then order it AFTER 15 days
+
+- DONE: when I click on plutus order, I don't wanna see the buffers
+
+- DONE: the contacts (the supplier list, the csv search and the contact book) carry a
+        "Lead time" column learned from the delivery notes: the days to plan around (the
+        delay one delivery in five exceeds) and how many deliveries it rests on; a supplier
+        with fewer than 3 deliveries says too few
+- within the suppliers database, create a lead time column based on historical data
+
+- DONE: DDMRP, card "Orders to come": what the buffers say to order now (red and yellow
+        zones, in packs where a pack size is known), what waits in the 15-day queue, and
+        what was sent and has not arrived, each with the day to order and the day to expect
+        it, counted in the supplier's working days and cut-off hour
+- within ddmrp, add a table with all the order to come, planned by the bot
+
+- DONE: landing page dashboard: line down, critical and at risk counts, shortage units, and
+        a table per short SKU with its status, units short, the day it is needed, the work
+        it blocks (from reservations and lines ticked to order), the root cause (held for
+        approval, order sent without confirmation, supplier ETA after the need date, order
+        late, drafted not sent, in the 15-day queue, part delivered, or no order placed), the
+        supplier, its lead time and the action to take; below it the open actions
+- on the landing page add a dashboard with : shortage at risk critical and line down, sku's shortage units blocking next weeks activity and their need date and root cause and supplier lead time, open actions
+
+- DONE: landing page "Autonomy" figure, two decimals out of 100, live. Rates the ARCHITECTURE
+        as a logistics manager, not what was done today: 19 capabilities in four areas with
+        fixed weights, each on a 0 to 4 ladder (not built, records only, assisted, supervised,
+        autonomous), points = weight x level / 4. It moves when a module is built or a mailbox,
+        outgoing mail, alert channel or the Claude command line is switched on. "How it is worked
+        out" lists the biggest gaps by points to win, each with the step that would close it
+- on the landing page, add a live software autonomous-ness rate out of 100 with 2 digits : I wanna see how efficient it would be to replace a logistics manager employee
+
+- DONE (asked in chat): alerts that push to Slack, SMS or mail (NOTIFY_VIA) plus a daily digest at
+        NOTIFY_HOUR; quote answers with price, lead time and validity, side-by-side comparison and
+        an award that becomes the agreed price and supplier; pack sizes and minimum orders; a
+        working calendar (French holidays, own closures, per supplier cut-off and shut days) used by
+        every expected date, and exchange rates for foreign bills; delivery to sites with proof of
+        delivery, a delivery note with a box to sign, labels, and the order as a PDF on supplier
+        mails; disputes followed through to the credit note; photos packed into small black-and-white
+        arrays after 42 days and kept 10 years (`stock archive` does it now)
+
+- DONE (asked in chat): feedback loop. Per-article learned factors (inventory/feedback.py, table
+        tuning): a quantity cut or removed on a Plutus order lowers its next proposal, a raise lifts it;
+        an article a fresh hand count found empty gets 15% more safety stock, short counts 5%, calm
+        ones ease back; refused baskets are remembered and told to Plutus. Applied in the planner and
+        the DDMRP buffers. The Plutus card lists every factor with its reason and a "forget" button
+- DONE (asked in chat): Plutus orders, "Bill to" section: company name, contact name, address.
+        Remembered for the next order, saved on the purchase order, printed on the supplier mail
+        and the order PDF
+
+- DONE (asked in chat): policies (inventory/policies.py) and charters for the two bots
+        (inventory/charters.py). Policies: send an order, send a reminder, approve a held basket,
+        inside limits; kill switch off by default; dry run for 3 days before live; 5000 EUR hard
+        ceiling; working days and hours only; price band; minimum history; budgets; Terminus must
+        have read the names as the same; every decision logged. Charters: what each bot is free to do,
+        must never do, and numeric limits a person sets, added to the prompt and enforced again in
+        code on the answer. Settings, Policies and Rules for the two bots
+
+- DONE (asked in chat): Plutus orders from the DDMRP (inventory/replenish.py): every hour it writes one
+        purchase order for the articles in their red or yellow zone, the buffer's own quantity, in
+        whole packs, leaving alone what is already on its way; on/off and "order now" on its card;
+        the model path gets the DDMRP block and a narrow band around its number. Terminus approves
+        and cancels (inventory/judge.py): off, then dry run, then live after 3 days; approves when
+        every line is the same article inside its limits; cancels a repeat, a twice-refused article
+        or a stale basket; signed TERMINUS. Both charters in the bot-rules folder updated
+
+- DONE (asked in chat): Plutus orders on a rhythm, not every hour: one big consolidated order every 14
+        days (Monday, working hours) for every counted, in-use article that would fall under the top of
+        yellow before the next sitting, up to the top of green plus the cycle's use; between sittings
+        only a small urgent order, once a day, for an article already in red. Common sense built in:
+        leave alone what is on its way, held-back stock is not free, 90-day cover limit, no use in 8
+        weeks means no order, a supplier under 30 EUR waits, books below zero are ordered from zero
+        (one buffer at most) and a count is asked for. Written in bot-rules/plutus.md
+
+- DONE (asked in chat): Plutus is autonomous, from a wallet a person funds (inventory/wallet.py,
+        purchasing.py, payments.py): it sends its orders to the suppliers, approves and places baskets
+        (steps 6 and 7 of the round are built), and pays matched bills. Hard ceiling is the wallet
+        (balance less commitments); beyond it Plutus's own limits in bot-rules/plutus.md; mode off, then
+        dry run, live only after 3 days of that. A payment is instructed into a SEPA bank file and a bill
+        turns paid when the bank taking the batch is confirmed: the program does not move money at a bank
+
+- DONE (asked in chat): a check that fails shows in the landing dashboard's Open actions ("Plutus could not send an
+        order ... reasons"), and clears when settled. Plutus's own orders follow the blockchain process:
+        each order enters the gate as a request, Terminus reads it for sense first (inventory/coherence.py:
+        names known, no duplicate, the buffers still ask for it and for that quantity, supplier, price, whole
+        packs), Plutus approves what clears it, the wallet covers it, then it is sent and marked ordered.
+        Also fixed: Plutus's own supply orders were being counted as stock shipped out
+
+- DONE: Partly delivered has no "arrived" button: a waiting line settles itself when a later delivery
+        note brings the same article for the same supplier, site and work item (backorders.reconcile)
+- in the "partly delivered" table, remove the "arrived" button - it should automatically know when it's arrived with the delivery note
+
+- DONE: Answers/comparison/awards, Suppliers, Deliveries to sites and To order, waiting are gone from
+        the screens (cards and their page code; the server side still runs). Bills against deliveries is
+        two buttons that each open one list: delivered, not billed / billed, not delivered
+- within purchase orders : remove "answer, comparison, award" , "suupliers", "deliveries to sites", "to order, waiting". For "bills against deliveries", just add two developp buttons for "delivered, not billed" and "billed, not delivered", remove the rest. 
+
+- DONE: the buffers show only on the DDMRP name (bar or left tree); each entry under it shows its own
+        card alone
+
+
+- DONE: the first 9 System entries are off the menu (Pack sizes to Photo archive). Their cards stay in
+        the page, hidden, so wallet, policies and rules still load but cannot be reached
+
+
+- DONE: the Bugs dashboard button is on every screen; from another screen it walks home and opens it
+
+
+- Overall you've got to be more efficient in the UX/UI, sometimes it's messy and can lead to misunderstandings
+
+- DONE: All purchase orders has a run button: it lists every order whatever is filled in
+        (a pick from a menu still lists by itself)
+- within purchase orders>all purchase order , add a "run" button to execute the query, even if every field are not filled
+
+- DONE: the two Bills buttons are the heading's size and colour, no count, no tick; the open one is underlined
+- within purchase order>bills , for the bills deliveries buttons, make them the same size and color as "BILLS AGAINST DELIVERIES" , remove the number count and the "to tick" case
+
+- DONE: Plutus orders card is the three fields, Bill to and the draft button, nothing else. No Refresh
+        button on the DDMRP screens: it rereads every 30 seconds while open and keeps a draft on screen
+- within "plutus order", just leave the fieldtexts, and the fieldtexts for "bill to" + draft the order. Remove the refresh button, it should be automatic
+
+- DONE: Plutus closes the loop with suppliers (replies.py, purchasing.py): supplier replies are read for a new
+        date, quote prices, credit notes and questions; it chases silent orders (twice at most), reminds a
+        supplier of owed lines weekly, and disputes bills that disagree with their deliveries and mails them,
+        each inside limits (send_chases, max_chases, send_disputes, dispute_max_claim) and the dry-run gate
+- DONE: placing for real (channels.py, bankdrop.py): a supplier can take its orders as a signed JSON webhook
+        instead of mail, and the payment file goes to the bank by SFTP with the report read back; System,
+        Connections holds both. A shop checkout and a bank API are not built
+- DONE: site requests (requisitions.py): Site requests screen and /request in Discord and Slack; stock held
+        back first, the rest ordered through the gate, a state per line, closed by itself, late ones alerted
+
+- DONE: trustworthy stock (receiving.py, counting.py): every delivered line is checked against the orders and
+        given a place that is learned; a blind daily count list, a second count before a big gap moves the books,
+        and the likely cause of the gap named; disagreeing counts go to a person
+
+- REMOVED (changed mind): the dispatcher (planning the day's deliveries) and carriers (booking and tracking).
+        Their code, screens and tables are gone; the old Deliveries to sites paperwork is as it was
+
+- DONE: SQL is off the menu bar and the left panel; Terminal stands where it was. It opens a terminal
+        window outside the app (konsole, else gnome-terminal, mate, xfce, xterm) in the program's
+        folder, with stock and stock-tui first on its PATH. Admin only (POST /api/terminal). The SQL
+        screen is still on F1. While the window is open the database is held, so a stock command
+        that opens it waits until the window is closed
+- let's remove the sql icon, insteaad add a link that opens a terminal
+
+- DONE: the left panel shows names only (Home, Import data, Inventory...); the codes still work typed
+        in the command field (MMBE, MIGO, ME2N, ME4N, ME41, ME51N, MIRO, MD04, ME59N, VT01N, SPRO)
+- on the left vertical panel, remove the code names like "migo", "me41" ...
+
+- DONE: one Help left, the one on the menu bar; the yellow ? on the toolbar is gone
+-there's two help buttons- remove the one with the yellow icon
+
+- DONE: Print and Find are off the toolbar
+- remove print and find
+
+- DONE: the "licence" link at the end of the function keys is gone; Help on the menu bar opens the same page
+- the "licence" and "help" button lead to the same licence. remove the "licence" button
+
+- DONE: the five shortcuts (Slack, Discord, Outlook, Proton Mail, Supplier contacts) stand in one row along
+        the bottom of the landing page, just above the function keys; the logo and the cards use the full width
+- instead of displaying the apps ( slack [...] suppliers contact) vertically, display them horizontally at the very bottom of the landing page, just above the F bar
+
+- remove "scan a purchase order" , "to put away" and "count today"
+
+- remove "scan a delivery note" , instead, make it a manual input with fieldtexts
+
+- remove "mailbox" from the "input" icon , we already have the app link to click on fr that
+
+- DONE: the menu bar is reordered after reordering.ods, seven menus left to right, then System and Help:
+        Monitor: Purchase round, Held baskets, Plutus draft, Bugs dashboard, Orders to come, Import files, Mailbox
+        Analysis: Terminal, Quotes
+        Order: DDMRP buffers, Purchase orders (sites and work items roll out of it), FLOW, Safety stock watch,
+               Lead times, Plutus orders, Contacts, Scan a purchase order
+        Delivery: Partly delivered, Delivered lines, Bills, Scan a delivery note
+        Inventory: In stock, To put away, Count today
+        Dispatch: opens Site requests          Ship: opens Route wrangler
+        Terminal and Site request each appear once. Bugs dashboard left the toolbar for Monitor. The left
+        panel is Home, the same seven folders, then Settings. The command field codes still work
+- reorder the rolling menu bar as in reordering.ods
+
+- DONE: "Baskets needing your approval" keeps to a quarter of the screen's width, on the left (360 px at least)
+- see how much the "baskets needing your approval" takes space ? make it only take 1/4 of the screen
+
+- DONE: the menus stay open when the pointer moves from one name on the bar to the next (leaving a menu
+        closed every menu, the one just opened included)
+- the rolling menus don't seem to work well - when I hoover from one to another, they collapse.
+
+- DONE: the F bar reads F1 SQL, F2 In stock, F3 Purchase orders, F4 Export CSV, F5 Export Parquet, F6 Orders
+        to come, F7 Bugs dashboard, F8 Remember me, F9 Exit. F4 and F5 export every table of the database:
+        one zip, one file per table (CSV with ; or Parquet), since neither format holds sheets.
+        Admin only (/export/all/csv.zip, /export/all/parquet.zip): the tables carry bank details and the audit
+- for the F bar, re arrange it like this : F1 sql , F2 in stock , F3 purchase orders, F4 export csv, F5 export parquet , F6 orders to come , F7 bugs dahboard, F8 remember me, F9 exit
+- for f5 and F4 , export all data from all tables into one file with different sheets
+
+- DONE: In stock is seven columns: Material, SKU (what the shelf holds, a hand count winning), Value per SKU
+        (the last price seen), Total value, Lasts for (shelf / the DDMRP daily use, red under a week), On its
+        way (sent or confirmed to a supplier, with the first day expected) and Weekly movements (in / out a
+        week, over the last eight weeks). What runs out first is at the top; the table fills the screen.
+        Figures above: materials, stock value, without a price, below zero (inventory/shelf.py)
+- In stock table: article (name it material); on the shelf (name it sku); value per sku; total value; lasts for; on its way; weekly movements
+
+- DONE: In stock: "SKU" is called "Units in stock" and "Value per SKU" is called "Value per unit"
+- change sku for the number of units in stock
+
+- for plutus order, when I enter an article name, select the supplier with the lowest price per unit (order by price asc limit 1); site and work item are not necessary, I fill them if I want
+- give "bill to" its own link in the order rolling menu, not sharing a page with plutus orders
+
+- DONE: Plutus orders: the supplier on each drafted line is the cheapest the app knows (each supplier at its latest price, or an active agreement; lowest per unit wins; inventory/prices.py cheapest). Naming one article shows "Cheapest supplier: X at N per unit" under the field (/api/cheapest-supplier/{article}). Site and work item are marked (optional) and were already saved empty. Bill to is its own card, with its own line under Order after Plutus orders.
+
+- contacts: the "show all" button cannot be collapsed; remove "scan a purchase order"; under monitor rename "purchase round" to "blockchain"; remove "dispatch", it should be automated when the purchase orders are uploaded
+
+- DONE: Contacts: "show all" turns into "hide all" and folds the list back up. Scan a purchase order is gone from the Order menu. Monitor says "Blockchain" where it said "Purchase round". The Dispatch menu is gone (its one entry, Site requests, stays on the left panel). Dispatching on upload is not built: /api/dispatches still waits for a screen or an automatic call.
+
+- remove "STK (1) 100 / User admin / localhost / INS" from the bottom bar (visually)
+
+- DONE: the status bar shows only its message; the four system boxes are gone.
+
+- build: an exception inbox; auto-approve of matching bills; auto-dispatch when purchase orders are uploaded; weigh lead time (from history) when picking a supplier
+
+- DONE: Inbox (Monitor, first line): what needs a person (the notices watch.py already kept, now on a screen with an open button per kind) and what ran without one (Plutus/Terminus actions from policy_log, automatic dispatches, matched bills waiting for Plutus to pay). /api/inbox.
+- DONE: Matching bills: nothing new was needed. Plutus already pays a bill that matches its deliveries inside its limits (purchasing._pay_bills, pay_bills = 1); the Inbox now says how many and how much.
+- DONE: Auto-dispatch: when a list with a site is stored, the lines the shelf covers in full go out on the next working day in the van with the fewest stops (outbound.auto_dispatch, created_by AUTO). Lists with no site and Plutus supplier orders are left alone. The rest stays on the order for the buyer.
+- DONE: Supplier pick weighs lead time: price x (1 + 0.5% per day), the days being the 80th percentile of that supplier's real deliveries (leadtimes); a supplier with fewer than 3 deliveries counts at the middle of the others. The draft and the hint under the article field say which cheaper supplier lost and why (prices.cheapest, LEAD_DAY_COST).
+
+- DONE: the Order menu line for the order card is called "Place an order" like its card (it said Plutus orders and found nothing); site and work item say (optional) again.
+
+- build the anomaly engine: find supply chain faults by statistics
+
+- DONE: Anomaly engine (inventory/anomalies.py, fed into the notices by watch.py, so they reach the Inbox): an article's last week of use against its own weeks (spike or collapse), a supplier whose latest deliveries are slower than its own habit, a price far from its own history either way, and the same bill entered twice (same number, or same amount on the same day). Robust statistics (median and MAD, z of 3.5), a minimum of history before anything is called odd, and an impact on every finding. tests/test_anomalies.py plants each fault in a quiet history and checks that exactly those are found.
+
+- put an anomaly page under the monitor rolling menu
+
+- DONE: Monitor has an Anomalies line (after Inbox): every finding of the anomaly engine with its kind, impact (EUR, or days for a slow supplier) and severity, costliest first (/api/anomalies).
+
+- Policies and bot-rules: add "Guardrails" above Remember me and Exit, where I write in plain text the limits and rights of Plutus and of the verification bot (Terminus), and the AI sticks to them
+
+- DONE: Guardrails button on the toolbar, left of Remember me / Exit, opens a screen with one text box for Plutus and one for Terminus (stored in bot_guardrails, admin only: /api/guardrails). The words are added to each bot's charter in the model's instructions, and a second look (charters.review) holds what the bot is about to do against them: a Plutus order line that breaks a rule is cut and the cut says which rule, a name Terminus would approve is left to a person. If the second look cannot be made, the numeric limits still apply. Numbers stay under Rules for the two bots.
+
+- the Guardrails button goes above Remember me and Exit, not on their left
+
+- DONE: Guardrails is in the title bar row, at the right end, straight above Remember me / Exit.
+
+- guardrails should be a double entry table: plutus, terminus by rights, limits
+
+- DONE: Guardrails is a table, a row for Plutus and one for Terminus, a column for Rights (what it may do) and one for Limits (what it must not do), each cell plain text (bot_guardrail_texts, migration 34; /api/guardrails/{bot}/{rights|limits}). One button saves the table. Both columns go to the model and to the second look. Text saved with the first one-box version is kept under Rights.
+
+- guardrails screen: shorter intro; the rows are called Purchase bot and Double check bot
+
+- DONE: Guardrails intro reads "Write in plain words new limits/ rights for each bot..."; the rows are Purchase bot (Plutus) and Double check bot (Terminus).
+
+- Guardrails screen: heading is the plain-words sentence; columns Rights / Limits; placeholder examples removed.
+- DONE: kept, and closed the textarea tags the edit had cut off.
+
+remove "to put away" and "count today" from the Inventory menu
+- DONE: both lines are gone from the menu (the screens stay in the page); Inbox receiving notices now open In stock.
+
+create 5gb of data. it should supply every functionalities. Of course it must be relevant and numbers must make sense
+- DONE: sample_data/make_big_data.py (+ make_big_tables.py, make_big_more.py, make_big_photos.py) builds a separate DATA_DIR: 15 years, 9.4k articles, 41 suppliers, 180 sites, 1.1M delivery lines, 2.3M order lines, bills/payments/disputes, Plutus pilot wallet, sealed audit and gate chains, 106k archived scans (about 4 GB). Made at ~/Desktop/Stock-Manager-5GB (not in git). Found on it: the price detector took 4 minutes and the consumption detector flags 9% of articles.
+
+- remove "Write in plain words new limits/ rights for each bot..." from the System rolling menu
+
+- DONE: the guardrails card is off the System menu (retired like the nine before it; the card stays in the page).
+
+- DONE: the Guardrails toolbar button opens its card again; only its System menu line stays removed (menu spec noLine, not retired).
+
+fix the anomaly engine: too slow and too many alarms on the 5 GB data
+- DONE: prices read in one query and judged per supplier (240 s to 0.3 s), a cheap-article change under 0.10 EUR is rounding; consumption spikes must also beat the biggest earlier week, collapses only count for steady movers. On the 5 GB data: 1029 findings in 240 s became 142 in 2 s. Two tests added.
+
+upload the 5gb data to the app. it should be running on it.
+- DONE: the app now runs on ~/Desktop/Stock-Manager-5GB (DATA_DIR in stock-manager/.env; your real data is still in stock-manager/data, put DATA_DIR=./data back to return to it). Opening it exposed what a long history costs, all fixed: start-up (catalog backfill one insert a name, 43 s to 4 s), DDMRP and forecast read the last year not fifteen (typical week once per article), three-way match by slices (24 s to 4 s) and once per scan, the landing page and Orders to come (one lookup for all articles, open mail threads read once), the Inbox, and /api/data sends the latest 500 notes and orders. Migration 35 adds indexes. Every screen answers in under 7 s, most in under 1 s.
+
+- anomalies and held baskets lead to the same page, not normal
+
+- DONE: Held baskets and Plutus draft show only their own card (they also showed the Blockchain card); Blockchain shows its card again. Anomalies has its own card on the DDMRP screen.
+
+- now nothing works on monitor
+
+- DONE: menus: pressing a menu name with the mouse closed it again, because the pointer entering had already opened it, so no menu stayed open to be clicked. A press now keeps it open; leaving, Escape and picking a line close it.
+
+- check everything on Monitor, then every feature of the software, no exception
+
+- DONE: Full check on a copy of the app with the sample data. Every menu, left panel line, F key, command code (MMBE..SMEN) and the System menu opens its screen with no network or script error; all 69 GET routes answer; the two zip exports download. 265 tests pass. Two tests that failed only because they used fixed November dates against the real clock now count from the real day (Terminus stale basket, Plutus chases). Left: two Slack tests, because the slack_sdk library is not installed in the venv.
+
+[2026-11-14] Request: a loading circle while a page loads.
+- DONE: a ring shows in the middle of the screen when a request takes over a quarter second, and goes away when it ends.
+
+[2026-11-14] Request: loading has to be much quicker (5 GB test data).
+- DONE: the buffer-order screen took over 20 minutes on 7,000 articles and now takes 3 seconds (the "already on its way" checks and pack sizes are read once, not per article). The heavy screens are kept for five minutes, cleared on any change, and worked out in the background a few seconds after start-up, so the first click is quick too.
+
+[2026-11-14] Request: find every implicit state machine; one decision that helps users, developers and agents, breaking nothing; humanize the code.
+- DONE: inventory/states.py writes down all 17 life cycles (steps in plain words, allowed moves, start and end states) in one place; STATES.md and GET /api/states serve it; tests fail if the code writes a state the map does not know, if a table's start state differs, or if STATES.md is stale. move() takes one guarded step in a single update. Two existing updates (count tasks done, stock released) now use it with identical behaviour.

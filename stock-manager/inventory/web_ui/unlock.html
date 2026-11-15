@@ -1,0 +1,97 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAP Logon - Stock Manager</title>
+<link rel="icon" href="/icon.png">
+<style>
+  @import url("/sap.css");
+
+  body {
+    align-items: center;
+    background: linear-gradient(160deg, #e8eaec 0%, #cfd8e3 60%, #b9c8da 100%);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  /* The logo sits behind the box, not under the words: its own layer, 65% opacity. */
+  body::before {
+    background: url("/logo.png") center / min(620px, 72vmin) no-repeat;
+    content: "";
+    inset: 0;
+    opacity: .65;
+    pointer-events: none;
+    position: fixed;
+    z-index: 0;
+  }
+  main {
+    background: #fff;
+    border: 1px solid #a6a6a6;
+    box-shadow: 2px 3px 10px rgba(0, 0, 0, .25);
+    position: relative;
+    width: min(420px, 100%);
+    z-index: 1;
+  }
+  h1 {
+    background: linear-gradient(180deg, #5b8cc4, #2c5d99);
+    color: #fff;
+    font-size: 13px;
+    margin: 0;
+    padding: 6px 10px;
+  }
+  form { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; }
+  .row { align-items: center; display: flex; gap: 10px; }
+  label { color: #1f3b5c; flex: 0 0 90px; font-size: 12px; }
+  input { flex: 1 1 auto; width: auto; }
+  button {
+    align-self: flex-start;
+    background: linear-gradient(180deg, #fdfdfd, #dfe2e5);
+    border: 1px solid #8d9196;
+    border-radius: 2px;
+    color: #000;
+    cursor: pointer;
+    font-family: Arial, "Liberation Sans", sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 4px;
+    padding: 4px 16px;
+  }
+  button::before { color: #0a7a2f; content: "\2713 "; }
+  button:hover { background: linear-gradient(180deg, #fff, #cfe0f2); border-color: #1a5fa8; }
+  .error { border-left: 3px solid #b00020; color: #b00020; font-size: 12px; padding: 4px 10px; }
+  .hint { color: #4a4a4a; font-size: 11px; padding: 0 20px 16px; }
+  .cursor { display: none; }
+</style>
+
+<main>
+  <h1>Stock Manager </h1>
+  <form method="post" action="/unlock">
+    <div class="row">
+      <label for="user">User</label>
+      <input id="user" name="user" autocomplete="username"
+             autocapitalize="characters" USER_STATE>
+    </div>
+    <div class="row">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="PASSWORD_MODE"
+             required autofocus>
+    </div>
+    CONFIRM_ROW
+    <button type="submit">BUTTON_LABEL</button>
+  </form>
+
+</main>
+
+<script>
+  const boxes = [...document.querySelectorAll("main input")];
+
+  for (const box of boxes) {
+    box.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = boxes[(boxes.indexOf(box) + step + boxes.length) % boxes.length];
+      next.focus();
+      next.select();
+    });
+  }
+</script>

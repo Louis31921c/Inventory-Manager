@@ -1,0 +1,58 @@
+[project]
+name = "stock-manager"
+version = "1.0.0"
+description = "Read delivery notes and handwritten hardware lists from photos into a local DuckDB file, from the terminal."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+classifiers = ["License :: Other/Proprietary License", "Private :: Do Not Upload"]
+authors = [{ name = "@louis31921c" }]
+keywords = ["inventory", "duckdb", "terminal", "ocr", "deliveries"]
+dependencies = [
+    "duckdb>=1.1",
+    "pydantic>=2",
+    "python-dotenv>=1",
+    "openpyxl>=3.1",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+    "pillow>=10",
+    "reportlab>=4.0",
+    "cryptography>=43",
+]
+
+[project.optional-dependencies]
+gemini = ["google-genai>=2.24"]
+discord = ["discord.py>=2.3"]
+# Brotli is pinned up because some distributions ship a 1.1.0 whose Decompressor.process
+# takes only the data, while aiohttp calls it with a length as well: any brotli answer
+# from Slack then dies in the socket rather than in anything you can see.
+slack = ["slack-bolt>=1.18", "Brotli>=1.2"]
+outlook = ["msal>=1.28"]
+# The sample documents: PDFs of the year's paperwork and the gate's proofs.
+documents = ["reportlab>=4.0"]
+dev = ["pytest", "pytest-asyncio", "pillow", "httpx"]
+
+[project.scripts]
+stock-manager = "inventory.desktop:main"
+stock = "inventory.cli:main"
+stock-tui = "inventory.cli:main"
+stock-bot = "inventory.discord_bot:main"
+stock-slack = "inventory.slack_bot:main"
+
+[project.urls]
+Source = "https://github.com/Louis31921c/Inventory-Manager"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["inventory"]
+
+[tool.setuptools.package-data]
+inventory = ["rules.md", "prompts/*.md", "web_ui/*.html", "web_ui/*.css", "web_ui/*.txt",
+             "web_ui/*.png", "web_ui/fonts/*.woff2", "web_ui/doors/*.png", "web_ui/vehicles/*.png"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
