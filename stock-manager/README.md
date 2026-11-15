@@ -25,7 +25,7 @@ band that says how much you should hold given how fast it sells and how long the
 takes. Red means order now. It learns each supplier's real delivery time from your own notes,
 and it respects supplier holidays and cut-off times.
 
-![Stock buffers](docs/ddmrp.png)
+![Buffers: click a colour to list its articles](docs/ddmrp.png)
 
 **Ordering.** Turn a shortage into a purchase order, ask suppliers for quotes, compare their
 answers, and send orders by mail. A shopping basket filled in your team chat (Discord or
